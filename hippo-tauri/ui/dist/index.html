@@ -1102,30 +1102,234 @@
     .qa-desc { font-size: 10px; color: #78716c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* Chat Messages */
-    .chat-message { margin-bottom: 12px; }
+    .chat-message { margin-bottom: 16px; }
     .chat-message.user { text-align: right; }
     .chat-message .bubble {
       display: inline-block;
-      max-width: 85%;
-      padding: 10px 14px;
-      border-radius: 12px;
+      max-width: 90%;
+      padding: 12px 16px;
+      border-radius: 16px;
       font-size: 13px;
-      line-height: 1.5;
+      line-height: 1.6;
       text-align: left;
-      white-space: pre-wrap;
     }
     .chat-message.user .bubble {
-      background: #292524;
+      background: linear-gradient(135deg, #292524 0%, #44403c 100%);
       color: white;
       border-bottom-right-radius: 4px;
     }
-    body.dark .chat-message.user .bubble { background: #fafaf9; color: #292524; }
+    body.dark .chat-message.user .bubble { background: linear-gradient(135deg, #fafaf9 0%, #e7e5e4 100%); color: #292524; }
     .chat-message.assistant .bubble {
-      background: #f5f5f4;
+      background: white;
       color: #292524;
+      border: 1px solid #e7e5e4;
       border-bottom-left-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     }
-    body.dark .chat-message.assistant .bubble { background: #292524; color: #fafaf9; }
+    body.dark .chat-message.assistant .bubble { background: #1c1917; color: #fafaf9; border-color: #44403c; }
+
+    /* Rich Message Content */
+    .msg-content { white-space: normal; }
+    .msg-content p { margin: 0 0 8px 0; }
+    .msg-content p:last-child { margin-bottom: 0; }
+    .msg-content strong { font-weight: 600; color: #292524; }
+    body.dark .msg-content strong { color: #fafaf9; }
+    .msg-content em { font-style: italic; color: #57534e; }
+    body.dark .msg-content em { color: #a8a29e; }
+    .msg-content code {
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      background: #f5f5f4;
+      border-radius: 4px;
+      color: #dc2626;
+    }
+    body.dark .msg-content code { background: #292524; color: #f87171; }
+
+    /* Code Blocks */
+    .msg-code-block {
+      position: relative;
+      margin: 12px 0;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #1c1917;
+    }
+    .msg-code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: #292524;
+      border-bottom: 1px solid #44403c;
+    }
+    .msg-code-lang {
+      font-size: 11px;
+      color: #a8a29e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .msg-code-copy {
+      padding: 4px 8px;
+      background: #44403c;
+      border: none;
+      border-radius: 4px;
+      color: #d6d3d1;
+      font-size: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+    .msg-code-copy:hover { background: #57534e; color: white; }
+    .msg-code-copy .icon { width: 12px; height: 12px; }
+    .msg-code-pre {
+      margin: 0;
+      padding: 12px;
+      overflow-x: auto;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #e7e5e4;
+    }
+    body.dark .msg-code-block { background: #0c0a09; }
+    body.dark .msg-code-header { background: #1c1917; }
+
+    /* Lists */
+    .msg-list {
+      margin: 10px 0;
+      padding-left: 0;
+      list-style: none;
+    }
+    .msg-list li {
+      position: relative;
+      padding: 6px 0 6px 24px;
+      border-bottom: 1px solid #f5f5f4;
+    }
+    .msg-list li:last-child { border-bottom: none; }
+    body.dark .msg-list li { border-color: #44403c; }
+    .msg-list li::before {
+      content: '';
+      position: absolute;
+      left: 8px;
+      top: 14px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #6366f1;
+    }
+    .msg-list.numbered li::before {
+      content: counter(list-item);
+      counter-increment: list-item;
+      width: auto;
+      height: auto;
+      background: none;
+      font-size: 11px;
+      font-weight: 600;
+      color: #6366f1;
+      top: 6px;
+      left: 4px;
+    }
+    .msg-list.numbered { counter-reset: list-item; }
+
+    /* Headers in messages */
+    .msg-h1 { font-size: 16px; font-weight: 600; margin: 16px 0 8px; color: #292524; border-bottom: 1px solid #e7e5e4; padding-bottom: 8px; }
+    .msg-h2 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: #44403c; }
+    .msg-h3 { font-size: 13px; font-weight: 600; margin: 12px 0 4px; color: #57534e; }
+    body.dark .msg-h1 { color: #fafaf9; border-color: #44403c; }
+    body.dark .msg-h2 { color: #e7e5e4; }
+    body.dark .msg-h3 { color: #d6d3d1; }
+
+    /* Action Buttons in Messages */
+    .msg-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e7e5e4;
+    }
+    body.dark .msg-actions { border-color: #44403c; }
+    .msg-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      background: linear-gradient(135deg, #f5f5f4 0%, #e7e5e4 100%);
+      border: 1px solid #d6d3d1;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #44403c;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .msg-action-btn:hover {
+      background: linear-gradient(135deg, #e7e5e4 0%, #d6d3d1 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .msg-action-btn .icon { width: 14px; height: 14px; }
+    .msg-action-btn.primary {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      border-color: #6366f1;
+      color: white;
+    }
+    .msg-action-btn.primary:hover { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); }
+    body.dark .msg-action-btn { background: linear-gradient(135deg, #292524 0%, #44403c 100%); border-color: #57534e; color: #d6d3d1; }
+    body.dark .msg-action-btn:hover { background: linear-gradient(135deg, #44403c 0%, #57534e 100%); }
+
+    /* Highlight boxes */
+    .msg-highlight {
+      margin: 12px 0;
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 3px solid;
+    }
+    .msg-highlight.info { background: #eff6ff; border-color: #3b82f6; color: #1e40af; }
+    .msg-highlight.success { background: #f0fdf4; border-color: #22c55e; color: #166534; }
+    .msg-highlight.warning { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+    .msg-highlight.tip { background: #faf5ff; border-color: #8b5cf6; color: #6b21a8; }
+    body.dark .msg-highlight.info { background: #172554; color: #93c5fd; }
+    body.dark .msg-highlight.success { background: #052e16; color: #86efac; }
+    body.dark .msg-highlight.warning { background: #451a03; color: #fcd34d; }
+    body.dark .msg-highlight.tip { background: #2e1065; color: #c4b5fd; }
+    .msg-highlight-title { font-weight: 600; font-size: 12px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+    .msg-highlight-title .icon { width: 14px; height: 14px; }
+
+    /* File mentions */
+    .msg-file-mention {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      background: #fef3c7;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #92400e;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .msg-file-mention:hover { background: #fde68a; }
+    body.dark .msg-file-mention { background: #451a03; color: #fcd34d; }
+    body.dark .msg-file-mention:hover { background: #78350f; }
+    .msg-file-mention .icon { width: 12px; height: 12px; }
+
+    /* Quick stats cards */
+    .msg-stat-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .msg-stat-card {
+      padding: 10px;
+      background: #fafaf9;
+      border-radius: 8px;
+      text-align: center;
+    }
+    body.dark .msg-stat-card { background: #292524; }
+    .msg-stat-value { font-size: 18px; font-weight: 600; color: #6366f1; }
+    .msg-stat-label { font-size: 10px; color: #78716c; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
 
     /* Chat Input */
     .chat-input-container { padding: 12px 16px; border-top: 1px solid #e7e5e4; display: flex; gap: 8px; align-items: flex-end; }
@@ -2624,6 +2828,230 @@
           });
         }
 
+        // Parse markdown-like content for rich formatting
+        function parseMessageContent(text) {
+          if (!text) return '';
+
+          var html = text;
+
+          // Escape HTML first
+          html = esc(html);
+
+          // Code blocks (```lang\ncode```)
+          html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(match, lang, code) {
+            var langLabel = lang || 'code';
+            var codeId = 'code_' + Math.random().toString(36).substr(2, 9);
+            return '<div class="msg-code-block">' +
+              '<div class="msg-code-header">' +
+              '<span class="msg-code-lang">' + langLabel + '</span>' +
+              '<button class="msg-code-copy" onclick="copyCodeBlock(\'' + codeId + '\')">' +
+              '<span class="icon">' + icons.file + '</span>Copy</button>' +
+              '</div>' +
+              '<pre class="msg-code-pre" id="' + codeId + '">' + code.trim() + '</pre>' +
+              '</div>';
+          });
+
+          // Inline code (`code`)
+          html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+          // Bold (**text** or __text__)
+          html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+          html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+
+          // Italic (*text* or _text_)
+          html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+          html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+
+          // Headers
+          html = html.replace(/^### (.+)$/gm, '<div class="msg-h3">$1</div>');
+          html = html.replace(/^## (.+)$/gm, '<div class="msg-h2">$1</div>');
+          html = html.replace(/^# (.+)$/gm, '<div class="msg-h1">$1</div>');
+
+          // Bullet lists (- item or * item)
+          var listPattern = /^[\-\*] .+(\n[\-\*] .+)*/gm;
+          html = html.replace(listPattern, function(match) {
+            var items = match.split('\n').map(function(line) {
+              return '<li>' + line.replace(/^[\-\*] /, '') + '</li>';
+            }).join('');
+            return '<ul class="msg-list">' + items + '</ul>';
+          });
+
+          // Numbered lists (1. item)
+          var numListPattern = /^\d+\. .+(\n\d+\. .+)*/gm;
+          html = html.replace(numListPattern, function(match) {
+            var items = match.split('\n').map(function(line) {
+              return '<li>' + line.replace(/^\d+\. /, '') + '</li>';
+            }).join('');
+            return '<ul class="msg-list numbered">' + items + '</ul>';
+          });
+
+          // Highlight boxes (> info: text, > tip: text, etc.)
+          html = html.replace(/^&gt; (info|tip|warning|success): (.+)$/gm, function(match, type, text) {
+            var icon = type === 'info' ? icons.alertCircle :
+                       type === 'tip' ? icons.zap :
+                       type === 'warning' ? icons.alertCircle :
+                       icons.checkCircle;
+            return '<div class="msg-highlight ' + type + '">' +
+              '<div class="msg-highlight-title"><span class="icon">' + icon + '</span>' + type.charAt(0).toUpperCase() + type.slice(1) + '</div>' +
+              text + '</div>';
+          });
+
+          // File mentions (detect file paths or filenames)
+          html = html.replace(/\b([\w\-\.]+\.(png|jpg|jpeg|gif|pdf|doc|docx|txt|md|js|ts|py|rs|go|json|yaml|yml|html|css|svg))\b/gi, function(match, filename) {
+            return '<span class="msg-file-mention" onclick="searchForFile(\'' + filename + '\')">' +
+              '<span class="icon">' + icons.file + '</span>' + filename + '</span>';
+          });
+
+          // Convert newlines to paragraphs (but not inside code blocks or lists)
+          var lines = html.split('\n');
+          var result = [];
+          var inCodeBlock = false;
+
+          for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            if (line.includes('msg-code-block')) inCodeBlock = true;
+            if (line.includes('</div>') && inCodeBlock) inCodeBlock = false;
+
+            if (!inCodeBlock && line.trim() && !line.startsWith('<ul') && !line.startsWith('<li') && !line.startsWith('</ul') && !line.startsWith('<div class="msg-')) {
+              result.push('<p>' + line + '</p>');
+            } else {
+              result.push(line);
+            }
+          }
+
+          return '<div class="msg-content">' + result.join('\n') + '</div>';
+        }
+
+        function generateActionButtons(content, files, stats) {
+          var actions = [];
+          var contentLower = content.toLowerCase();
+
+          // Always add a "Copy" button
+          actions.push({
+            label: 'Copy',
+            icon: icons.file,
+            action: 'copyResponse',
+            primary: false
+          });
+
+          // Add contextual actions based on content
+          if (contentLower.includes('screenshot') || contentLower.includes('image')) {
+            actions.push({
+              label: 'Show Images',
+              icon: icons.image,
+              action: 'filterImages',
+              primary: false
+            });
+          }
+
+          if (contentLower.includes('code') || contentLower.includes('function') || contentLower.includes('script')) {
+            actions.push({
+              label: 'Show Code Files',
+              icon: icons.code,
+              action: 'filterCode',
+              primary: false
+            });
+          }
+
+          if (contentLower.includes('document') || contentLower.includes('pdf') || contentLower.includes('text')) {
+            actions.push({
+              label: 'Show Documents',
+              icon: icons.doc,
+              action: 'filterDocs',
+              primary: false
+            });
+          }
+
+          if (contentLower.includes('duplicate') || contentLower.includes('similar')) {
+            actions.push({
+              label: 'Find Duplicates',
+              icon: icons.file,
+              action: 'findDuplicates',
+              primary: true
+            });
+          }
+
+          if (contentLower.includes('organize') || contentLower.includes('folder') || contentLower.includes('structure')) {
+            actions.push({
+              label: 'Smart Organize',
+              icon: icons.folder,
+              action: 'smartOrganize',
+              primary: true
+            });
+          }
+
+          // Always offer to ask follow-up
+          actions.push({
+            label: 'Ask Follow-up',
+            icon: icons.messageCircle,
+            action: 'askFollowup',
+            primary: true
+          });
+
+          // Build HTML
+          var html = '<div class="msg-actions">';
+          actions.slice(0, 4).forEach(function(action) {
+            html += '<button class="msg-action-btn' + (action.primary ? ' primary' : '') + '" ' +
+              'onclick="handleMsgAction(\'' + action.action + '\')">' +
+              '<span class="icon">' + action.icon + '</span>' + action.label + '</button>';
+          });
+          html += '</div>';
+
+          return html;
+        }
+
+        function handleMsgAction(action) {
+          switch(action) {
+            case 'copyResponse':
+              var lastMsg = chatMessages[chatMessages.length - 1];
+              if (lastMsg && lastMsg.role === 'assistant') {
+                navigator.clipboard.writeText(lastMsg.content).then(function() {
+                  showToast('Response copied!', 'success');
+                });
+              }
+              break;
+            case 'filterImages':
+              filterType = 'Images';
+              render();
+              showToast('Filtered to images', 'success');
+              break;
+            case 'filterCode':
+              filterType = 'Code';
+              render();
+              showToast('Filtered to code files', 'success');
+              break;
+            case 'filterDocs':
+              filterType = 'Docs';
+              render();
+              showToast('Filtered to documents', 'success');
+              break;
+            case 'findDuplicates':
+              sendChatQuery('Find all duplicate or very similar files in my collection and group them together.', 'Finding duplicates...');
+              break;
+            case 'smartOrganize':
+              sendChatQuery('Suggest a smart folder organization structure for my files based on their types and content.', 'Generating organization plan...');
+              break;
+            case 'askFollowup':
+              document.getElementById('chatInput').focus();
+              break;
+          }
+        }
+
+        function copyCodeBlock(codeId) {
+          var codeEl = document.getElementById(codeId);
+          if (codeEl) {
+            navigator.clipboard.writeText(codeEl.textContent).then(function() {
+              showToast('Code copied!', 'success');
+            });
+          }
+        }
+
+        function searchForFile(filename) {
+          document.getElementById('searchInput').value = filename;
+          handleSearch();
+          showToast('Searching for ' + filename, 'info');
+        }
+
         function addChatMessage(role, content, files, stats) {
           var container = document.getElementById('chatMessages');
           // Remove welcome message if present
@@ -2633,23 +3061,36 @@
           var msgDiv = document.createElement('div');
           msgDiv.className = 'chat-message ' + role;
 
-          var bubbleContent = '<div class="bubble">' + esc(content);
+          var bubbleContent = '<div class="bubble">';
+
+          // Parse content for rich formatting (only for assistant messages)
+          if (role === 'assistant') {
+            bubbleContent += parseMessageContent(content);
+          } else {
+            bubbleContent += '<div class="msg-content"><p>' + esc(content) + '</p></div>';
+          }
 
           // Add file previews for assistant messages
           if (role === 'assistant' && files && files.length > 0) {
             bubbleContent += renderFilePreviewCards(files);
           }
 
-          // Add stats for assistant messages
+          // Add stats as nice cards for assistant messages
           if (role === 'assistant' && stats) {
-            bubbleContent += '<div class="ai-stats">';
+            bubbleContent += '<div class="msg-stat-cards">';
             if (stats.total_files) {
-              bubbleContent += '<span class="ai-stat"><span class="icon">' + icons.folder + '</span>' + stats.total_files + ' files analyzed</span>';
+              bubbleContent += '<div class="msg-stat-card"><div class="msg-stat-value">' + stats.total_files + '</div><div class="msg-stat-label">Files Analyzed</div></div>';
             }
             if (stats.context_size) {
-              bubbleContent += '<span class="ai-stat"><span class="icon">' + icons.zap + '</span>' + Math.round(stats.context_size / 100) / 10 + 'KB context</span>';
+              var kb = Math.round(stats.context_size / 100) / 10;
+              bubbleContent += '<div class="msg-stat-card"><div class="msg-stat-value">' + kb + '</div><div class="msg-stat-label">KB Context</div></div>';
             }
             bubbleContent += '</div>';
+          }
+
+          // Add action buttons for assistant messages
+          if (role === 'assistant') {
+            bubbleContent += generateActionButtons(content, files, stats);
           }
 
           bubbleContent += '</div>';
@@ -3337,6 +3778,9 @@
         window.openSimilarFile = openSimilarFile;
         window.copyToClipboard = copyToClipboard;
         window.openChatFile = openChatFile;
+        window.handleMsgAction = handleMsgAction;
+        window.copyCodeBlock = copyCodeBlock;
+        window.searchForFile = searchForFile;
       });
 
       // Helpers
