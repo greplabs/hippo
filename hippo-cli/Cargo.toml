@@ -37,3 +37,6 @@ reqwest = { workspace = true }
 
 # Hashing for duplicates
 sha2 = { workspace = true }
+
+# Signal handling
+ctrlc = { workspace = true }

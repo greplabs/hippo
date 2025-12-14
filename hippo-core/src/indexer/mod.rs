@@ -136,6 +136,37 @@ impl Indexer {
         }
         Ok(())
     }
+
+    /// Index a single file (used by file watcher)
+    pub async fn index_single_file(&self, path: &Path, source: &Source) -> Result<()> {
+        // Check if file exists and has supported extension
+        if !path.exists() || !path.is_file() {
+            return Err(HippoError::Indexing(format!("File does not exist: {:?}", path)));
+        }
+
+        let ext = path.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase())
+            .unwrap_or_default();
+
+        if !self.config.supported_extensions.contains(&ext) {
+            return Ok(()); // Silently skip unsupported files
+        }
+
+        // Process the file
+        let memory = Self::process_file(path, source)?;
+
+        // Store it
+        self.storage.upsert_memory(&memory).await?;
+
+        // Embed it
+        if let Err(e) = self.embedder.embed_memory(&memory).await {
+            debug!("Failed to embed memory {}: {}", memory.id, e);
+        }
+
+        info!("Indexed single file: {:?}", path);
+        Ok(())
+    }
     
     /// Background worker that processes index tasks
     async fn background_worker(

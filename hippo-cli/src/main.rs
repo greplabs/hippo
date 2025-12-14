@@ -741,19 +741,59 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
 
-            println!("\nWatching:");
-            for p in &watch_paths {
-                println!("  - {}", p.display().to_string().bright_cyan());
+            // Start watching each path
+            let mut watched_count = 0;
+            for path in &watch_paths {
+                let source = Source::Local { root_path: path.clone() };
+                match hippo.watch_source(&source).await {
+                    Ok(_) => {
+                        watched_count += 1;
+                        println!("  {} {}", "✓".bright_green(), path.display().to_string().bright_cyan());
+                    }
+                    Err(e) => {
+                        println!("  {} {} - {}", "✗".bright_red(), path.display(), e);
+                    }
+                }
             }
-            println!("\n{}", "Press Ctrl+C to stop".dimmed());
 
-            // Simple watch loop (actual implementation would use notify crate)
-            print_info("File watching started. Changes will be detected automatically.");
-
-            // Keep running
-            loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            if watched_count == 0 {
+                print_error("Failed to watch any paths");
+                return Ok(());
             }
+
+            println!("\n{}", format!("Watching {} path(s) for changes...", watched_count).bright_green());
+            println!("{}", "Press Ctrl+C to stop".dimmed());
+            println!();
+
+            // Set up Ctrl+C handler
+            let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+            let r = running.clone();
+            ctrlc::set_handler(move || {
+                r.store(false, std::sync::atomic::Ordering::SeqCst);
+            }).expect("Error setting Ctrl-C handler");
+
+            // Keep running and show status
+            let mut last_count = hippo.stats().await?.total_memories;
+            while running.load(std::sync::atomic::Ordering::SeqCst) {
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+                // Check if anything changed
+                let current_count = hippo.stats().await?.total_memories;
+                if current_count != last_count {
+                    let diff = current_count as i64 - last_count as i64;
+                    if diff > 0 {
+                        println!("  {} {} new file(s) indexed", "→".bright_blue(), diff);
+                    } else {
+                        println!("  {} {} file(s) removed", "→".bright_yellow(), -diff);
+                    }
+                    last_count = current_count;
+                }
+            }
+
+            // Cleanup
+            println!("\n{}", "Stopping watchers...".dimmed());
+            hippo.unwatch_all().await?;
+            print_success("Stopped watching");
         }
 
         Commands::Den => {

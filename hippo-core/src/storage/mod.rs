@@ -186,6 +186,52 @@ impl Storage {
         db.execute("DELETE FROM memories WHERE source_json = ?1", params![source_json])?;
         Ok(())
     }
+
+    /// Remove a memory by its file path
+    pub async fn remove_memory_by_path(&self, path: &std::path::Path) -> Result<()> {
+        let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let path_str = path.to_string_lossy();
+        db.execute("DELETE FROM memories WHERE path = ?1", params![path_str.as_ref()])?;
+        Ok(())
+    }
+
+    /// Get a memory by its file path
+    pub async fn get_memory_by_path(&self, path: &std::path::Path) -> Result<Option<Memory>> {
+        let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let path_str = path.to_string_lossy();
+
+        let mut stmt = db.prepare(
+            "SELECT id, path, source_json, kind_json, metadata_json, tags_json,
+                    embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
+             FROM memories WHERE path = ?1"
+        )?;
+
+        let result = stmt.query_row(params![path_str.as_ref()], |row| {
+            Ok(Memory {
+                id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                path: PathBuf::from(row.get::<_, String>(1)?),
+                source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+                kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+                metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+                tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+                embedding_id: row.get(6)?,
+                connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+                is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
+                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
+                    .unwrap().with_timezone(&chrono::Utc),
+                modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
+                    .unwrap().with_timezone(&chrono::Utc),
+                indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
+                    .unwrap().with_timezone(&chrono::Utc),
+            })
+        });
+
+        match result {
+            Ok(memory) => Ok(Some(memory)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
     
     pub async fn find_by_path_prefix(&self, prefix: &str) -> Result<Vec<Memory>> {
         let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;

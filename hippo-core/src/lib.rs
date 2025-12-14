@@ -70,6 +70,7 @@ pub mod graph;
 pub mod storage;
 pub mod error;
 pub mod ai;
+pub mod watcher;
 
 pub use models::*;
 pub use error::{HippoError, Result};
@@ -79,6 +80,9 @@ pub use graph::MindMap;
 
 // Re-export AI types
 pub use ai::{ClaudeClient, FileAnalysis, TagSuggestion, OrganizationSuggestion};
+
+// Re-export watcher types
+pub use watcher::{FileWatcher, WatchEvent, WatchStats};
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -92,6 +96,7 @@ pub struct Hippo {
     embedder: Arc<embeddings::Embedder>,
     searcher: Arc<search::Searcher>,
     graph: Arc<RwLock<graph::KnowledgeGraph>>,
+    watcher: Option<Arc<watcher::FileWatcher>>,
     config: HippoConfig,
 }
 
@@ -156,12 +161,22 @@ impl Hippo {
         ).await?);
         let graph = Arc::new(RwLock::new(graph::KnowledgeGraph::new(storage.clone())));
         
+        // Initialize watcher (optional - can be started later)
+        let watcher = match watcher::FileWatcher::new(storage.clone(), indexer.clone()) {
+            Ok(w) => Some(Arc::new(w)),
+            Err(e) => {
+                tracing::warn!("Failed to create file watcher: {}", e);
+                None
+            }
+        };
+
         Ok(Self {
             storage,
             indexer,
             embedder,
             searcher,
             graph,
+            watcher,
             config,
         })
     }
@@ -282,10 +297,66 @@ impl Hippo {
     }
     
     // === Stats ===
-    
+
     /// Get index statistics
     pub async fn stats(&self) -> Result<IndexStats> {
         self.storage.stats().await
+    }
+
+    // === File Watching ===
+
+    /// Start watching a source for file changes
+    pub async fn watch_source(&self, source: &Source) -> Result<()> {
+        if let Some(watcher) = &self.watcher {
+            watcher.watch(source).await
+        } else {
+            Err(HippoError::Other("File watcher not available".to_string()))
+        }
+    }
+
+    /// Stop watching a source
+    pub async fn unwatch_source(&self, source: &Source) -> Result<()> {
+        if let Some(watcher) = &self.watcher {
+            watcher.unwatch(source).await
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Start watching all configured sources
+    pub async fn watch_all(&self) -> Result<()> {
+        if let Some(watcher) = &self.watcher {
+            watcher.watch_all_sources().await
+        } else {
+            Err(HippoError::Other("File watcher not available".to_string()))
+        }
+    }
+
+    /// Stop all file watchers
+    pub async fn unwatch_all(&self) -> Result<()> {
+        if let Some(watcher) = &self.watcher {
+            watcher.unwatch_all().await
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Get the number of active watchers
+    pub async fn active_watchers(&self) -> usize {
+        if let Some(watcher) = &self.watcher {
+            watcher.active_count().await
+        } else {
+            0
+        }
+    }
+
+    /// Get list of watched paths
+    pub async fn watched_paths(&self) -> Vec<PathBuf> {
+        if let Some(watcher) = &self.watcher {
+            watcher.watched_paths().await
+        } else {
+            vec![]
+        }
     }
 }
 
