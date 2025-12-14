@@ -598,26 +598,37 @@
 
   <!-- Floating Chat Bubble -->
   <div class="chat-bubble" id="chatBubble">
-    <span class="chat-bubble-icon">🦛</span>
+    <span class="icon icon-lg" id="chatBubbleIcon"></span>
     <span class="chat-bubble-badge" id="chatBadge" style="display:none;">1</span>
+    <div class="chat-bubble-pulse"></div>
   </div>
 
   <!-- Expanded Chat Window -->
   <div class="chat-window" id="chatWindow">
     <div class="chat-header">
       <div class="chat-header-left">
-        <span class="chat-header-icon">🦛</span>
+        <span class="icon icon-md" id="chatHeaderIcon"></span>
         <div class="chat-header-info">
-          <h2>Ask Hippo</h2>
+          <h2>Hippo AI</h2>
           <span class="chat-status" id="chatStatus">
-            <span class="status-dot online" id="ollamaStatusDot"></span>
-            <span id="chatStatusText">Ready</span>
+            <span class="status-dot" id="ollamaStatusDot"></span>
+            <span id="chatStatusText">Connecting...</span>
           </span>
         </div>
       </div>
       <div class="chat-header-actions">
+        <button class="chat-action-btn" id="chatSettingsBtn" title="AI Settings"><span class="icon icon-sm" id="chatSettingsIcon"></span></button>
         <button class="chat-action-btn" id="chatClearBtn" title="Clear chat"><span class="icon icon-sm" id="chatClearIcon"></span></button>
         <button class="chat-action-btn" id="chatMinimizeBtn" title="Minimize"><span class="icon icon-sm" id="chatMinimizeIcon"></span></button>
+      </div>
+    </div>
+
+    <!-- AI Progress Bar -->
+    <div class="ai-progress-container" id="aiProgressContainer" style="display:none;">
+      <div class="ai-progress-bar" id="aiProgressBar"></div>
+      <div class="ai-progress-info">
+        <span class="icon icon-sm ai-progress-icon" id="aiProgressIcon"></span>
+        <span id="aiProgressText">Processing...</span>
       </div>
     </div>
 
@@ -628,26 +639,66 @@
         <span id="contextText">0 files selected</span>
       </div>
       <div class="context-actions">
-        <button class="context-btn" id="analyzeSelectedBtn">Analyze</button>
-        <button class="context-btn" id="summarizeSelectedBtn">Summarize</button>
+        <button class="context-btn" id="analyzeSelectedBtn"><span class="icon icon-xs" id="ctxAnalyzeIcon"></span> Analyze</button>
+        <button class="context-btn" id="summarizeSelectedBtn"><span class="icon icon-xs" id="ctxSummarizeIcon"></span> Summarize</button>
         <button class="context-btn secondary" id="clearContextBtn">×</button>
       </div>
     </div>
 
     <div class="chat-messages" id="chatMessages">
       <div class="chat-welcome">
-        <span class="welcome-icon">🦛</span>
-        <h3>Chat with your files</h3>
-        <p>Ask questions about your documents and I'll find answers using local AI.</p>
+        <div class="welcome-icon-container">
+          <span class="icon icon-2xl" id="welcomeIcon"></span>
+        </div>
+        <h3>Hippo AI Assistant</h3>
+        <p>Ask questions about your files, get summaries, find patterns, and more.</p>
+        <div class="ai-capabilities">
+          <div class="capability-badge"><span class="icon icon-xs" id="capLocal"></span> Local AI</div>
+          <div class="capability-badge"><span class="icon icon-xs" id="capPrivate"></span> Private</div>
+          <div class="capability-badge"><span class="icon icon-xs" id="capFast"></span> Fast</div>
+        </div>
         <div class="quick-actions">
           <button class="quick-action-btn" data-action="summarize">
-            <span class="icon icon-sm" id="qaSum"></span> Summarize recent
+            <span class="icon icon-sm" id="qaSum"></span>
+            <div class="qa-text">
+              <span class="qa-title">Summarize Collection</span>
+              <span class="qa-desc">Overview of your files</span>
+            </div>
           </button>
           <button class="quick-action-btn" data-action="find-duplicates">
-            <span class="icon icon-sm" id="qaDup"></span> Find duplicates
+            <span class="icon icon-sm" id="qaDup"></span>
+            <div class="qa-text">
+              <span class="qa-title">Find Similar</span>
+              <span class="qa-desc">Detect duplicates & patterns</span>
+            </div>
           </button>
           <button class="quick-action-btn" data-action="organize">
-            <span class="icon icon-sm" id="qaOrg"></span> Suggest organization
+            <span class="icon icon-sm" id="qaOrg"></span>
+            <div class="qa-text">
+              <span class="qa-title">Smart Organize</span>
+              <span class="qa-desc">AI-powered suggestions</span>
+            </div>
+          </button>
+          <button class="quick-action-btn" data-action="extract-insights">
+            <span class="icon icon-sm" id="qaInsight"></span>
+            <div class="qa-text">
+              <span class="qa-title">Extract Insights</span>
+              <span class="qa-desc">Key themes & topics</span>
+            </div>
+          </button>
+          <button class="quick-action-btn" data-action="code-review">
+            <span class="icon icon-sm" id="qaCode"></span>
+            <div class="qa-text">
+              <span class="qa-title">Code Analysis</span>
+              <span class="qa-desc">Review code quality</span>
+            </div>
+          </button>
+          <button class="quick-action-btn" data-action="search-help">
+            <span class="icon icon-sm" id="qaSearch"></span>
+            <div class="qa-text">
+              <span class="qa-title">Smart Search</span>
+              <span class="qa-desc">Natural language queries</span>
+            </div>
           </button>
         </div>
       </div>
@@ -659,6 +710,7 @@
         <div class="chat-input-actions">
           <button class="input-action-btn" id="attachFileBtn" title="Attach selected files">
             <span class="icon icon-sm" id="attachIcon"></span>
+            <span class="attach-count" id="attachCount" style="display:none;">0</span>
           </button>
         </div>
       </div>
@@ -669,44 +721,66 @@
   </div>
 
   <style>
+    /* Icon sizes */
+    .icon-xs { width: 12px; height: 12px; }
+
     /* Floating Chat Bubble */
     .chat-bubble {
       position: fixed;
       bottom: 24px;
       right: 24px;
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-      box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4);
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: #292524;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 1000;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.2s ease;
+      color: white;
     }
+    body.dark .chat-bubble { background: #fafaf9; color: #292524; }
     .chat-bubble:hover {
-      transform: scale(1.1);
-      box-shadow: 0 6px 24px rgba(139, 92, 246, 0.5);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
     }
     .chat-bubble.hidden { display: none; }
-    .chat-bubble-icon { font-size: 28px; }
+    .chat-bubble-pulse {
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      background: inherit;
+      animation: bubblePulse 2s ease-in-out infinite;
+      opacity: 0;
+      z-index: -1;
+    }
+    @keyframes bubblePulse {
+      0%, 100% { transform: scale(1); opacity: 0; }
+      50% { transform: scale(1.15); opacity: 0.3; }
+    }
+    .chat-bubble.processing .chat-bubble-pulse { animation: bubblePulseActive 1s ease-in-out infinite; }
+    @keyframes bubblePulseActive {
+      0%, 100% { transform: scale(1); opacity: 0.2; }
+      50% { transform: scale(1.2); opacity: 0.5; }
+    }
     .chat-bubble-badge {
       position: absolute;
       top: -4px;
       right: -4px;
-      min-width: 20px;
-      height: 20px;
+      min-width: 18px;
+      height: 18px;
       background: #ef4444;
-      border-radius: 10px;
+      border-radius: 9px;
       color: white;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 0 6px;
+      padding: 0 5px;
     }
 
     /* Chat Window */
@@ -714,73 +788,106 @@
       position: fixed;
       bottom: 24px;
       right: 24px;
-      width: 380px;
-      height: 520px;
+      width: 400px;
+      height: 560px;
       background: white;
       border-radius: 16px;
-      box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.05);
       z-index: 1001;
       display: none;
       flex-direction: column;
       overflow: hidden;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .chat-window.open { display: flex; animation: chatSlideUp 0.3s ease-out; }
-    body.dark .chat-window { background: #292524; box-shadow: 0 8px 40px rgba(0,0,0,0.4); }
+    .chat-window.open { display: flex; animation: chatSlideUp 0.25s ease-out; }
+    body.dark .chat-window { background: #1c1917; box-shadow: 0 8px 40px rgba(0,0,0,0.4); }
     @keyframes chatSlideUp {
-      from { opacity: 0; transform: translateY(20px) scale(0.95); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     /* Chat Header */
     .chat-header {
       padding: 12px 16px;
-      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      background: #292524;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      color: white;
     }
-    .chat-header-left { display: flex; align-items: center; gap: 12px; }
-    .chat-header-icon { font-size: 24px; }
-    .chat-header-info h2 { font-size: 15px; font-weight: 600; color: white; margin: 0; }
-    .chat-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255,255,255,0.8); }
-    .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+    body.dark .chat-header { background: #0c0a09; }
+    .chat-header-left { display: flex; align-items: center; gap: 10px; }
+    .chat-header-left .icon { opacity: 0.9; }
+    .chat-header-info h2 { font-size: 14px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+    .chat-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: rgba(255,255,255,0.6); }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #78716c; transition: background 0.3s; }
     .status-dot.online { background: #22c55e; }
     .status-dot.offline { background: #f59e0b; }
     .status-dot.error { background: #ef4444; }
-    .chat-header-actions { display: flex; gap: 4px; }
+    .status-dot.connecting { background: #78716c; animation: statusPulse 1s ease-in-out infinite; }
+    @keyframes statusPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .chat-header-actions { display: flex; gap: 2px; }
     .chat-action-btn {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.1);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: transparent;
       border: none;
-      color: white;
+      color: rgba(255,255,255,0.7);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: all 0.15s;
     }
-    .chat-action-btn:hover { background: rgba(255,255,255,0.2); }
+    .chat-action-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+
+    /* AI Progress Bar */
+    .ai-progress-container {
+      background: #f5f5f4;
+      border-bottom: 1px solid #e7e5e4;
+      overflow: hidden;
+    }
+    body.dark .ai-progress-container { background: #0c0a09; border-color: #292524; }
+    .ai-progress-bar {
+      height: 2px;
+      background: linear-gradient(90deg, #8b5cf6 0%, #6366f1 50%, #8b5cf6 100%);
+      background-size: 200% 100%;
+      animation: progressSlide 1.5s ease-in-out infinite;
+      width: 100%;
+    }
+    @keyframes progressSlide {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    .ai-progress-info {
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #57534e;
+    }
+    body.dark .ai-progress-info { color: #a8a29e; }
+    .ai-progress-icon { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
     /* Context Bar */
     .chat-context-bar {
       padding: 8px 12px;
-      background: #f5f5f4;
+      background: #fafaf9;
       border-bottom: 1px solid #e7e5e4;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
     }
-    body.dark .chat-context-bar { background: #1c1917; border-color: #44403c; }
+    body.dark .chat-context-bar { background: #0c0a09; border-color: #292524; }
     .context-info { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #57534e; }
     body.dark .context-info { color: #a8a29e; }
     .context-actions { display: flex; gap: 6px; }
     .context-btn {
-      padding: 4px 10px;
-      background: #8b5cf6;
+      padding: 5px 10px;
+      background: #292524;
       color: white;
       border: none;
       border-radius: 6px;
@@ -788,37 +895,76 @@
       font-weight: 500;
       cursor: pointer;
       transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
-    .context-btn:hover { background: #7c3aed; }
-    .context-btn.secondary { background: transparent; color: #78716c; padding: 4px 8px; }
+    .context-btn:hover { background: #44403c; }
+    body.dark .context-btn { background: #fafaf9; color: #292524; }
+    body.dark .context-btn:hover { background: #e7e5e4; }
+    .context-btn.secondary { background: transparent; color: #78716c; padding: 5px 8px; }
     .context-btn.secondary:hover { background: #e7e5e4; }
     body.dark .context-btn.secondary { color: #a8a29e; }
-    body.dark .context-btn.secondary:hover { background: #44403c; }
+    body.dark .context-btn.secondary:hover { background: #292524; }
 
     /* Chat Messages */
     .chat-messages { flex: 1; overflow-y: auto; padding: 16px; }
-    .chat-welcome { text-align: center; padding: 24px 16px; }
-    .welcome-icon { font-size: 48px; display: block; margin-bottom: 12px; }
-    .chat-welcome h3 { font-size: 16px; color: #292524; margin: 0 0 6px; font-weight: 600; }
-    body.dark .chat-welcome h3 { color: #fafaf9; }
-    .chat-welcome p { font-size: 13px; color: #78716c; margin: 0 0 16px; line-height: 1.4; }
-    .quick-actions { display: flex; flex-direction: column; gap: 8px; }
-    .quick-action-btn {
-      padding: 10px 14px;
+    .chat-welcome { padding: 20px 8px; }
+    .welcome-icon-container {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 16px;
       background: #f5f5f4;
-      border: 1px solid #e7e5e4;
-      border-radius: 10px;
-      font-size: 13px;
-      color: #57534e;
-      cursor: pointer;
+      border-radius: 14px;
       display: flex;
       align-items: center;
-      gap: 8px;
-      transition: all 0.15s;
+      justify-content: center;
+      color: #57534e;
     }
-    .quick-action-btn:hover { background: #e7e5e4; border-color: #d6d3d1; }
-    body.dark .quick-action-btn { background: #1c1917; border-color: #44403c; color: #d6d3d1; }
-    body.dark .quick-action-btn:hover { background: #44403c; }
+    body.dark .welcome-icon-container { background: #292524; color: #a8a29e; }
+    .chat-welcome h3 { font-size: 15px; color: #292524; margin: 0 0 4px; font-weight: 600; text-align: center; }
+    body.dark .chat-welcome h3 { color: #fafaf9; }
+    .chat-welcome p { font-size: 12px; color: #78716c; margin: 0 0 12px; line-height: 1.4; text-align: center; }
+    .ai-capabilities {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .capability-badge {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: #f5f5f4;
+      border-radius: 6px;
+      font-size: 10px;
+      color: #57534e;
+      font-weight: 500;
+    }
+    body.dark .capability-badge { background: #292524; color: #a8a29e; }
+    .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .quick-action-btn {
+      padding: 12px;
+      background: white;
+      border: 1px solid #e7e5e4;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      transition: all 0.15s;
+      text-align: left;
+    }
+    .quick-action-btn:hover { border-color: #292524; background: #fafaf9; }
+    body.dark .quick-action-btn { background: #0c0a09; border-color: #292524; }
+    body.dark .quick-action-btn:hover { border-color: #57534e; background: #1c1917; }
+    .quick-action-btn .icon { color: #57534e; flex-shrink: 0; margin-top: 2px; }
+    body.dark .quick-action-btn .icon { color: #a8a29e; }
+    .qa-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .qa-title { font-size: 12px; font-weight: 500; color: #292524; }
+    body.dark .qa-title { color: #fafaf9; }
+    .qa-desc { font-size: 10px; color: #78716c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* Chat Messages */
     .chat-message { margin-bottom: 12px; }
@@ -827,51 +973,41 @@
       display: inline-block;
       max-width: 85%;
       padding: 10px 14px;
-      border-radius: 14px;
+      border-radius: 12px;
       font-size: 13px;
       line-height: 1.5;
       text-align: left;
       white-space: pre-wrap;
     }
     .chat-message.user .bubble {
-      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      background: #292524;
       color: white;
       border-bottom-right-radius: 4px;
     }
+    body.dark .chat-message.user .bubble { background: #fafaf9; color: #292524; }
     .chat-message.assistant .bubble {
       background: #f5f5f4;
       color: #292524;
       border-bottom-left-radius: 4px;
     }
-    body.dark .chat-message.assistant .bubble { background: #44403c; color: #fafaf9; }
-    .chat-message .file-tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      background: rgba(139, 92, 246, 0.2);
-      border-radius: 4px;
-      font-size: 11px;
-      color: #8b5cf6;
-      margin-right: 4px;
-    }
+    body.dark .chat-message.assistant .bubble { background: #292524; color: #fafaf9; }
 
     /* Chat Input */
     .chat-input-container { padding: 12px 16px; border-top: 1px solid #e7e5e4; display: flex; gap: 8px; align-items: flex-end; }
-    body.dark .chat-input-container { border-color: #44403c; }
+    body.dark .chat-input-container { border-color: #292524; }
     .chat-input-wrapper {
       flex: 1;
       display: flex;
       align-items: center;
       background: #f5f5f4;
       border: 1px solid #e7e5e4;
-      border-radius: 20px;
-      padding: 0 4px 0 14px;
+      border-radius: 12px;
+      padding: 0 4px 0 12px;
       transition: all 0.15s;
     }
-    .chat-input-wrapper:focus-within { border-color: #8b5cf6; background: white; }
-    body.dark .chat-input-wrapper { background: #1c1917; border-color: #44403c; }
-    body.dark .chat-input-wrapper:focus-within { border-color: #8b5cf6; background: #292524; }
+    .chat-input-wrapper:focus-within { border-color: #292524; background: white; }
+    body.dark .chat-input-wrapper { background: #0c0a09; border-color: #292524; }
+    body.dark .chat-input-wrapper:focus-within { border-color: #57534e; background: #1c1917; }
     .chat-input {
       flex: 1;
       padding: 10px 0;
@@ -883,11 +1019,11 @@
     }
     body.dark .chat-input { color: #fafaf9; }
     .chat-input::placeholder { color: #a8a29e; }
-    .chat-input-actions { display: flex; }
+    .chat-input-actions { display: flex; position: relative; }
     .input-action-btn {
       width: 32px;
       height: 32px;
-      border-radius: 50%;
+      border-radius: 8px;
       background: transparent;
       border: none;
       color: #78716c;
@@ -896,15 +1032,33 @@
       align-items: center;
       justify-content: center;
       transition: all 0.15s;
+      position: relative;
     }
-    .input-action-btn:hover { background: #e7e5e4; color: #8b5cf6; }
-    .input-action-btn.has-files { color: #8b5cf6; }
-    body.dark .input-action-btn:hover { background: #44403c; }
+    .input-action-btn:hover { background: #e7e5e4; color: #292524; }
+    .input-action-btn.has-files { color: #292524; }
+    body.dark .input-action-btn:hover { background: #292524; color: #fafaf9; }
+    body.dark .input-action-btn.has-files { color: #fafaf9; }
+    .attach-count {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      min-width: 14px;
+      height: 14px;
+      background: #292524;
+      border-radius: 7px;
+      color: white;
+      font-size: 9px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    body.dark .attach-count { background: #fafaf9; color: #292524; }
     .chat-send-btn {
       width: 40px;
       height: 40px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      border-radius: 10px;
+      background: #292524;
       border: none;
       color: white;
       cursor: pointer;
@@ -914,13 +1068,15 @@
       transition: all 0.15s;
       flex-shrink: 0;
     }
-    .chat-send-btn:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3); }
+    body.dark .chat-send-btn { background: #fafaf9; color: #292524; }
+    .chat-send-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
     .chat-send-btn:disabled { background: #d6d3d1; transform: none; box-shadow: none; cursor: not-allowed; }
-    body.dark .chat-send-btn:disabled { background: #44403c; }
+    body.dark .chat-send-btn:disabled { background: #44403c; color: #78716c; }
 
     /* Chat Loading Animation */
     .chat-loading { display: flex; gap: 4px; padding: 8px 0; }
-    .chat-loading span { width: 8px; height: 8px; background: #8b5cf6; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out; }
+    .chat-loading span { width: 6px; height: 6px; background: #57534e; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out; }
+    body.dark .chat-loading span { background: #a8a29e; }
     .chat-loading span:nth-child(1) { animation-delay: -0.32s; }
     .chat-loading span:nth-child(2) { animation-delay: -0.16s; }
     @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
@@ -1036,13 +1192,26 @@
         // Chat icons
         document.getElementById('chatBtnIcon').innerHTML = icons.messageCircle;
         // Chat window icons
+        document.getElementById('chatBubbleIcon').innerHTML = icons.sparkles;
+        document.getElementById('chatHeaderIcon').innerHTML = icons.sparkles;
+        document.getElementById('chatSettingsIcon').innerHTML = icons.settings;
         document.getElementById('chatClearIcon').innerHTML = icons.trash;
         document.getElementById('chatMinimizeIcon').innerHTML = icons.close;
         document.getElementById('contextIcon').innerHTML = icons.file;
+        document.getElementById('ctxAnalyzeIcon').innerHTML = icons.eye;
+        document.getElementById('ctxSummarizeIcon').innerHTML = icons.doc;
         document.getElementById('attachIcon').innerHTML = icons.file;
+        document.getElementById('welcomeIcon').innerHTML = icons.sparkles;
+        document.getElementById('capLocal').innerHTML = icons.zap;
+        document.getElementById('capPrivate').innerHTML = icons.eye;
+        document.getElementById('capFast').innerHTML = icons.zap;
         document.getElementById('qaSum').innerHTML = icons.doc;
         document.getElementById('qaDup').innerHTML = icons.file;
         document.getElementById('qaOrg').innerHTML = icons.folder;
+        document.getElementById('qaInsight').innerHTML = icons.brain;
+        document.getElementById('qaCode').innerHTML = icons.code;
+        document.getElementById('qaSearch').innerHTML = icons.search;
+        document.getElementById('aiProgressIcon').innerHTML = icons.refresh;
         document.getElementById('sendIcon').innerHTML = icons.send;
         document.getElementById('ollamaStatusIcon').innerHTML = icons.checkCircle;
         // Filter icons
@@ -1950,20 +2119,24 @@
           // Open chat if not open
           if (!chatOpen) openChat();
 
-          var query = 'Analyze these ' + filePaths.length + ' files: ' + filePaths.map(function(p) { return p.split('/').pop(); }).join(', ');
+          var fileNames = filePaths.map(function(p) { return p.split('/').pop(); });
+          var query = 'Analyze ' + (filePaths.length === 1 ? fileNames[0] : filePaths.length + ' files: ' + fileNames.slice(0, 3).join(', ') + (fileNames.length > 3 ? '...' : ''));
           addChatMessage('user', query);
 
           document.getElementById('chatInput').disabled = true;
           document.getElementById('chatSendBtn').disabled = true;
+          showAiProgress('Analyzing ' + filePaths.length + ' file' + (filePaths.length > 1 ? 's' : '') + '...');
           addChatLoading();
 
           // Use ollama_analyze for file analysis
           invoke('ollama_analyze', { filePaths: filePaths }).then(function(response) {
+            hideAiProgress();
             removeChatLoading();
             addChatMessage('assistant', response);
             document.getElementById('chatInput').disabled = false;
             document.getElementById('chatSendBtn').disabled = false;
           }).catch(function(e) {
+            hideAiProgress();
             removeChatLoading();
             addChatMessage('assistant', 'Analysis failed: ' + e);
             document.getElementById('chatInput').disabled = false;
@@ -1987,19 +2160,23 @@
 
           if (!chatOpen) openChat();
 
-          var query = 'Summarize these files: ' + filePaths.map(function(p) { return p.split('/').pop(); }).join(', ');
+          var fileNames = filePaths.map(function(p) { return p.split('/').pop(); });
+          var query = 'Summarize ' + (filePaths.length === 1 ? fileNames[0] : filePaths.length + ' files');
           addChatMessage('user', query);
 
           document.getElementById('chatInput').disabled = true;
           document.getElementById('chatSendBtn').disabled = true;
+          showAiProgress('Summarizing ' + filePaths.length + ' file' + (filePaths.length > 1 ? 's' : '') + '...');
           addChatLoading();
 
           invoke('ollama_summarize', { filePaths: filePaths }).then(function(response) {
+            hideAiProgress();
             removeChatLoading();
             addChatMessage('assistant', response);
             document.getElementById('chatInput').disabled = false;
             document.getElementById('chatSendBtn').disabled = false;
           }).catch(function(e) {
+            hideAiProgress();
             removeChatLoading();
             addChatMessage('assistant', 'Summarization failed: ' + e);
             document.getElementById('chatInput').disabled = false;
@@ -2007,25 +2184,59 @@
           });
         }
 
+        // AI Progress Indicator Functions
+        function showAiProgress(text) {
+          var container = document.getElementById('aiProgressContainer');
+          var progressText = document.getElementById('aiProgressText');
+          progressText.textContent = text || 'Processing...';
+          container.style.display = 'block';
+          document.getElementById('chatBubble').classList.add('processing');
+        }
+
+        function updateAiProgress(text) {
+          document.getElementById('aiProgressText').textContent = text;
+        }
+
+        function hideAiProgress() {
+          document.getElementById('aiProgressContainer').style.display = 'none';
+          document.getElementById('chatBubble').classList.remove('processing');
+        }
+
         function handleQuickAction(action) {
           if (!chatOpen) openChat();
 
           var query = '';
+          var progressText = '';
           switch(action) {
             case 'summarize':
-              query = 'Summarize my most recent files and what they contain';
+              query = 'Give me a brief overview of my file collection. What types of files do I have and what are the main themes or content areas?';
+              progressText = 'Analyzing your collection...';
               break;
             case 'find-duplicates':
-              query = 'Are there any duplicate or very similar files in my collection?';
+              query = 'Look through my files and identify any that might be duplicates or very similar to each other. Group them by similarity.';
+              progressText = 'Scanning for duplicates...';
               break;
             case 'organize':
-              query = 'How would you suggest organizing my files better?';
+              query = 'Based on my current files, suggest a better folder structure or organization system. What categories would work best?';
+              progressText = 'Generating suggestions...';
+              break;
+            case 'extract-insights':
+              query = 'What are the main themes, topics, or patterns you can identify across my files? Extract key insights.';
+              progressText = 'Extracting insights...';
+              break;
+            case 'code-review':
+              query = 'Review my code files for quality, potential issues, and improvements. Focus on the most important findings.';
+              progressText = 'Reviewing code...';
+              break;
+            case 'search-help':
+              query = 'Help me search my files. What kind of queries can I ask? Give me examples of useful searches.';
+              progressText = 'Preparing search tips...';
               break;
             default:
               return;
           }
 
-          sendChatQuery(query);
+          sendChatQuery(query, progressText);
         }
 
         function attachQuickActionHandlers() {
@@ -2044,7 +2255,7 @@
           input.value = '';
         }
 
-        function sendChatQuery(query) {
+        function sendChatQuery(query, progressText) {
           var input = document.getElementById('chatInput');
 
           // Add user message
@@ -2052,19 +2263,35 @@
           input.disabled = true;
           document.getElementById('chatSendBtn').disabled = true;
 
-          // Add loading indicator
+          // Show progress indicator
+          showAiProgress(progressText || 'Thinking...');
           addChatLoading();
 
-          // Use RAG query for local AI
+          // Use RAG query for local AI with timeout
+          var timeoutId = setTimeout(function() {
+            updateAiProgress('Still processing...');
+          }, 5000);
+
           invoke('ollama_rag_query', { query: query }).then(function(response) {
+            clearTimeout(timeoutId);
+            hideAiProgress();
             removeChatLoading();
             addChatMessage('assistant', response);
             input.disabled = false;
             document.getElementById('chatSendBtn').disabled = false;
             input.focus();
           }).catch(function(e) {
+            clearTimeout(timeoutId);
+            hideAiProgress();
             removeChatLoading();
-            addChatMessage('assistant', 'Sorry, I encountered an error: ' + e);
+            var errorMsg = String(e);
+            if (errorMsg.includes('connection') || errorMsg.includes('refused')) {
+              addChatMessage('assistant', 'Ollama is not running. Start it with: ollama serve');
+            } else if (errorMsg.includes('model')) {
+              addChatMessage('assistant', 'Model not found. Run: ollama pull llama3.2:3b');
+            } else {
+              addChatMessage('assistant', 'Error: ' + errorMsg);
+            }
             input.disabled = false;
             document.getElementById('chatSendBtn').disabled = false;
             input.focus();
@@ -2472,6 +2699,7 @@
         document.getElementById('chatBubble').onclick = openChat;
         document.getElementById('chatMinimizeBtn').onclick = closeChat;
         document.getElementById('chatClearBtn').onclick = clearChatHistory;
+        document.getElementById('chatSettingsBtn').onclick = openSettings;
         document.getElementById('chatSendBtn').onclick = sendChatMessage;
         document.getElementById('chatInput').onkeypress = function(e) {
           if (e.key === 'Enter') sendChatMessage();
