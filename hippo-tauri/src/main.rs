@@ -7,7 +7,7 @@
     windows_subsystem = "windows"
 )]
 
-use hippo_core::{Hippo, SearchQuery, Tag, Source, MemoryId, ClaudeClient, OllamaClient, OllamaConfig, UnifiedAiClient, AiProvider};
+use hippo_core::{Hippo, SearchQuery, Tag, Source, MemoryId, ClaudeClient, OllamaClient, UnifiedAiClient};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;

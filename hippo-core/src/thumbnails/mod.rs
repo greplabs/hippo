@@ -1,7 +1,6 @@
 //! Thumbnail generation and caching for fast image previews
 
 use crate::error::{HippoError, Result};
-use image::imageops::FilterType;
 use image::{DynamicImage, ImageFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,9 +8,6 @@ use tracing::{debug, warn};
 
 /// Default thumbnail size (width and height)
 pub const THUMBNAIL_SIZE: u32 = 256;
-
-/// Thumbnail quality for JPEG (0-100)
-const JPEG_QUALITY: u8 = 85;
 
 /// Thumbnail manager for generating and caching image thumbnails
 pub struct ThumbnailManager {

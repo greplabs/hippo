@@ -10,8 +10,7 @@ use crate::ollama::{OllamaClient, OllamaConfig, LocalAnalysis, ChatMessage, RagC
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::sync::Arc;
-use tracing::{info, warn, debug};
+use tracing::{info, warn};
 
 /// Claude API client for AI-powered features
 pub struct ClaudeClient {
