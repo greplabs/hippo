@@ -72,6 +72,7 @@ pub mod error;
 pub mod ai;
 pub mod watcher;
 pub mod duplicates;
+pub mod thumbnails;
 
 pub use models::*;
 pub use error::{HippoError, Result};
@@ -88,6 +89,9 @@ pub use watcher::{FileWatcher, WatchEvent, WatchStats};
 // Re-export duplicates types
 pub use duplicates::{DuplicateGroup, DuplicateSummary, compute_file_hash, find_duplicates_by_scanning};
 
+// Re-export thumbnail types
+pub use thumbnails::{ThumbnailManager, ThumbnailStats, is_supported_image, THUMBNAIL_SIZE};
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -101,6 +105,7 @@ pub struct Hippo {
     searcher: Arc<search::Searcher>,
     graph: Arc<RwLock<graph::KnowledgeGraph>>,
     watcher: Option<Arc<watcher::FileWatcher>>,
+    thumbnail_manager: Arc<thumbnails::ThumbnailManager>,
     config: HippoConfig,
 }
 
@@ -174,6 +179,9 @@ impl Hippo {
             }
         };
 
+        // Initialize thumbnail manager
+        let thumbnail_manager = Arc::new(thumbnails::ThumbnailManager::new()?);
+
         Ok(Self {
             storage,
             indexer,
@@ -181,6 +189,7 @@ impl Hippo {
             searcher,
             graph,
             watcher,
+            thumbnail_manager,
             config,
         })
     }
@@ -374,6 +383,38 @@ impl Hippo {
     /// Get all memories (for duplicate scanning)
     pub async fn get_all_memories(&self) -> Result<Vec<Memory>> {
         self.storage.get_all_memories().await
+    }
+
+    // === Thumbnail Management ===
+
+    /// Get or generate a thumbnail for an image file
+    pub fn get_thumbnail(&self, image_path: &std::path::Path) -> Result<PathBuf> {
+        self.thumbnail_manager.generate_thumbnail(image_path)
+    }
+
+    /// Get the thumbnail path without generating (may not exist)
+    pub fn get_thumbnail_path(&self, image_path: &std::path::Path) -> PathBuf {
+        self.thumbnail_manager.get_thumbnail_path(image_path)
+    }
+
+    /// Check if a thumbnail exists for the given image
+    pub fn has_thumbnail(&self, image_path: &std::path::Path) -> bool {
+        self.thumbnail_manager.has_thumbnail(image_path)
+    }
+
+    /// Get thumbnail cache statistics
+    pub fn thumbnail_stats(&self) -> Result<ThumbnailStats> {
+        self.thumbnail_manager.get_stats()
+    }
+
+    /// Clear the thumbnail cache
+    pub fn clear_thumbnail_cache(&self) -> Result<()> {
+        self.thumbnail_manager.clear_cache()
+    }
+
+    /// Get the thumbnail manager for direct access
+    pub fn thumbnail_manager(&self) -> &Arc<thumbnails::ThumbnailManager> {
+        &self.thumbnail_manager
     }
 }
 

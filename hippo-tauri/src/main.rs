@@ -349,6 +349,55 @@ async fn pick_folder() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+async fn get_thumbnail(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let file_path = std::path::Path::new(&path);
+
+    // Check if this is a supported image format
+    if !hippo_core::is_supported_image(file_path) {
+        return Err("Not a supported image format".to_string());
+    }
+
+    // Generate or get cached thumbnail
+    match hippo.get_thumbnail(file_path) {
+        Ok(thumb_path) => Ok(thumb_path.to_string_lossy().to_string()),
+        Err(e) => Err(format!("Failed to generate thumbnail: {}", e))
+    }
+}
+
+#[tauri::command]
+async fn get_thumbnail_stats(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    match hippo.thumbnail_stats() {
+        Ok(stats) => {
+            serde_json::to_value(serde_json::json!({
+                "count": stats.count,
+                "total_size": stats.total_size
+            })).map_err(|e| e.to_string())
+        }
+        Err(e) => Err(format!("Failed to get thumbnail stats: {}", e))
+    }
+}
+
+#[tauri::command]
+async fn clear_thumbnail_cache(state: State<'_, AppState>) -> Result<String, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    match hippo.clear_thumbnail_cache() {
+        Ok(_) => Ok("Thumbnail cache cleared".to_string()),
+        Err(e) => Err(format!("Failed to clear cache: {}", e))
+    }
+}
+
+#[tauri::command]
 async fn add_source_path(
     path: String,
     state: State<'_, AppState>,
@@ -399,6 +448,9 @@ fn main() {
             reset_index,
             open_in_finder,
             open_file,
+            get_thumbnail,
+            get_thumbnail_stats,
+            clear_thumbnail_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
