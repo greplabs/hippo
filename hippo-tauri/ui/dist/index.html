@@ -59,6 +59,9 @@
     body.dark .sidebar-btn:hover { background: #44403c; color: #d6d3d1; }
     .sidebar-btn.danger:hover { background: #fef2f2; color: #dc2626; }
     body.dark .sidebar-btn.danger:hover { background: #451a1a; color: #f87171; }
+    .sidebar-btn.ai-chat-btn { background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); color: white; }
+    .sidebar-btn.ai-chat-btn:hover { background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); color: white; }
+    .sidebar-btn.ai-chat-btn .icon { opacity: 1; }
 
     /* Main area */
     .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
@@ -252,6 +255,74 @@
     body.dark .empty-title { color: #d6d3d1; }
     .empty-text { font-size: 14px; }
 
+    /* AI Features */
+    .ai-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid #e7e5e4; }
+    body.dark .ai-section { border-color: #44403c; }
+    .ai-btn { width: 100%; padding: 10px 14px; background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); border: none; border-radius: 8px; color: white; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s; }
+    .ai-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+    .ai-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+    .ai-btn.loading { pointer-events: none; }
+    .ai-btn.loading::after { content: ''; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .ai-summary { margin-top: 12px; padding: 12px; background: #faf5ff; border-radius: 8px; font-size: 13px; line-height: 1.5; color: #57534e; }
+    body.dark .ai-summary { background: #2e1065; color: #e9d5ff; }
+    .ai-summary-label { font-size: 11px; color: #8b5cf6; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .ai-topics { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .ai-topic { padding: 3px 8px; background: #ede9fe; border-radius: 4px; font-size: 11px; color: #6366f1; }
+    body.dark .ai-topic { background: #4c1d95; color: #c4b5fd; }
+
+    /* Search Mode Toggle */
+    .search-mode { display: flex; gap: 2px; background: #f5f5f4; padding: 3px; border-radius: 8px; margin-left: 8px; }
+    body.dark .search-mode { background: #44403c; }
+    .search-mode-btn { padding: 5px 10px; border: none; background: transparent; border-radius: 6px; font-size: 12px; color: #78716c; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 4px; }
+    .search-mode-btn:hover { color: #57534e; }
+    .search-mode-btn.active { background: white; color: #292524; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    body.dark .search-mode-btn { color: #a8a29e; }
+    body.dark .search-mode-btn:hover { color: #d6d3d1; }
+    body.dark .search-mode-btn.active { background: #57534e; color: #fafaf9; }
+
+    /* Settings Modal */
+    .settings-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1001; display: none; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+    .settings-overlay.open { display: flex; }
+    .settings-modal { width: 480px; max-width: 90vw; background: white; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); overflow: hidden; animation: cmdSlide 0.15s ease-out; }
+    body.dark .settings-modal { background: #292524; }
+    .settings-header { padding: 20px 24px; border-bottom: 1px solid #e7e5e4; display: flex; align-items: center; justify-content: space-between; }
+    body.dark .settings-header { border-color: #44403c; }
+    .settings-header h2 { font-size: 18px; color: #292524; display: flex; align-items: center; gap: 10px; }
+    body.dark .settings-header h2 { color: #fafaf9; }
+    .settings-body { padding: 24px; }
+    .settings-section { margin-bottom: 24px; }
+    .settings-section:last-child { margin-bottom: 0; }
+    .settings-label { display: block; font-size: 14px; font-weight: 500; color: #292524; margin-bottom: 8px; }
+    body.dark .settings-label { color: #fafaf9; }
+    .settings-desc { font-size: 12px; color: #78716c; margin-bottom: 10px; }
+    body.dark .settings-desc { color: #a8a29e; }
+    .settings-input { width: 100%; padding: 10px 14px; border: 1px solid #e7e5e4; border-radius: 8px; font-size: 14px; color: #292524; background: #fafaf9; transition: all 0.15s; }
+    .settings-input:focus { outline: none; border-color: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,0.1); }
+    body.dark .settings-input { background: #1c1917; border-color: #44403c; color: #fafaf9; }
+    .settings-footer { padding: 16px 24px; background: #fafaf9; border-top: 1px solid #e7e5e4; display: flex; justify-content: flex-end; gap: 8px; }
+    body.dark .settings-footer { background: #1c1917; border-color: #44403c; }
+
+    /* Symbol Search Results */
+    .symbol-results { padding: 8px 16px; background: #fefce8; border-bottom: 1px solid #fef08a; max-height: 200px; overflow-y: auto; }
+    body.dark .symbol-results { background: #422006; border-color: #854d0e; }
+    .symbol-item { padding: 8px 12px; margin-bottom: 4px; background: white; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+    .symbol-item:hover { background: #fef9c3; }
+    body.dark .symbol-item { background: #292524; }
+    body.dark .symbol-item:hover { background: #44403c; }
+    .symbol-name { font-weight: 500; color: #292524; font-family: 'SF Mono', Monaco, monospace; font-size: 13px; }
+    body.dark .symbol-name { color: #fafaf9; }
+    .symbol-type { font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
+    .symbol-type.function { background: #dbeafe; color: #1e40af; }
+    .symbol-type.export { background: #dcfce7; color: #166534; }
+    .symbol-type.import { background: #fce7f3; color: #9d174d; }
+    body.dark .symbol-type.function { background: #1e3a5f; color: #93c5fd; }
+    body.dark .symbol-type.export { background: #14532d; color: #86efac; }
+    body.dark .symbol-type.import { background: #500724; color: #f9a8d4; }
+    .symbol-file { font-size: 11px; color: #78716c; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    body.dark .symbol-file { color: #a8a29e; }
+
     /* Scrollbar */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -309,6 +380,8 @@
       </div>
       <div class="sidebar-footer">
         <p id="statsText" style="margin-bottom:8px;">Loading...</p>
+        <button class="sidebar-btn ai-chat-btn" id="chatBtn"><span class="icon icon-sm" id="chatBtnIcon"></span> Ask Hippo</button>
+        <button class="sidebar-btn" id="settingsBtn"><span class="icon icon-sm" id="settingsIcon"></span> AI Settings</button>
         <button class="sidebar-btn" id="darkModeBtn"><span class="icon icon-sm" id="themeIcon"></span> <span id="themeText">Dark Mode</span></button>
         <button class="sidebar-btn danger" id="resetBtn"><span class="icon icon-sm" id="resetIcon"></span> Reset Index</button>
       </div>
@@ -316,13 +389,21 @@
 
     <main class="main">
       <div class="search-bar">
-        <div class="search-container">
-          <span class="icon icon-md" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
-          <div class="active-tags" id="activeTags"></div>
-          <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)">
+        <div style="display:flex;align-items:center;gap:0;">
+          <div class="search-container" style="flex:1;">
+            <span class="icon icon-md" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
+            <div class="active-tags" id="activeTags"></div>
+            <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)">
+          </div>
+          <div class="search-mode">
+            <button class="search-mode-btn active" id="searchModeText" data-mode="text"><span class="icon icon-sm" id="searchModeTextIcon"></span> Text</button>
+            <button class="search-mode-btn" id="searchModeSemantic" data-mode="semantic"><span class="icon icon-sm" id="searchModeSemanticIcon"></span> AI</button>
+            <button class="search-mode-btn" id="searchModeSymbol" data-mode="symbol"><span class="icon icon-sm" id="searchModeSymbolIcon"></span> Code</button>
+          </div>
         </div>
         <div class="tag-bar" id="tagBar"></div>
       </div>
+      <div class="symbol-results" id="symbolResults" style="display:none;"></div>
       <div class="filter-bar">
         <button class="filter-btn active" data-filter="all">All</button>
         <button class="filter-btn" data-filter="favorites"><span class="icon icon-sm filter-icon" data-icon="star"></span> Favorites</button>
@@ -371,6 +452,16 @@
           <div class="info-row"><span class="info-label">Size</span><span class="info-value" id="detailSize">-</span></div>
           <div class="info-row"><span class="info-label">Modified</span><span class="info-value" id="detailDate">-</span></div>
         </div>
+        <div class="ai-section" id="aiSection">
+          <button class="ai-btn" id="aiAnalyzeBtn"><span class="icon icon-sm" id="aiIcon"></span> Analyze with AI</button>
+          <div id="aiResults" style="display:none;">
+            <div class="ai-summary">
+              <div class="ai-summary-label">AI Summary</div>
+              <div id="aiSummaryText"></div>
+              <div class="ai-topics" id="aiTopics"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </aside>
   </div>
@@ -416,6 +507,151 @@
     </div>
   </div>
 
+  <!-- Settings Modal -->
+  <div class="settings-overlay" id="settingsOverlay">
+    <div class="settings-modal" style="width:560px;">
+      <div class="settings-header">
+        <h2><span class="icon icon-md" id="settingsModalIcon"></span> AI Settings</h2>
+        <button class="close-btn" id="closeSettings"><span class="icon icon-md" id="closeSettingsIcon"></span></button>
+      </div>
+      <div class="settings-body" style="max-height:60vh;overflow-y:auto;">
+        <!-- AI Provider Selection -->
+        <div class="settings-section">
+          <label class="settings-label">AI Provider</label>
+          <p class="settings-desc">Choose between local AI (Ollama) or cloud AI (Claude)</p>
+          <select class="settings-input" id="aiProvider" style="cursor:pointer;">
+            <option value="ollama">Ollama (Local, Private, Free)</option>
+            <option value="claude">Claude API (Cloud, Paid)</option>
+          </select>
+        </div>
+
+        <!-- Ollama Settings -->
+        <div id="ollamaSettings">
+          <div class="settings-section" style="background:#f0fdf4;padding:12px;border-radius:8px;margin-top:12px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <span class="icon icon-sm" id="ollamaStatusIcon" style="color:#22c55e;"></span>
+              <label class="settings-label" style="margin:0;">Ollama Status</label>
+              <span id="ollamaStatusText" style="font-size:12px;color:#22c55e;">Checking...</span>
+            </div>
+            <button class="modal-btn secondary" id="refreshOllamaStatus" style="font-size:12px;padding:6px 10px;">Refresh Status</button>
+          </div>
+
+          <div class="settings-section">
+            <label class="settings-label">Installed Models</label>
+            <p class="settings-desc">Models available for analysis and chat</p>
+            <div id="installedModels" style="margin-top:8px;font-size:13px;color:#78716c;">Loading...</div>
+          </div>
+
+          <div class="settings-section">
+            <label class="settings-label">Pull New Model</label>
+            <p class="settings-desc">Download a model from Ollama library</p>
+            <div style="display:flex;gap:8px;">
+              <select class="settings-input" id="modelToPull" style="flex:1;cursor:pointer;">
+                <optgroup label="Embeddings (Required)">
+                  <option value="nomic-embed-text">nomic-embed-text (274MB)</option>
+                  <option value="mxbai-embed-large">mxbai-embed-large (670MB)</option>
+                </optgroup>
+                <optgroup label="Text Generation (Light)">
+                  <option value="llama3.2:3b">llama3.2:3b (2GB)</option>
+                  <option value="phi3:mini">phi3:mini (2.3GB)</option>
+                  <option value="qwen2.5:3b">qwen2.5:3b (1.9GB)</option>
+                </optgroup>
+                <optgroup label="Text Generation (Standard)">
+                  <option value="llama3.1:8b">llama3.1:8b (4.7GB)</option>
+                  <option value="mistral:7b">mistral:7b (4.1GB)</option>
+                </optgroup>
+                <optgroup label="Code Models">
+                  <option value="codellama:7b">codellama:7b (3.8GB)</option>
+                  <option value="deepseek-coder:6.7b">deepseek-coder:6.7b (3.8GB)</option>
+                </optgroup>
+              </select>
+              <button class="modal-btn primary" id="pullModelBtn" style="white-space:nowrap;">Pull Model</button>
+            </div>
+            <div id="pullProgress" style="display:none;margin-top:8px;font-size:12px;color:#78716c;"></div>
+          </div>
+        </div>
+
+        <!-- Claude Settings -->
+        <div id="claudeSettings" style="display:none;">
+          <div class="settings-section">
+            <label class="settings-label">Claude API Key</label>
+            <p class="settings-desc">Get your key at <a href="https://console.anthropic.com" target="_blank" style="color:#8b5cf6;">console.anthropic.com</a></p>
+            <input type="password" class="settings-input" id="apiKeyInput" placeholder="sk-ant-...">
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <label class="settings-label">Default Search Mode</label>
+          <select class="settings-input" id="defaultSearchMode" style="cursor:pointer;">
+            <option value="text">Text Search (fast, keyword matching)</option>
+            <option value="semantic">AI Search (semantic understanding)</option>
+            <option value="symbol">Code Search (functions & symbols)</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-footer">
+        <button class="modal-btn secondary" id="settingsCancel">Cancel</button>
+        <button class="modal-btn primary" id="settingsSave">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RAG Chat Panel -->
+  <div class="chat-overlay" id="chatOverlay" style="display:none;">
+    <div class="chat-panel">
+      <div class="chat-header">
+        <h2><span class="icon icon-md" id="chatIcon"></span> Ask Hippo</h2>
+        <button class="close-btn" id="closeChat"><span class="icon icon-md" id="closeChatIcon"></span></button>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-welcome">
+          <span class="icon icon-xl" style="color:#8b5cf6;">🦛</span>
+          <h3>Chat with your files</h3>
+          <p>Ask questions about your indexed documents and Hippo will find answers using RAG (Retrieval-Augmented Generation).</p>
+        </div>
+      </div>
+      <div class="chat-input-container">
+        <input type="text" class="chat-input" id="chatInput" placeholder="Ask anything about your files...">
+        <button class="chat-send-btn" id="chatSendBtn"><span class="icon icon-md" id="sendIcon"></span></button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    /* Chat Panel Styles */
+    .chat-overlay { position: fixed; top: 0; right: 0; bottom: 0; width: 400px; background: white; box-shadow: -4px 0 20px rgba(0,0,0,0.15); z-index: 1000; display: flex; flex-direction: column; }
+    body.dark .chat-overlay { background: #292524; }
+    .chat-header { padding: 16px 20px; border-bottom: 1px solid #e7e5e4; display: flex; align-items: center; justify-content: space-between; }
+    body.dark .chat-header { border-color: #44403c; }
+    .chat-header h2 { font-size: 16px; color: #292524; display: flex; align-items: center; gap: 8px; }
+    body.dark .chat-header h2 { color: #fafaf9; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 20px; }
+    .chat-welcome { text-align: center; padding: 40px 20px; color: #78716c; }
+    .chat-welcome h3 { font-size: 18px; color: #292524; margin: 12px 0 8px; }
+    body.dark .chat-welcome h3 { color: #fafaf9; }
+    .chat-welcome p { font-size: 14px; line-height: 1.5; }
+    .chat-message { margin-bottom: 16px; }
+    .chat-message.user { text-align: right; }
+    .chat-message .bubble { display: inline-block; max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
+    .chat-message.user .bubble { background: #8b5cf6; color: white; border-bottom-right-radius: 4px; }
+    .chat-message.assistant .bubble { background: #f5f5f4; color: #292524; border-bottom-left-radius: 4px; }
+    body.dark .chat-message.assistant .bubble { background: #44403c; color: #fafaf9; }
+    .chat-message .sources { margin-top: 8px; font-size: 11px; color: #78716c; }
+    .chat-input-container { padding: 16px 20px; border-top: 1px solid #e7e5e4; display: flex; gap: 8px; }
+    body.dark .chat-input-container { border-color: #44403c; }
+    .chat-input { flex: 1; padding: 12px 16px; border: 1px solid #e7e5e4; border-radius: 24px; font-size: 14px; outline: none; }
+    .chat-input:focus { border-color: #8b5cf6; }
+    body.dark .chat-input { background: #1c1917; border-color: #44403c; color: #fafaf9; }
+    .chat-send-btn { width: 44px; height: 44px; border-radius: 50%; background: #8b5cf6; border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+    .chat-send-btn:hover { background: #7c3aed; }
+    .chat-send-btn:disabled { background: #d6d3d1; cursor: not-allowed; }
+    .chat-loading { display: flex; gap: 4px; padding: 8px 0; }
+    .chat-loading span { width: 8px; height: 8px; background: #8b5cf6; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out; }
+    .chat-loading span:nth-child(1) { animation-delay: -0.32s; }
+    .chat-loading span:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+  </style>
+
   <script>
     (function() {
       // Custom SVG Icons - Clean, minimal design
@@ -448,7 +684,15 @@
         command: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>',
         zap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
         check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-        checkSquare: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
+        checkSquare: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        sparkles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>',
+        brain: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"/></svg>',
+        terminal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
+        messageCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
+        send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
+        checkCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+        alertCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+        download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'
       };
 
       // State
@@ -470,6 +714,16 @@
       // Thumbnail cache: path -> thumbnail path
       var thumbnailCache = {};
       var thumbnailPending = {};
+
+      // AI settings
+      var apiKey = localStorage.getItem('hippo-api-key') || '';
+      var searchMode = localStorage.getItem('hippo-search-mode') || 'text';
+      var aiProvider = localStorage.getItem('hippo-ai-provider') || 'ollama';
+      var ollamaAvailable = false;
+      var ollamaModels = [];
+      var chatMessages = [];
+      var chatOpen = false;
+      var symbolResults = [];
 
       // Apply dark mode on load
       if (darkMode) document.body.classList.add('dark');
@@ -497,6 +751,20 @@
         document.getElementById('bulkTagIcon').innerHTML = icons.tag;
         document.getElementById('bulkSelectIcon').innerHTML = icons.checkSquare;
         document.getElementById('bulkCloseIcon').innerHTML = icons.close;
+        // AI icons
+        document.getElementById('settingsIcon').innerHTML = icons.settings;
+        document.getElementById('settingsModalIcon').innerHTML = icons.sparkles;
+        document.getElementById('closeSettingsIcon').innerHTML = icons.close;
+        document.getElementById('aiIcon').innerHTML = icons.sparkles;
+        document.getElementById('searchModeTextIcon').innerHTML = icons.search;
+        document.getElementById('searchModeSemanticIcon').innerHTML = icons.brain;
+        document.getElementById('searchModeSymbolIcon').innerHTML = icons.terminal;
+        // Chat icons
+        document.getElementById('chatBtnIcon').innerHTML = icons.messageCircle;
+        document.getElementById('chatIcon').innerHTML = icons.messageCircle;
+        document.getElementById('closeChatIcon').innerHTML = icons.close;
+        document.getElementById('sendIcon').innerHTML = icons.send;
+        document.getElementById('ollamaStatusIcon').innerHTML = icons.checkCircle;
         // Filter icons
         document.querySelectorAll('.filter-icon').forEach(function(el) {
           var iconName = el.dataset.icon;
@@ -1164,6 +1432,329 @@
           });
         }
 
+        // ==================== AI Features ====================
+
+        function openSettings() {
+          document.getElementById('settingsOverlay').classList.add('open');
+          document.getElementById('apiKeyInput').value = apiKey;
+          document.getElementById('defaultSearchMode').value = searchMode;
+          document.getElementById('aiProvider').value = aiProvider;
+          updateProviderUI();
+          checkOllamaStatus();
+        }
+
+        function closeSettings() {
+          document.getElementById('settingsOverlay').classList.remove('open');
+        }
+
+        function saveSettings() {
+          apiKey = document.getElementById('apiKeyInput').value.trim();
+          searchMode = document.getElementById('defaultSearchMode').value;
+          aiProvider = document.getElementById('aiProvider').value;
+          localStorage.setItem('hippo-api-key', apiKey);
+          localStorage.setItem('hippo-search-mode', searchMode);
+          localStorage.setItem('hippo-ai-provider', aiProvider);
+          setSearchMode(searchMode);
+          closeSettings();
+          showToast('Settings saved', 'success');
+        }
+
+        function updateProviderUI() {
+          var isOllama = document.getElementById('aiProvider').value === 'ollama';
+          document.getElementById('ollamaSettings').style.display = isOllama ? 'block' : 'none';
+          document.getElementById('claudeSettings').style.display = isOllama ? 'none' : 'block';
+        }
+
+        function checkOllamaStatus() {
+          var statusIcon = document.getElementById('ollamaStatusIcon');
+          var statusText = document.getElementById('ollamaStatusText');
+          var statusSection = statusIcon.parentElement.parentElement;
+
+          statusText.textContent = 'Checking...';
+          statusIcon.innerHTML = icons.refresh;
+          statusIcon.style.color = '#78716c';
+
+          invoke('ollama_status').then(function(status) {
+            ollamaAvailable = status.available;
+            if (status.available) {
+              statusIcon.innerHTML = icons.checkCircle;
+              statusIcon.style.color = '#22c55e';
+              statusText.textContent = 'Running';
+              statusText.style.color = '#22c55e';
+              statusSection.style.background = '#f0fdf4';
+              loadOllamaModels();
+            } else {
+              statusIcon.innerHTML = icons.alertCircle;
+              statusIcon.style.color = '#ef4444';
+              statusText.textContent = 'Not running';
+              statusText.style.color = '#ef4444';
+              statusSection.style.background = '#fef2f2';
+              document.getElementById('installedModels').innerHTML = '<span style="color:#ef4444;">Start Ollama to see installed models</span>';
+            }
+          }).catch(function(e) {
+            statusIcon.innerHTML = icons.alertCircle;
+            statusIcon.style.color = '#ef4444';
+            statusText.textContent = 'Error';
+            statusText.style.color = '#ef4444';
+          });
+        }
+
+        function loadOllamaModels() {
+          invoke('ollama_list_models').then(function(models) {
+            ollamaModels = models;
+            var html = '';
+            if (models.length === 0) {
+              html = '<span style="color:#f59e0b;">No models installed. Pull one below.</span>';
+            } else {
+              models.forEach(function(m) {
+                html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e7e5e4;">';
+                html += '<span style="font-weight:500;color:#292524;">' + esc(m.name) + '</span>';
+                html += '<span style="color:#78716c;">' + m.size_formatted + '</span>';
+                html += '</div>';
+              });
+            }
+            document.getElementById('installedModels').innerHTML = html;
+          }).catch(function(e) {
+            document.getElementById('installedModels').innerHTML = '<span style="color:#ef4444;">Failed to load models</span>';
+          });
+        }
+
+        function pullModel() {
+          var modelName = document.getElementById('modelToPull').value;
+          var btn = document.getElementById('pullModelBtn');
+          var progress = document.getElementById('pullProgress');
+
+          btn.disabled = true;
+          btn.textContent = 'Pulling...';
+          progress.style.display = 'block';
+          progress.textContent = 'Downloading ' + modelName + '... This may take a few minutes.';
+
+          invoke('ollama_pull_model', { name: modelName }).then(function() {
+            btn.disabled = false;
+            btn.textContent = 'Pull Model';
+            progress.style.display = 'none';
+            showToast('Model ' + modelName + ' installed!', 'success');
+            loadOllamaModels();
+          }).catch(function(e) {
+            btn.disabled = false;
+            btn.textContent = 'Pull Model';
+            progress.textContent = 'Error: ' + e;
+            progress.style.color = '#ef4444';
+            showToast('Failed to pull model: ' + e, 'error');
+          });
+        }
+
+        // ==================== Chat Functions ====================
+
+        function openChat() {
+          chatOpen = true;
+          document.getElementById('chatOverlay').style.display = 'flex';
+          document.getElementById('chatInput').focus();
+        }
+
+        function closeChat() {
+          chatOpen = false;
+          document.getElementById('chatOverlay').style.display = 'none';
+        }
+
+        function sendChatMessage() {
+          var input = document.getElementById('chatInput');
+          var query = input.value.trim();
+          if (!query) return;
+
+          // Add user message
+          addChatMessage('user', query);
+          input.value = '';
+          input.disabled = true;
+          document.getElementById('chatSendBtn').disabled = true;
+
+          // Add loading indicator
+          addChatLoading();
+
+          // Use RAG query for local AI
+          invoke('ollama_rag_query', { query: query }).then(function(response) {
+            removeChatLoading();
+            addChatMessage('assistant', response);
+            input.disabled = false;
+            document.getElementById('chatSendBtn').disabled = false;
+            input.focus();
+          }).catch(function(e) {
+            removeChatLoading();
+            addChatMessage('assistant', 'Sorry, I encountered an error: ' + e);
+            input.disabled = false;
+            document.getElementById('chatSendBtn').disabled = false;
+            input.focus();
+          });
+        }
+
+        function addChatMessage(role, content) {
+          var container = document.getElementById('chatMessages');
+          // Remove welcome message if present
+          var welcome = container.querySelector('.chat-welcome');
+          if (welcome) welcome.remove();
+
+          var msgDiv = document.createElement('div');
+          msgDiv.className = 'chat-message ' + role;
+          msgDiv.innerHTML = '<div class="bubble">' + esc(content) + '</div>';
+          container.appendChild(msgDiv);
+          container.scrollTop = container.scrollHeight;
+          chatMessages.push({ role: role, content: content });
+        }
+
+        function addChatLoading() {
+          var container = document.getElementById('chatMessages');
+          var loadingDiv = document.createElement('div');
+          loadingDiv.className = 'chat-message assistant';
+          loadingDiv.id = 'chatLoading';
+          loadingDiv.innerHTML = '<div class="chat-loading"><span></span><span></span><span></span></div>';
+          container.appendChild(loadingDiv);
+          container.scrollTop = container.scrollHeight;
+        }
+
+        function removeChatLoading() {
+          var loading = document.getElementById('chatLoading');
+          if (loading) loading.remove();
+        }
+
+        function setSearchMode(mode) {
+          searchMode = mode;
+          document.querySelectorAll('.search-mode-btn').forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+          });
+          // Update placeholder
+          var input = document.getElementById('searchInput');
+          if (mode === 'text') {
+            input.placeholder = 'Search files... (Tab to add tag)';
+          } else if (mode === 'semantic') {
+            input.placeholder = 'Ask anything about your files...';
+          } else if (mode === 'symbol') {
+            input.placeholder = 'Search functions, classes, imports...';
+          }
+        }
+
+        function handleAISearch(query) {
+          if (!query.trim()) {
+            document.getElementById('symbolResults').style.display = 'none';
+            return;
+          }
+
+          if (searchMode === 'semantic') {
+            performSemanticSearch(query);
+          } else if (searchMode === 'symbol') {
+            performSymbolSearch(query);
+          }
+        }
+
+        function performSemanticSearch(query) {
+          if (!apiKey) {
+            showToast('Set your API key in AI Settings first', 'error');
+            return;
+          }
+          showToast('Searching with AI...', 'info');
+          invoke('semantic_search', { query: query, limit: 30 }).then(function(results) {
+            // Update memories with semantic results
+            if (results && results.length > 0) {
+              var semanticMemories = results.map(function(r) { return r.memory; });
+              memories = semanticMemories;
+              renderFiles();
+              showToast('Found ' + results.length + ' similar files', 'success');
+            } else {
+              showToast('No similar files found', 'info');
+            }
+          }).catch(function(e) {
+            showToast('Semantic search failed: ' + e, 'error');
+          });
+        }
+
+        function performSymbolSearch(query) {
+          invoke('search_symbols', { query: query }).then(function(results) {
+            symbolResults = results || [];
+            renderSymbolResults();
+          }).catch(function(e) {
+            showToast('Symbol search failed: ' + e, 'error');
+          });
+        }
+
+        function renderSymbolResults() {
+          var container = document.getElementById('symbolResults');
+          if (symbolResults.length === 0) {
+            container.style.display = 'none';
+            return;
+          }
+
+          var html = '';
+          symbolResults.slice(0, 20).forEach(function(sym) {
+            html += '<div class="symbol-item" data-file="' + esc(sym.file) + '" data-line="' + (sym.line || 1) + '">';
+            html += '<span class="symbol-name">' + esc(sym.name) + '</span>';
+            html += '<span class="symbol-type ' + sym.type + '">' + sym.type + '</span>';
+            html += '<div class="symbol-file">' + esc(sym.file) + (sym.line ? ':' + sym.line : '') + '</div>';
+            html += '</div>';
+          });
+
+          container.innerHTML = html;
+          container.style.display = 'block';
+
+          // Bind click handlers
+          container.querySelectorAll('.symbol-item').forEach(function(item) {
+            item.onclick = function() {
+              var file = item.dataset.file;
+              invoke('open_file', { path: file }).catch(function() {});
+              container.style.display = 'none';
+            };
+          });
+        }
+
+        function analyzeWithAI() {
+          if (!selectedMemory) return;
+          if (!apiKey) {
+            showToast('Set your API key in AI Settings first', 'error');
+            openSettings();
+            return;
+          }
+
+          var btn = document.getElementById('aiAnalyzeBtn');
+          btn.classList.add('loading');
+          btn.disabled = true;
+
+          invoke('analyze_file', { memoryId: selectedMemory.id, apiKey: apiKey }).then(function(analysis) {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+
+            // Show results
+            document.getElementById('aiResults').style.display = 'block';
+            document.getElementById('aiSummaryText').textContent = analysis.description || 'No description generated';
+
+            var topicsHtml = '';
+            if (analysis.tags && analysis.tags.length > 0) {
+              analysis.tags.forEach(function(tag) {
+                topicsHtml += '<span class="ai-topic">' + esc(tag.name) + '</span>';
+              });
+            }
+            document.getElementById('aiTopics').innerHTML = topicsHtml;
+
+            // Refresh tags
+            invoke('get_tags').then(function(tags) {
+              allTags = tags || [];
+              renderTagBar();
+            });
+
+            // Refresh the detail panel tags
+            var tagsHtml = '';
+            if (selectedMemory.tags) {
+              selectedMemory.tags.forEach(function(t) {
+                tagsHtml += '<span class="detail-tag">' + esc(t.name) + '</span>';
+              });
+            }
+            document.getElementById('detailTags').innerHTML = tagsHtml || '<span style="color:#a8a29e;font-size:12px;">No tags</span>';
+
+            showToast('AI analysis complete!', 'success');
+          }).catch(function(e) {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            showToast('Analysis failed: ' + e, 'error');
+          });
+        }
+
         function selectMemory(mem) {
           if (!mem) return;
           selectedMemory = mem;
@@ -1329,8 +1920,19 @@
         };
 
         document.getElementById('searchInput').oninput = function(e) {
-          search(e.target.value);
+          var query = e.target.value;
+          if (searchMode === 'text') {
+            search(query);
+          }
+          // AI search is triggered on Enter, not on every keystroke
         };
+
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+          if (e.key === 'Enter' && searchMode !== 'text') {
+            e.preventDefault();
+            handleAISearch(e.target.value);
+          }
+        });
 
         document.getElementById('searchInput').onkeydown = function(e) {
           if (e.key === 'Tab' && e.target.value.trim()) {
@@ -1368,6 +1970,43 @@
           document.getElementById('gridViewBtn').classList.remove('active');
           renderFiles();
         };
+
+        // Settings event bindings
+        document.getElementById('settingsBtn').onclick = openSettings;
+        document.getElementById('closeSettings').onclick = closeSettings;
+        document.getElementById('settingsCancel').onclick = closeSettings;
+        document.getElementById('settingsSave').onclick = saveSettings;
+        document.getElementById('settingsOverlay').onclick = function(e) {
+          if (e.target === this) closeSettings();
+        };
+        document.getElementById('aiProvider').onchange = updateProviderUI;
+        document.getElementById('refreshOllamaStatus').onclick = checkOllamaStatus;
+        document.getElementById('pullModelBtn').onclick = pullModel;
+
+        // Chat event bindings
+        document.getElementById('chatBtn').onclick = openChat;
+        document.getElementById('closeChat').onclick = closeChat;
+        document.getElementById('chatSendBtn').onclick = sendChatMessage;
+        document.getElementById('chatInput').onkeypress = function(e) {
+          if (e.key === 'Enter') sendChatMessage();
+        };
+
+        // Search mode buttons
+        document.querySelectorAll('.search-mode-btn').forEach(function(btn) {
+          btn.onclick = function() {
+            setSearchMode(btn.dataset.mode);
+            var query = document.getElementById('searchInput').value.trim();
+            if (query && searchMode !== 'text') {
+              handleAISearch(query);
+            }
+          };
+        });
+
+        // AI analyze button
+        document.getElementById('aiAnalyzeBtn').onclick = analyzeWithAI;
+
+        // Initialize search mode from saved preference
+        setSearchMode(searchMode);
 
         // Bulk action bar event bindings
         document.getElementById('bulkFavorite').onclick = function() {

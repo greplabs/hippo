@@ -7,7 +7,7 @@
     windows_subsystem = "windows"
 )]
 
-use hippo_core::{Hippo, SearchQuery, Tag, Source, MemoryId, ClaudeClient};
+use hippo_core::{Hippo, SearchQuery, Tag, Source, MemoryId, ClaudeClient, OllamaClient, OllamaConfig, UnifiedAiClient, AiProvider};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
@@ -612,9 +612,9 @@ async fn add_source_path(
     println!("[Hippo] Adding source path: {}", path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    
+
     let source = Source::Local { root_path: path.into() };
-    
+
     match hippo.add_source(source).await {
         Ok(_) => {
             println!("[Hippo] Source added successfully, indexing started");
@@ -624,6 +624,265 @@ async fn add_source_path(
             println!("[Hippo] Failed to add source: {}", e);
             Err(e.to_string())
         }
+    }
+}
+
+// ==================== Ollama / Local AI Features ====================
+
+#[tauri::command]
+async fn ollama_status() -> Result<serde_json::Value, String> {
+    println!("[Hippo] Checking Ollama status...");
+    let client = OllamaClient::new();
+
+    let available = client.is_available().await;
+    let version = if available {
+        client.version().await.ok()
+    } else {
+        None
+    };
+
+    Ok(serde_json::json!({
+        "available": available,
+        "version": version,
+        "url": hippo_core::ollama::DEFAULT_OLLAMA_URL
+    }))
+}
+
+#[tauri::command]
+async fn ollama_list_models() -> Result<serde_json::Value, String> {
+    println!("[Hippo] Listing Ollama models...");
+    let client = OllamaClient::new();
+
+    if !client.is_available().await {
+        return Err("Ollama is not running. Please start Ollama first.".to_string());
+    }
+
+    let models = client.list_models().await
+        .map_err(|e| format!("Failed to list models: {}", e))?;
+
+    let model_info: Vec<serde_json::Value> = models.iter()
+        .map(|m| {
+            serde_json::json!({
+                "name": m.name,
+                "size": m.size,
+                "size_formatted": format_bytes(m.size),
+                "digest": &m.digest[..12.min(m.digest.len())],
+                "modified_at": m.modified_at
+            })
+        })
+        .collect();
+
+    println!("[Hippo] Found {} models", model_info.len());
+    Ok(serde_json::Value::Array(model_info))
+}
+
+#[tauri::command]
+async fn ollama_pull_model(name: String) -> Result<String, String> {
+    println!("[Hippo] Pulling Ollama model: {}", name);
+    let client = OllamaClient::new();
+
+    if !client.is_available().await {
+        return Err("Ollama is not running. Please start Ollama first.".to_string());
+    }
+
+    client.pull_model(&name).await
+        .map_err(|e| format!("Failed to pull model: {}", e))?;
+
+    Ok(format!("Model {} pulled successfully", name))
+}
+
+#[tauri::command]
+async fn ollama_analyze(
+    memory_id: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Ollama analyzing file: {}", memory_id);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
+    let memory = hippo.get_memory(id).await
+        .map_err(|e| e.to_string())?
+        .ok_or("Memory not found")?;
+
+    // Use unified AI client with Ollama
+    let ai_client = UnifiedAiClient::with_ollama(None);
+
+    if !ai_client.is_available().await {
+        return Err("Ollama is not running. Please start Ollama first.".to_string());
+    }
+
+    let analysis = ai_client.analyze_file(&memory).await
+        .map_err(|e| format!("Analysis failed: {}", e))?;
+
+    // Add AI tags to the memory
+    for tag_suggestion in &analysis.tags {
+        if tag_suggestion.confidence >= 70 {
+            let tag = tag_suggestion.to_tag();
+            let _ = hippo.add_tag(id, tag).await;
+        }
+    }
+
+    println!("[Hippo] Ollama analysis complete, found {} tags", analysis.tags.len());
+    serde_json::to_value(analysis).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn ollama_summarize(
+    memory_id: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Ollama summarizing: {}", memory_id);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
+    let memory = hippo.get_memory(id).await
+        .map_err(|e| e.to_string())?
+        .ok_or("Memory not found")?;
+
+    // Read file content
+    let content = std::fs::read_to_string(&memory.path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let file_name = memory.path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let ai_client = UnifiedAiClient::with_ollama(None);
+
+    if !ai_client.is_available().await {
+        return Err("Ollama is not running. Please start Ollama first.".to_string());
+    }
+
+    let summary = ai_client.summarize(&content, &file_name).await
+        .map_err(|e| format!("Summarization failed: {}", e))?;
+
+    println!("[Hippo] Ollama summarization complete");
+    serde_json::to_value(summary).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn ollama_chat(
+    messages: Vec<(String, String)>,
+) -> Result<String, String> {
+    println!("[Hippo] Ollama chat with {} messages", messages.len());
+
+    let ai_client = UnifiedAiClient::with_ollama(None);
+
+    if !ai_client.is_available().await {
+        return Err("Ollama is not running. Please start Ollama first.".to_string());
+    }
+
+    let response = ai_client.chat(messages).await
+        .map_err(|e| format!("Chat failed: {}", e))?;
+
+    Ok(response)
+}
+
+#[tauri::command]
+async fn ollama_rag_query(
+    query: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    println!("[Hippo] RAG query: {}", query);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let ai_client = UnifiedAiClient::with_ollama(None);
+
+    if !ai_client.is_available().await {
+        return Err("Ollama is not running. Please start Ollama first.".to_string());
+    }
+
+    // Get query embedding
+    let query_embedding = ai_client.embed_single(&query).await
+        .map_err(|e| format!("Embedding failed: {}", e))?;
+
+    // Get all memories and find similar ones
+    let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+
+    let mut context_docs: Vec<(String, String, f32)> = Vec::new();
+
+    // Find similar files and extract their content
+    for memory in memories.iter().take(100) {
+        // For text-based files, compute similarity
+        if matches!(memory.kind, hippo_core::MemoryKind::Document { .. } | hippo_core::MemoryKind::Code { .. }) {
+            if let Ok(content) = std::fs::read_to_string(&memory.path) {
+                // Truncate content for context
+                let truncated: String = content.chars().take(2000).collect();
+                if let Ok(emb) = ai_client.embed_single(&truncated).await {
+                    let similarity = cosine_similarity(&query_embedding, &emb);
+                    if similarity > 0.3 {
+                        context_docs.push((
+                            truncated,
+                            memory.path.to_string_lossy().to_string(),
+                            similarity
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by similarity and take top results
+    context_docs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+    context_docs.truncate(5);
+
+    if context_docs.is_empty() {
+        return Ok("I couldn't find any relevant documents to answer your question. Try indexing more files or asking a different question.".to_string());
+    }
+
+    // Generate response using RAG
+    let response = ai_client.rag_query(&query, context_docs).await
+        .map_err(|e| format!("RAG query failed: {}", e))?;
+
+    Ok(response)
+}
+
+#[tauri::command]
+async fn get_recommended_models() -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "embedding": {
+            "light": hippo_core::RecommendedModels::EMBEDDING_LIGHT,
+            "standard": hippo_core::RecommendedModels::EMBEDDING_STANDARD
+        },
+        "generation": {
+            "light": hippo_core::RecommendedModels::GENERATION_LIGHT,
+            "standard": hippo_core::RecommendedModels::GENERATION_STANDARD
+        },
+        "code": hippo_core::RecommendedModels::CODE_MODELS
+    }))
+}
+
+// Helper function for cosine similarity
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return 0.0;
+    }
+    dot / (norm_a * norm_b)
+}
+
+// Helper function for formatting bytes
+fn format_bytes(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} B", bytes)
     }
 }
 
@@ -658,13 +917,22 @@ fn main() {
             get_thumbnail,
             get_thumbnail_stats,
             clear_thumbnail_cache,
-            // AI Features
+            // AI Features (Claude API)
             analyze_file,
             summarize_document,
             get_organization_suggestions,
             semantic_search,
             // Code Engine
             search_symbols,
+            // Ollama / Local AI
+            ollama_status,
+            ollama_list_models,
+            ollama_pull_model,
+            ollama_analyze,
+            ollama_summarize,
+            ollama_chat,
+            ollama_rag_query,
+            get_recommended_models,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

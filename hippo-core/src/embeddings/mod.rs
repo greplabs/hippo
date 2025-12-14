@@ -1,18 +1,19 @@
 //! Embedding generation for semantic search
 //!
 //! Supports multiple embedding backends:
-//! - Local ONNX models (CLIP, BGE, CodeBERT)
-//! - API-based embeddings (OpenAI, Voyage AI)
+//! - Ollama local models (nomic-embed-text, mxbai-embed-large)
+//! - API-based embeddings (OpenAI)
 //! - Simple hash-based fallback for offline use
 
 use crate::error::{HippoError, Result};
 use crate::models::*;
+use crate::ollama::{OllamaClient, OllamaConfig};
 use crate::HippoConfig;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// Embedding dimension for different model types
 pub const TEXT_EMBEDDING_DIM: usize = 1536;  // OpenAI ada-002 compatible
@@ -23,6 +24,7 @@ pub const CODE_EMBEDDING_DIM: usize = 768;   // CodeBERT compatible
 pub struct Embedder {
     config: EmbedderConfig,
     client: Client,
+    ollama: Option<OllamaClient>,
     cache: HashMap<String, Vec<f32>>,
 }
 
@@ -38,22 +40,64 @@ pub struct EmbedderConfig {
 pub enum EmbeddingProvider {
     #[default]
     Local,
+    Ollama,
     OpenAI,
-    Voyage,
 }
 
 impl Embedder {
     pub async fn new(config: &HippoConfig) -> Result<Self> {
+        // Try to create Ollama client
+        let ollama = if config.local_embeddings {
+            let ollama_client = OllamaClient::new();
+            if ollama_client.is_available().await {
+                info!("Ollama is available for local embeddings");
+                Some(ollama_client)
+            } else {
+                info!("Ollama not available, using fallback embeddings");
+                None
+            }
+        } else {
+            None
+        };
+
+        let provider = if ollama.is_some() {
+            EmbeddingProvider::Ollama
+        } else if config.ai_api_key.is_some() {
+            EmbeddingProvider::OpenAI
+        } else {
+            EmbeddingProvider::Local
+        };
+
         Ok(Self {
             config: EmbedderConfig {
                 use_local: config.local_embeddings,
                 model_path: Some(config.data_dir.join("models")),
                 api_key: config.ai_api_key.clone(),
-                api_provider: EmbeddingProvider::Local,
+                api_provider: provider,
             },
             client: Client::new(),
+            ollama,
             cache: HashMap::new(),
         })
+    }
+
+    /// Create embedder with Ollama
+    pub fn with_ollama(url: Option<String>) -> Self {
+        let ollama_config = OllamaConfig {
+            base_url: url.unwrap_or_else(|| crate::ollama::DEFAULT_OLLAMA_URL.to_string()),
+            ..Default::default()
+        };
+        Self {
+            config: EmbedderConfig {
+                use_local: true,
+                model_path: None,
+                api_key: None,
+                api_provider: EmbeddingProvider::Ollama,
+            },
+            client: Client::new(),
+            ollama: Some(OllamaClient::with_config(ollama_config)),
+            cache: HashMap::new(),
+        }
     }
 
     /// Create embedder with OpenAI API
@@ -66,8 +110,23 @@ impl Embedder {
                 api_provider: EmbeddingProvider::OpenAI,
             },
             client: Client::new(),
+            ollama: None,
             cache: HashMap::new(),
         }
+    }
+
+    /// Check if Ollama is available
+    pub async fn ollama_available(&self) -> bool {
+        if let Some(ollama) = &self.ollama {
+            ollama.is_available().await
+        } else {
+            false
+        }
+    }
+
+    /// Get the current embedding provider
+    pub fn provider(&self) -> &EmbeddingProvider {
+        &self.config.api_provider
     }
 
     /// Generate embedding for a memory
@@ -187,14 +246,36 @@ impl Embedder {
 
     /// Embed a search query
     pub async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
-        // Use API if available
+        // Use Ollama if available
+        if let Some(ollama) = &self.ollama {
+            if matches!(self.config.api_provider, EmbeddingProvider::Ollama) {
+                match ollama.embed_single(query).await {
+                    Ok(embedding) => return Ok(embedding),
+                    Err(e) => {
+                        warn!("Ollama embedding failed, falling back to hash: {}", e);
+                    }
+                }
+            }
+        }
+
+        // Use OpenAI API if available
         if let Some(api_key) = &self.config.api_key {
             if matches!(self.config.api_provider, EmbeddingProvider::OpenAI) {
                 return self.embed_with_openai(query, api_key).await;
             }
         }
 
+        // Fallback to hash-based embedding
         Ok(self.hash_embed(query, TEXT_EMBEDDING_DIM))
+    }
+
+    /// Embed multiple texts using Ollama
+    pub async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        if let Some(ollama) = &self.ollama {
+            return ollama.embed(texts).await;
+        }
+        // Fallback to individual hash embeddings
+        Ok(texts.iter().map(|t| self.hash_embed(t, TEXT_EMBEDDING_DIM)).collect())
     }
 
     /// Embed text using OpenAI API

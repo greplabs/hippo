@@ -73,6 +73,7 @@ pub mod ai;
 pub mod watcher;
 pub mod duplicates;
 pub mod thumbnails;
+pub mod ollama;
 
 pub use models::*;
 pub use error::{HippoError, Result};
@@ -81,7 +82,7 @@ pub use error::{HippoError, Result};
 pub use graph::MindMap;
 
 // Re-export AI types
-pub use ai::{ClaudeClient, FileAnalysis, TagSuggestion, OrganizationSuggestion, DocumentSummary, CodeSummary, ExtractedEntities};
+pub use ai::{ClaudeClient, FileAnalysis, TagSuggestion, OrganizationSuggestion, DocumentSummary, CodeSummary, ExtractedEntities, UnifiedAiClient, AiProvider, AiConfig};
 
 // Re-export watcher types
 pub use watcher::{FileWatcher, WatchEvent, WatchStats};
@@ -94,6 +95,9 @@ pub use thumbnails::{ThumbnailManager, ThumbnailStats, is_supported_image, THUMB
 
 // Re-export embeddings types
 pub use embeddings::{Embedder, VectorIndex, TEXT_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, CODE_EMBEDDING_DIM};
+
+// Re-export Ollama types
+pub use ollama::{OllamaClient, OllamaConfig, OllamaModel, LocalAnalysis, ChatMessage, RagContext, RagDocument, RecommendedModels};
 
 use std::path::PathBuf;
 use std::sync::Arc;

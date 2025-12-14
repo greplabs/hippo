@@ -1,13 +1,17 @@
-//! AI-powered file analysis and auto-tagging using Claude API
+//! AI-powered file analysis and auto-tagging
 //!
 //! This module provides intelligent file analysis, tag suggestion,
-//! and organization recommendations using Anthropic's Claude API.
+//! and organization recommendations using either:
+//! - Anthropic's Claude API (cloud)
+//! - Ollama (local, privacy-first)
 
 use crate::{Memory, MemoryKind, Tag, TagSource, Result, HippoError};
+use crate::ollama::{OllamaClient, OllamaConfig, LocalAnalysis, ChatMessage, RagContext, RagDocument};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use tracing::{info, warn};
+use std::sync::Arc;
+use tracing::{info, warn, debug};
 
 /// Claude API client for AI-powered features
 pub struct ClaudeClient {
@@ -789,4 +793,401 @@ pub struct CodeSummary {
     pub complexity: Option<String>,
     pub patterns: Vec<String>,
     pub suggested_tags: Vec<String>,
+}
+
+// ==================== Unified AI Client ====================
+
+/// AI provider selection
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AiProvider {
+    /// Use Anthropic's Claude API (requires API key)
+    Claude,
+    /// Use local Ollama instance (privacy-first, no API key needed)
+    Ollama,
+}
+
+impl Default for AiProvider {
+    fn default() -> Self {
+        AiProvider::Ollama // Default to local for privacy
+    }
+}
+
+/// Configuration for the unified AI client
+#[derive(Debug, Clone)]
+pub struct AiConfig {
+    pub provider: AiProvider,
+    pub claude_api_key: Option<String>,
+    pub ollama_url: String,
+    pub ollama_embedding_model: String,
+    pub ollama_generation_model: String,
+}
+
+impl Default for AiConfig {
+    fn default() -> Self {
+        Self {
+            provider: AiProvider::Ollama,
+            claude_api_key: None,
+            ollama_url: crate::ollama::DEFAULT_OLLAMA_URL.to_string(),
+            ollama_embedding_model: crate::ollama::DEFAULT_EMBEDDING_MODEL.to_string(),
+            ollama_generation_model: crate::ollama::DEFAULT_GENERATION_MODEL.to_string(),
+        }
+    }
+}
+
+/// Unified AI client that supports both Claude and Ollama backends
+pub struct UnifiedAiClient {
+    config: AiConfig,
+    claude: Option<ClaudeClient>,
+    ollama: OllamaClient,
+}
+
+impl UnifiedAiClient {
+    /// Create a new unified AI client with default configuration (Ollama)
+    pub fn new() -> Self {
+        Self::with_config(AiConfig::default())
+    }
+
+    /// Create with custom configuration
+    pub fn with_config(config: AiConfig) -> Self {
+        let claude = config.claude_api_key.as_ref().map(|key| ClaudeClient::new(key.clone()));
+
+        let ollama_config = OllamaConfig {
+            base_url: config.ollama_url.clone(),
+            embedding_model: config.ollama_embedding_model.clone(),
+            generation_model: config.ollama_generation_model.clone(),
+            timeout_secs: 120,
+        };
+        let ollama = OllamaClient::with_config(ollama_config);
+
+        Self {
+            config,
+            claude,
+            ollama,
+        }
+    }
+
+    /// Create with Claude API key
+    pub fn with_claude(api_key: String) -> Self {
+        Self::with_config(AiConfig {
+            provider: AiProvider::Claude,
+            claude_api_key: Some(api_key),
+            ..Default::default()
+        })
+    }
+
+    /// Create with Ollama only
+    pub fn with_ollama(url: Option<String>) -> Self {
+        Self::with_config(AiConfig {
+            provider: AiProvider::Ollama,
+            ollama_url: url.unwrap_or_else(|| crate::ollama::DEFAULT_OLLAMA_URL.to_string()),
+            ..Default::default()
+        })
+    }
+
+    /// Get the current provider
+    pub fn provider(&self) -> AiProvider {
+        self.config.provider
+    }
+
+    /// Set the AI provider
+    pub fn set_provider(&mut self, provider: AiProvider) {
+        self.config.provider = provider;
+    }
+
+    /// Set Claude API key
+    pub fn set_claude_key(&mut self, api_key: String) {
+        self.config.claude_api_key = Some(api_key.clone());
+        self.claude = Some(ClaudeClient::new(api_key));
+    }
+
+    /// Set Ollama models
+    pub fn set_ollama_models(&mut self, embedding_model: Option<String>, generation_model: Option<String>) {
+        if let Some(model) = embedding_model {
+            self.config.ollama_embedding_model = model;
+        }
+        if let Some(model) = generation_model {
+            self.config.ollama_generation_model = model;
+        }
+        // Recreate Ollama client with new config
+        let ollama_config = OllamaConfig {
+            base_url: self.config.ollama_url.clone(),
+            embedding_model: self.config.ollama_embedding_model.clone(),
+            generation_model: self.config.ollama_generation_model.clone(),
+            timeout_secs: 120,
+        };
+        self.ollama = OllamaClient::with_config(ollama_config);
+    }
+
+    /// Check if the current provider is available
+    pub async fn is_available(&self) -> bool {
+        match self.config.provider {
+            AiProvider::Claude => self.claude.is_some(),
+            AiProvider::Ollama => self.ollama.is_available().await,
+        }
+    }
+
+    /// Get Ollama client reference
+    pub fn ollama(&self) -> &OllamaClient {
+        &self.ollama
+    }
+
+    /// Analyze a file and suggest tags
+    pub async fn analyze_file(&self, memory: &Memory) -> Result<FileAnalysis> {
+        match self.config.provider {
+            AiProvider::Claude => {
+                if let Some(claude) = &self.claude {
+                    claude.analyze_file(memory).await
+                } else {
+                    Err(HippoError::Other("Claude API key not configured".to_string()))
+                }
+            }
+            AiProvider::Ollama => {
+                self.analyze_file_with_ollama(memory).await
+            }
+        }
+    }
+
+    /// Analyze file using Ollama
+    async fn analyze_file_with_ollama(&self, memory: &Memory) -> Result<FileAnalysis> {
+        let file_name = memory.path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        // For code files, read and analyze content
+        if let MemoryKind::Code { language, .. } = &memory.kind {
+            if let Ok(code) = std::fs::read_to_string(&memory.path) {
+                let analysis = self.ollama.analyze_code(&code, language, &file_name).await?;
+                return Ok(self.local_analysis_to_file_analysis(analysis));
+            }
+        }
+
+        // For documents, try to read content
+        if let MemoryKind::Document { .. } = &memory.kind {
+            if let Ok(text) = std::fs::read_to_string(&memory.path) {
+                let analysis = self.ollama.analyze_document(&text, &file_name).await?;
+                return Ok(self.local_analysis_to_file_analysis(analysis));
+            }
+        }
+
+        // For other files, analyze based on metadata
+        let kind_str = ClaudeClient::kind_to_string(&memory.kind);
+        let prompt = format!(
+            "Analyze this file and suggest tags:\nFile: {}\nType: {}\nSize: {} bytes\n\nSuggest relevant tags for organization.",
+            file_name,
+            kind_str,
+            memory.metadata.file_size
+        );
+
+        let response = self.ollama.generate(&prompt, Some(
+            "You are a file organization assistant. Suggest relevant tags as a JSON object with 'tags' array containing objects with 'name', 'confidence' (0-100), and 'reason' fields. Also include 'description' field."
+        )).await?;
+
+        self.parse_ollama_analysis_response(&response)
+    }
+
+    fn local_analysis_to_file_analysis(&self, analysis: LocalAnalysis) -> FileAnalysis {
+        let tags = analysis.suggested_tags
+            .into_iter()
+            .map(|name| TagSuggestion {
+                name: name.to_lowercase().replace(' ', "-"),
+                confidence: 75,
+                reason: "AI suggested".to_string(),
+            })
+            .collect();
+
+        FileAnalysis {
+            tags,
+            description: Some(analysis.summary),
+            organization: None,
+        }
+    }
+
+    fn parse_ollama_analysis_response(&self, response: &str) -> Result<FileAnalysis> {
+        // Try to extract JSON from response
+        let json_str = if let Some(start) = response.find('{') {
+            if let Some(end) = response.rfind('}') {
+                &response[start..=end]
+            } else {
+                response
+            }
+        } else {
+            response
+        };
+
+        #[derive(Deserialize)]
+        struct AnalysisJson {
+            tags: Option<Vec<TagJson>>,
+            description: Option<String>,
+        }
+
+        #[derive(Deserialize)]
+        struct TagJson {
+            name: String,
+            #[serde(default)]
+            confidence: Option<u8>,
+            #[serde(default)]
+            reason: Option<String>,
+        }
+
+        match serde_json::from_str::<AnalysisJson>(json_str) {
+            Ok(parsed) => {
+                let tags = parsed.tags
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|t| TagSuggestion {
+                        name: t.name.to_lowercase().replace(' ', "-"),
+                        confidence: t.confidence.unwrap_or(70).min(100),
+                        reason: t.reason.unwrap_or_else(|| "AI suggested".to_string()),
+                    })
+                    .collect();
+
+                Ok(FileAnalysis {
+                    tags,
+                    description: parsed.description,
+                    organization: None,
+                })
+            }
+            Err(_) => {
+                // Return basic analysis from raw response
+                Ok(FileAnalysis {
+                    tags: Vec::new(),
+                    description: Some(response.chars().take(300).collect()),
+                    organization: None,
+                })
+            }
+        }
+    }
+
+    /// Summarize text content
+    pub async fn summarize(&self, content: &str, file_name: &str) -> Result<DocumentSummary> {
+        match self.config.provider {
+            AiProvider::Claude => {
+                if let Some(claude) = &self.claude {
+                    claude.summarize_text(content, file_name).await
+                } else {
+                    Err(HippoError::Other("Claude API key not configured".to_string()))
+                }
+            }
+            AiProvider::Ollama => {
+                let analysis = self.ollama.analyze_document(content, file_name).await?;
+                Ok(DocumentSummary {
+                    summary: analysis.summary,
+                    key_topics: analysis.key_topics,
+                    entities: None,
+                    document_type: analysis.document_type,
+                    sentiment: None,
+                    complexity: None,
+                })
+            }
+        }
+    }
+
+    /// Summarize code
+    pub async fn summarize_code(&self, code: &str, language: &str, file_name: &str) -> Result<CodeSummary> {
+        match self.config.provider {
+            AiProvider::Claude => {
+                if let Some(claude) = &self.claude {
+                    claude.summarize_code(code, language, file_name).await
+                } else {
+                    Err(HippoError::Other("Claude API key not configured".to_string()))
+                }
+            }
+            AiProvider::Ollama => {
+                let analysis = self.ollama.analyze_code(code, language, file_name).await?;
+                Ok(CodeSummary {
+                    summary: analysis.summary,
+                    purpose: analysis.document_type,
+                    main_functionality: analysis.key_topics,
+                    dependencies: Vec::new(),
+                    complexity: None,
+                    patterns: Vec::new(),
+                    suggested_tags: analysis.suggested_tags,
+                })
+            }
+        }
+    }
+
+    /// Generate embeddings for texts
+    pub async fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        // Embeddings always use Ollama for local processing
+        self.ollama.embed(texts).await
+    }
+
+    /// Generate embedding for a single text
+    pub async fn embed_single(&self, text: &str) -> Result<Vec<f32>> {
+        self.ollama.embed_single(text).await
+    }
+
+    /// RAG query - answer questions using context from indexed files
+    pub async fn rag_query(&self, query: &str, documents: Vec<(String, String, f32)>) -> Result<String> {
+        let rag_docs: Vec<RagDocument> = documents
+            .into_iter()
+            .map(|(content, source, score)| RagDocument {
+                content,
+                source,
+                relevance_score: score,
+            })
+            .collect();
+
+        let context = RagContext {
+            query: query.to_string(),
+            documents: rag_docs,
+        };
+
+        self.ollama.rag_query(&context).await
+    }
+
+    /// Chat with conversation history
+    pub async fn chat(&self, messages: Vec<(String, String)>) -> Result<String> {
+        let chat_messages: Vec<ChatMessage> = messages
+            .into_iter()
+            .map(|(role, content)| ChatMessage { role, content })
+            .collect();
+
+        self.ollama.chat(&chat_messages).await
+    }
+
+    /// Get organization suggestions
+    pub async fn suggest_organization(&self, memories: &[Memory]) -> Result<Vec<(String, OrganizationSuggestion)>> {
+        match self.config.provider {
+            AiProvider::Claude => {
+                if let Some(claude) = &self.claude {
+                    claude.suggest_organization(memories).await
+                } else {
+                    Err(HippoError::Other("Claude API key not configured".to_string()))
+                }
+            }
+            AiProvider::Ollama => {
+                let descriptions: Vec<(&str, &str)> = memories
+                    .iter()
+                    .take(20)
+                    .filter_map(|m| {
+                        let name = m.path.file_name()?.to_str()?;
+                        let desc = ClaudeClient::kind_to_string(&m.kind);
+                        Some((name, desc.leak() as &str))
+                    })
+                    .collect();
+
+                let suggestion = self.ollama.suggest_organization(&descriptions).await?;
+
+                // Parse the response and create suggestions
+                Ok(memories.iter()
+                    .take(20)
+                    .map(|m| {
+                        (m.id.to_string(), OrganizationSuggestion {
+                            suggested_folder: "Organized".to_string(),
+                            reason: suggestion.clone(),
+                        })
+                    })
+                    .collect())
+            }
+        }
+    }
+}
+
+impl Default for UnifiedAiClient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
