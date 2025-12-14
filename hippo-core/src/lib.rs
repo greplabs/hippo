@@ -81,7 +81,7 @@ pub use error::{HippoError, Result};
 pub use graph::MindMap;
 
 // Re-export AI types
-pub use ai::{ClaudeClient, FileAnalysis, TagSuggestion, OrganizationSuggestion};
+pub use ai::{ClaudeClient, FileAnalysis, TagSuggestion, OrganizationSuggestion, DocumentSummary, CodeSummary, ExtractedEntities};
 
 // Re-export watcher types
 pub use watcher::{FileWatcher, WatchEvent, WatchStats};
@@ -91,6 +91,9 @@ pub use duplicates::{DuplicateGroup, DuplicateSummary, compute_file_hash, find_d
 
 // Re-export thumbnail types
 pub use thumbnails::{ThumbnailManager, ThumbnailStats, is_supported_image, THUMBNAIL_SIZE};
+
+// Re-export embeddings types
+pub use embeddings::{Embedder, VectorIndex, TEXT_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, CODE_EMBEDDING_DIM};
 
 use std::path::PathBuf;
 use std::sync::Arc;

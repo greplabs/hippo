@@ -103,7 +103,12 @@ impl Indexer {
             task_tx,
         })
     }
-    
+
+    /// Get a reference to the embedder
+    pub fn embedder(&self) -> &Arc<Embedder> {
+        &self.embedder
+    }
+
     /// Queue a source for indexing
     #[instrument(skip(self))]
     pub async fn queue_source(&self, source: Source) -> Result<()> {

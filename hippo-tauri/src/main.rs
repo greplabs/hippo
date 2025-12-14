@@ -7,7 +7,7 @@
     windows_subsystem = "windows"
 )]
 
-use hippo_core::{Hippo, SearchQuery, Tag, Source, MemoryId};
+use hippo_core::{Hippo, SearchQuery, Tag, Source, MemoryId, ClaudeClient};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
@@ -397,6 +397,139 @@ async fn clear_thumbnail_cache(state: State<'_, AppState>) -> Result<String, Str
     }
 }
 
+// ==================== AI Features ====================
+
+#[tauri::command]
+async fn analyze_file(
+    memory_id: String,
+    api_key: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] AI analyzing file: {}", memory_id);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
+    let memory = hippo.get_memory(id).await
+        .map_err(|e| e.to_string())?
+        .ok_or("Memory not found")?;
+
+    let client = ClaudeClient::new(api_key);
+    let analysis = client.analyze_file(&memory).await
+        .map_err(|e| format!("Analysis failed: {}", e))?;
+
+    // Add AI tags to the memory
+    for tag_suggestion in &analysis.tags {
+        if tag_suggestion.confidence >= 70 {
+            let tag = tag_suggestion.to_tag();
+            let _ = hippo.add_tag(id, tag).await;
+        }
+    }
+
+    println!("[Hippo] AI analysis complete, found {} tags", analysis.tags.len());
+    serde_json::to_value(analysis).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn summarize_document(
+    memory_id: String,
+    api_key: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Summarizing document: {}", memory_id);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
+    let memory = hippo.get_memory(id).await
+        .map_err(|e| e.to_string())?
+        .ok_or("Memory not found")?;
+
+    // Read file content
+    let content = std::fs::read_to_string(&memory.path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let file_name = memory.path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let client = ClaudeClient::new(api_key);
+    let summary = client.summarize_text(&content, &file_name).await
+        .map_err(|e| format!("Summarization failed: {}", e))?;
+
+    println!("[Hippo] Document summarized");
+    serde_json::to_value(summary).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_organization_suggestions(
+    api_key: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Getting organization suggestions...");
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    // Get recent unorganized files
+    let all_memories = hippo.get_all_memories().await
+        .map_err(|e| e.to_string())?;
+
+    // Take up to 50 files for analysis
+    let to_analyze: Vec<_> = all_memories.into_iter().take(50).collect();
+
+    let client = ClaudeClient::new(api_key);
+    let suggestions = client.suggest_organization(&to_analyze).await
+        .map_err(|e| format!("Organization suggestion failed: {}", e))?;
+
+    println!("[Hippo] Got {} organization suggestions", suggestions.len());
+    serde_json::to_value(suggestions).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn semantic_search(
+    query: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Semantic search: {}", query);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let limit = limit.unwrap_or(20);
+
+    // Get query embedding
+    let query_embedding = hippo.indexer.embedder().embed_query(&query).await
+        .map_err(|e| format!("Embedding failed: {}", e))?;
+
+    // Get all memories and their embeddings
+    let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+
+    // Generate embeddings for memories and find similar ones
+    let mut scored: Vec<(hippo_core::Memory, f32)> = Vec::new();
+    for memory in memories {
+        if let Ok(emb) = hippo.indexer.embedder().embed_memory(&memory).await {
+            let similarity = hippo_core::embeddings::Embedder::similarity(&query_embedding, &emb);
+            scored.push((memory, similarity));
+        }
+    }
+
+    // Sort by similarity and take top results
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(limit);
+
+    let results: Vec<serde_json::Value> = scored.iter()
+        .map(|(mem, score)| {
+            serde_json::json!({
+                "memory": mem,
+                "similarity": score
+            })
+        })
+        .collect();
+
+    println!("[Hippo] Semantic search returned {} results", results.len());
+    Ok(serde_json::Value::Array(results))
+}
+
 #[tauri::command]
 async fn add_source_path(
     path: String,
@@ -451,6 +584,11 @@ fn main() {
             get_thumbnail,
             get_thumbnail_stats,
             clear_thumbnail_cache,
+            // AI Features
+            analyze_file,
+            summarize_document,
+            get_organization_suggestions,
+            semantic_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

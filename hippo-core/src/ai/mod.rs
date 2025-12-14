@@ -59,7 +59,7 @@ struct ClaudeContent {
 }
 
 /// Tag suggestion from AI analysis
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TagSuggestion {
     pub name: String,
     pub confidence: u8,
@@ -67,14 +67,14 @@ pub struct TagSuggestion {
 }
 
 /// Organization suggestion
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrganizationSuggestion {
     pub suggested_folder: String,
     pub reason: String,
 }
 
 /// Full AI analysis result for a file
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileAnalysis {
     pub tags: Vec<TagSuggestion>,
     pub description: Option<String>,
@@ -518,4 +518,275 @@ impl TagSuggestion {
             confidence: Some(self.confidence),
         }
     }
+}
+
+impl ClaudeClient {
+    /// Summarize a text document
+    pub async fn summarize_text(&self, text: &str, file_name: &str) -> Result<DocumentSummary> {
+        // Truncate text if too long (Claude has token limits)
+        let max_chars = 50_000;
+        let truncated = if text.len() > max_chars {
+            &text[..max_chars]
+        } else {
+            text
+        };
+
+        let prompt = format!(
+            r#"Analyze and summarize this document.
+
+File: {file_name}
+
+Content:
+---
+{truncated}
+---
+
+Respond in this exact JSON format:
+{{
+  "summary": "2-3 sentence summary of the document",
+  "key_topics": ["topic1", "topic2", "topic3"],
+  "entities": {{
+    "people": ["name1", "name2"],
+    "organizations": ["org1"],
+    "locations": ["place1"],
+    "technologies": ["tech1", "tech2"]
+  }},
+  "document_type": "article|code|notes|report|other",
+  "sentiment": "positive|negative|neutral|mixed",
+  "complexity": "simple|moderate|complex"
+}}"#
+        );
+
+        let request = ClaudeRequest {
+            model: self.model.clone(),
+            max_tokens: 1024,
+            messages: vec![ClaudeMessage {
+                role: "user".to_string(),
+                content: vec![ContentBlock::Text { text: prompt }],
+            }],
+        };
+
+        let response = self.client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| HippoError::Other(format!("API request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(HippoError::Other(format!("Claude API error {}: {}", status, body)));
+        }
+
+        let claude_response: ClaudeResponse = response
+            .json()
+            .await
+            .map_err(|e| HippoError::Other(format!("Failed to parse response: {}", e)))?;
+
+        self.parse_summary_response(&claude_response)
+    }
+
+    /// Summarize code file
+    pub async fn summarize_code(&self, code: &str, language: &str, file_name: &str) -> Result<CodeSummary> {
+        let max_chars = 30_000;
+        let truncated = if code.len() > max_chars {
+            &code[..max_chars]
+        } else {
+            code
+        };
+
+        let prompt = format!(
+            r#"Analyze this {language} code file.
+
+File: {file_name}
+
+Code:
+```{language}
+{truncated}
+```
+
+Respond in this exact JSON format:
+{{
+  "summary": "Brief description of what this code does",
+  "purpose": "main|library|utility|test|config|other",
+  "main_functionality": ["function1 - description", "function2 - description"],
+  "dependencies": ["dep1", "dep2"],
+  "complexity": "simple|moderate|complex",
+  "patterns": ["pattern1", "pattern2"],
+  "suggested_tags": ["tag1", "tag2"]
+}}"#
+        );
+
+        let request = ClaudeRequest {
+            model: self.model.clone(),
+            max_tokens: 1024,
+            messages: vec![ClaudeMessage {
+                role: "user".to_string(),
+                content: vec![ContentBlock::Text { text: prompt }],
+            }],
+        };
+
+        let response = self.client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| HippoError::Other(format!("API request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(HippoError::Other(format!("Claude API error {}: {}", status, body)));
+        }
+
+        let claude_response: ClaudeResponse = response
+            .json()
+            .await
+            .map_err(|e| HippoError::Other(format!("Failed to parse response: {}", e)))?;
+
+        self.parse_code_summary_response(&claude_response)
+    }
+
+    fn parse_summary_response(&self, response: &ClaudeResponse) -> Result<DocumentSummary> {
+        let text = response.content
+            .first()
+            .and_then(|c| c.text.as_ref())
+            .ok_or_else(|| HippoError::Other("Empty response from Claude".to_string()))?;
+
+        let json_str = Self::extract_json(text);
+
+        #[derive(Deserialize)]
+        struct SummaryJson {
+            summary: String,
+            key_topics: Vec<String>,
+            entities: Option<EntitiesJson>,
+            document_type: Option<String>,
+            sentiment: Option<String>,
+            complexity: Option<String>,
+        }
+
+        #[derive(Deserialize)]
+        struct EntitiesJson {
+            people: Option<Vec<String>>,
+            organizations: Option<Vec<String>>,
+            locations: Option<Vec<String>>,
+            technologies: Option<Vec<String>>,
+        }
+
+        match serde_json::from_str::<SummaryJson>(&json_str) {
+            Ok(parsed) => {
+                let entities = parsed.entities.map(|e| ExtractedEntities {
+                    people: e.people.unwrap_or_default(),
+                    organizations: e.organizations.unwrap_or_default(),
+                    locations: e.locations.unwrap_or_default(),
+                    technologies: e.technologies.unwrap_or_default(),
+                });
+
+                Ok(DocumentSummary {
+                    summary: parsed.summary,
+                    key_topics: parsed.key_topics,
+                    entities,
+                    document_type: parsed.document_type,
+                    sentiment: parsed.sentiment,
+                    complexity: parsed.complexity,
+                })
+            }
+            Err(e) => {
+                warn!("Failed to parse summary response: {}. Raw: {}", e, text);
+                Ok(DocumentSummary {
+                    summary: text.chars().take(500).collect(),
+                    key_topics: Vec::new(),
+                    entities: None,
+                    document_type: None,
+                    sentiment: None,
+                    complexity: None,
+                })
+            }
+        }
+    }
+
+    fn parse_code_summary_response(&self, response: &ClaudeResponse) -> Result<CodeSummary> {
+        let text = response.content
+            .first()
+            .and_then(|c| c.text.as_ref())
+            .ok_or_else(|| HippoError::Other("Empty response from Claude".to_string()))?;
+
+        let json_str = Self::extract_json(text);
+
+        #[derive(Deserialize)]
+        struct CodeJson {
+            summary: String,
+            purpose: Option<String>,
+            main_functionality: Option<Vec<String>>,
+            dependencies: Option<Vec<String>>,
+            complexity: Option<String>,
+            patterns: Option<Vec<String>>,
+            suggested_tags: Option<Vec<String>>,
+        }
+
+        match serde_json::from_str::<CodeJson>(&json_str) {
+            Ok(parsed) => {
+                Ok(CodeSummary {
+                    summary: parsed.summary,
+                    purpose: parsed.purpose,
+                    main_functionality: parsed.main_functionality.unwrap_or_default(),
+                    dependencies: parsed.dependencies.unwrap_or_default(),
+                    complexity: parsed.complexity,
+                    patterns: parsed.patterns.unwrap_or_default(),
+                    suggested_tags: parsed.suggested_tags.unwrap_or_default(),
+                })
+            }
+            Err(e) => {
+                warn!("Failed to parse code summary response: {}. Raw: {}", e, text);
+                Ok(CodeSummary {
+                    summary: text.chars().take(500).collect(),
+                    purpose: None,
+                    main_functionality: Vec::new(),
+                    dependencies: Vec::new(),
+                    complexity: None,
+                    patterns: Vec::new(),
+                    suggested_tags: Vec::new(),
+                })
+            }
+        }
+    }
+}
+
+/// Document summary from AI analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentSummary {
+    pub summary: String,
+    pub key_topics: Vec<String>,
+    pub entities: Option<ExtractedEntities>,
+    pub document_type: Option<String>,
+    pub sentiment: Option<String>,
+    pub complexity: Option<String>,
+}
+
+/// Extracted entities from text
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractedEntities {
+    pub people: Vec<String>,
+    pub organizations: Vec<String>,
+    pub locations: Vec<String>,
+    pub technologies: Vec<String>,
+}
+
+/// Code analysis summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeSummary {
+    pub summary: String,
+    pub purpose: Option<String>,
+    pub main_functionality: Vec<String>,
+    pub dependencies: Vec<String>,
+    pub complexity: Option<String>,
+    pub patterns: Vec<String>,
+    pub suggested_tags: Vec<String>,
 }
