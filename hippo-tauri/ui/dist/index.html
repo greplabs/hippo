@@ -328,7 +328,6 @@
       cursor: pointer;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
-      animation: fadeInUp 0.4s ease backwards;
     }
     .card:hover {
       box-shadow: 0 20px 40px -12px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.02);
@@ -337,17 +336,6 @@
     .card:active { transform: translateY(-2px) scale(0.99); }
     body.dark .card { background: #1c1917; border-color: rgba(255,255,255,0.04); }
     body.dark .card:hover { box-shadow: 0 20px 40px -12px rgba(0,0,0,0.4); }
-
-    /* Staggered animation for cards */
-    .card:nth-child(1) { animation-delay: 0.02s; }
-    .card:nth-child(2) { animation-delay: 0.04s; }
-    .card:nth-child(3) { animation-delay: 0.06s; }
-    .card:nth-child(4) { animation-delay: 0.08s; }
-    .card:nth-child(5) { animation-delay: 0.1s; }
-    .card:nth-child(6) { animation-delay: 0.12s; }
-    .card:nth-child(7) { animation-delay: 0.14s; }
-    .card:nth-child(8) { animation-delay: 0.16s; }
-    .card:nth-child(n+9) { animation-delay: 0.18s; }
 
     .card-preview {
       aspect-ratio: 1;
@@ -410,7 +398,6 @@
       border-radius: 12px;
       cursor: pointer;
       transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      animation: fadeIn 0.3s ease backwards;
     }
     .list-item:hover { background: white; transform: translateX(4px); box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
     .list-item:active { transform: translateX(4px) scale(0.99); }
@@ -3441,17 +3428,17 @@
               }
               break;
             case 'filterImages':
-              filterType = 'Images';
+              filterType = 'image';
               render();
               showToast('Filtered to images', 'success');
               break;
             case 'filterCode':
-              filterType = 'Code';
+              filterType = 'code';
               render();
               showToast('Filtered to code files', 'success');
               break;
             case 'filterDocs':
-              filterType = 'Docs';
+              filterType = 'document';
               render();
               showToast('Filtered to documents', 'success');
               break;
@@ -4262,6 +4249,11 @@
         var k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
         var i = Math.floor(Math.log(bytes) / Math.log(k));
         return Math.round(bytes / Math.pow(k, i)) + ' ' + sizes[i];
+      }
+
+      // Alias for formatSize
+      function formatBytes(bytes) {
+        return formatSize(bytes);
       }
 
       function esc(s) {
