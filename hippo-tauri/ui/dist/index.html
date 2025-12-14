@@ -596,55 +596,329 @@
     </div>
   </div>
 
-  <!-- RAG Chat Panel -->
-  <div class="chat-overlay" id="chatOverlay" style="display:none;">
-    <div class="chat-panel">
-      <div class="chat-header">
-        <h2><span class="icon icon-md" id="chatIcon"></span> Ask Hippo</h2>
-        <button class="close-btn" id="closeChat"><span class="icon icon-md" id="closeChatIcon"></span></button>
-      </div>
-      <div class="chat-messages" id="chatMessages">
-        <div class="chat-welcome">
-          <span class="icon icon-xl" style="color:#8b5cf6;">🦛</span>
-          <h3>Chat with your files</h3>
-          <p>Ask questions about your indexed documents and Hippo will find answers using RAG (Retrieval-Augmented Generation).</p>
+  <!-- Floating Chat Bubble -->
+  <div class="chat-bubble" id="chatBubble">
+    <span class="chat-bubble-icon">🦛</span>
+    <span class="chat-bubble-badge" id="chatBadge" style="display:none;">1</span>
+  </div>
+
+  <!-- Expanded Chat Window -->
+  <div class="chat-window" id="chatWindow">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <span class="chat-header-icon">🦛</span>
+        <div class="chat-header-info">
+          <h2>Ask Hippo</h2>
+          <span class="chat-status" id="chatStatus">
+            <span class="status-dot online" id="ollamaStatusDot"></span>
+            <span id="chatStatusText">Ready</span>
+          </span>
         </div>
       </div>
-      <div class="chat-input-container">
-        <input type="text" class="chat-input" id="chatInput" placeholder="Ask anything about your files...">
-        <button class="chat-send-btn" id="chatSendBtn"><span class="icon icon-md" id="sendIcon"></span></button>
+      <div class="chat-header-actions">
+        <button class="chat-action-btn" id="chatClearBtn" title="Clear chat"><span class="icon icon-sm" id="chatClearIcon"></span></button>
+        <button class="chat-action-btn" id="chatMinimizeBtn" title="Minimize"><span class="icon icon-sm" id="chatMinimizeIcon"></span></button>
       </div>
+    </div>
+
+    <!-- File Context Bar (shows when files are selected) -->
+    <div class="chat-context-bar" id="chatContextBar" style="display:none;">
+      <div class="context-info">
+        <span class="icon icon-sm" id="contextIcon"></span>
+        <span id="contextText">0 files selected</span>
+      </div>
+      <div class="context-actions">
+        <button class="context-btn" id="analyzeSelectedBtn">Analyze</button>
+        <button class="context-btn" id="summarizeSelectedBtn">Summarize</button>
+        <button class="context-btn secondary" id="clearContextBtn">×</button>
+      </div>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-welcome">
+        <span class="welcome-icon">🦛</span>
+        <h3>Chat with your files</h3>
+        <p>Ask questions about your documents and I'll find answers using local AI.</p>
+        <div class="quick-actions">
+          <button class="quick-action-btn" data-action="summarize">
+            <span class="icon icon-sm" id="qaSum"></span> Summarize recent
+          </button>
+          <button class="quick-action-btn" data-action="find-duplicates">
+            <span class="icon icon-sm" id="qaDup"></span> Find duplicates
+          </button>
+          <button class="quick-action-btn" data-action="organize">
+            <span class="icon icon-sm" id="qaOrg"></span> Suggest organization
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input-container">
+      <div class="chat-input-wrapper">
+        <input type="text" class="chat-input" id="chatInput" placeholder="Ask anything about your files...">
+        <div class="chat-input-actions">
+          <button class="input-action-btn" id="attachFileBtn" title="Attach selected files">
+            <span class="icon icon-sm" id="attachIcon"></span>
+          </button>
+        </div>
+      </div>
+      <button class="chat-send-btn" id="chatSendBtn">
+        <span class="icon icon-md" id="sendIcon"></span>
+      </button>
     </div>
   </div>
 
   <style>
-    /* Chat Panel Styles */
-    .chat-overlay { position: fixed; top: 0; right: 0; bottom: 0; width: 400px; background: white; box-shadow: -4px 0 20px rgba(0,0,0,0.15); z-index: 1000; display: flex; flex-direction: column; }
-    body.dark .chat-overlay { background: #292524; }
-    .chat-header { padding: 16px 20px; border-bottom: 1px solid #e7e5e4; display: flex; align-items: center; justify-content: space-between; }
-    body.dark .chat-header { border-color: #44403c; }
-    .chat-header h2 { font-size: 16px; color: #292524; display: flex; align-items: center; gap: 8px; }
-    body.dark .chat-header h2 { color: #fafaf9; }
-    .chat-messages { flex: 1; overflow-y: auto; padding: 20px; }
-    .chat-welcome { text-align: center; padding: 40px 20px; color: #78716c; }
-    .chat-welcome h3 { font-size: 18px; color: #292524; margin: 12px 0 8px; }
+    /* Floating Chat Bubble */
+    .chat-bubble {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .chat-bubble:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 24px rgba(139, 92, 246, 0.5);
+    }
+    .chat-bubble.hidden { display: none; }
+    .chat-bubble-icon { font-size: 28px; }
+    .chat-bubble-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 20px;
+      height: 20px;
+      background: #ef4444;
+      border-radius: 10px;
+      color: white;
+      font-size: 11px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 6px;
+    }
+
+    /* Chat Window */
+    .chat-window {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 380px;
+      height: 520px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+      z-index: 1001;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .chat-window.open { display: flex; animation: chatSlideUp 0.3s ease-out; }
+    body.dark .chat-window { background: #292524; box-shadow: 0 8px 40px rgba(0,0,0,0.4); }
+    @keyframes chatSlideUp {
+      from { opacity: 0; transform: translateY(20px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Chat Header */
+    .chat-header {
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .chat-header-left { display: flex; align-items: center; gap: 12px; }
+    .chat-header-icon { font-size: 24px; }
+    .chat-header-info h2 { font-size: 15px; font-weight: 600; color: white; margin: 0; }
+    .chat-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255,255,255,0.8); }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .status-dot.online { background: #22c55e; }
+    .status-dot.offline { background: #f59e0b; }
+    .status-dot.error { background: #ef4444; }
+    .chat-header-actions { display: flex; gap: 4px; }
+    .chat-action-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.1);
+      border: none;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .chat-action-btn:hover { background: rgba(255,255,255,0.2); }
+
+    /* Context Bar */
+    .chat-context-bar {
+      padding: 8px 12px;
+      background: #f5f5f4;
+      border-bottom: 1px solid #e7e5e4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    body.dark .chat-context-bar { background: #1c1917; border-color: #44403c; }
+    .context-info { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #57534e; }
+    body.dark .context-info { color: #a8a29e; }
+    .context-actions { display: flex; gap: 6px; }
+    .context-btn {
+      padding: 4px 10px;
+      background: #8b5cf6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .context-btn:hover { background: #7c3aed; }
+    .context-btn.secondary { background: transparent; color: #78716c; padding: 4px 8px; }
+    .context-btn.secondary:hover { background: #e7e5e4; }
+    body.dark .context-btn.secondary { color: #a8a29e; }
+    body.dark .context-btn.secondary:hover { background: #44403c; }
+
+    /* Chat Messages */
+    .chat-messages { flex: 1; overflow-y: auto; padding: 16px; }
+    .chat-welcome { text-align: center; padding: 24px 16px; }
+    .welcome-icon { font-size: 48px; display: block; margin-bottom: 12px; }
+    .chat-welcome h3 { font-size: 16px; color: #292524; margin: 0 0 6px; font-weight: 600; }
     body.dark .chat-welcome h3 { color: #fafaf9; }
-    .chat-welcome p { font-size: 14px; line-height: 1.5; }
-    .chat-message { margin-bottom: 16px; }
+    .chat-welcome p { font-size: 13px; color: #78716c; margin: 0 0 16px; line-height: 1.4; }
+    .quick-actions { display: flex; flex-direction: column; gap: 8px; }
+    .quick-action-btn {
+      padding: 10px 14px;
+      background: #f5f5f4;
+      border: 1px solid #e7e5e4;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #57534e;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s;
+    }
+    .quick-action-btn:hover { background: #e7e5e4; border-color: #d6d3d1; }
+    body.dark .quick-action-btn { background: #1c1917; border-color: #44403c; color: #d6d3d1; }
+    body.dark .quick-action-btn:hover { background: #44403c; }
+
+    /* Chat Messages */
+    .chat-message { margin-bottom: 12px; }
     .chat-message.user { text-align: right; }
-    .chat-message .bubble { display: inline-block; max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
-    .chat-message.user .bubble { background: #8b5cf6; color: white; border-bottom-right-radius: 4px; }
-    .chat-message.assistant .bubble { background: #f5f5f4; color: #292524; border-bottom-left-radius: 4px; }
+    .chat-message .bubble {
+      display: inline-block;
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: left;
+      white-space: pre-wrap;
+    }
+    .chat-message.user .bubble {
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+    .chat-message.assistant .bubble {
+      background: #f5f5f4;
+      color: #292524;
+      border-bottom-left-radius: 4px;
+    }
     body.dark .chat-message.assistant .bubble { background: #44403c; color: #fafaf9; }
-    .chat-message .sources { margin-top: 8px; font-size: 11px; color: #78716c; }
-    .chat-input-container { padding: 16px 20px; border-top: 1px solid #e7e5e4; display: flex; gap: 8px; }
+    .chat-message .file-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      background: rgba(139, 92, 246, 0.2);
+      border-radius: 4px;
+      font-size: 11px;
+      color: #8b5cf6;
+      margin-right: 4px;
+    }
+
+    /* Chat Input */
+    .chat-input-container { padding: 12px 16px; border-top: 1px solid #e7e5e4; display: flex; gap: 8px; align-items: flex-end; }
     body.dark .chat-input-container { border-color: #44403c; }
-    .chat-input { flex: 1; padding: 12px 16px; border: 1px solid #e7e5e4; border-radius: 24px; font-size: 14px; outline: none; }
-    .chat-input:focus { border-color: #8b5cf6; }
-    body.dark .chat-input { background: #1c1917; border-color: #44403c; color: #fafaf9; }
-    .chat-send-btn { width: 44px; height: 44px; border-radius: 50%; background: #8b5cf6; border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
-    .chat-send-btn:hover { background: #7c3aed; }
-    .chat-send-btn:disabled { background: #d6d3d1; cursor: not-allowed; }
+    .chat-input-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      background: #f5f5f4;
+      border: 1px solid #e7e5e4;
+      border-radius: 20px;
+      padding: 0 4px 0 14px;
+      transition: all 0.15s;
+    }
+    .chat-input-wrapper:focus-within { border-color: #8b5cf6; background: white; }
+    body.dark .chat-input-wrapper { background: #1c1917; border-color: #44403c; }
+    body.dark .chat-input-wrapper:focus-within { border-color: #8b5cf6; background: #292524; }
+    .chat-input {
+      flex: 1;
+      padding: 10px 0;
+      border: none;
+      background: transparent;
+      font-size: 13px;
+      outline: none;
+      color: #292524;
+    }
+    body.dark .chat-input { color: #fafaf9; }
+    .chat-input::placeholder { color: #a8a29e; }
+    .chat-input-actions { display: flex; }
+    .input-action-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: transparent;
+      border: none;
+      color: #78716c;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .input-action-btn:hover { background: #e7e5e4; color: #8b5cf6; }
+    .input-action-btn.has-files { color: #8b5cf6; }
+    body.dark .input-action-btn:hover { background: #44403c; }
+    .chat-send-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      border: none;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .chat-send-btn:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3); }
+    .chat-send-btn:disabled { background: #d6d3d1; transform: none; box-shadow: none; cursor: not-allowed; }
+    body.dark .chat-send-btn:disabled { background: #44403c; }
+
+    /* Chat Loading Animation */
     .chat-loading { display: flex; gap: 4px; padding: 8px 0; }
     .chat-loading span { width: 8px; height: 8px; background: #8b5cf6; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out; }
     .chat-loading span:nth-child(1) { animation-delay: -0.32s; }
@@ -761,8 +1035,14 @@
         document.getElementById('searchModeSymbolIcon').innerHTML = icons.terminal;
         // Chat icons
         document.getElementById('chatBtnIcon').innerHTML = icons.messageCircle;
-        document.getElementById('chatIcon').innerHTML = icons.messageCircle;
-        document.getElementById('closeChatIcon').innerHTML = icons.close;
+        // Chat window icons
+        document.getElementById('chatClearIcon').innerHTML = icons.trash;
+        document.getElementById('chatMinimizeIcon').innerHTML = icons.close;
+        document.getElementById('contextIcon').innerHTML = icons.file;
+        document.getElementById('attachIcon').innerHTML = icons.file;
+        document.getElementById('qaSum').innerHTML = icons.doc;
+        document.getElementById('qaDup').innerHTML = icons.file;
+        document.getElementById('qaOrg').innerHTML = icons.folder;
         document.getElementById('sendIcon').innerHTML = icons.send;
         document.getElementById('ollamaStatusIcon').innerHTML = icons.checkCircle;
         // Filter icons
@@ -1341,6 +1621,10 @@
           } else {
             bulkBar.classList.remove('open');
           }
+          // Also update chat context bar if chat is open
+          if (chatOpen) {
+            updateChatContextBar();
+          }
         }
 
         function clearSelection() {
@@ -1546,25 +1830,225 @@
 
         // ==================== Chat Functions ====================
 
+        // Chat context for file-based queries
+        var chatContextFiles = [];
+
         function openChat() {
           chatOpen = true;
-          document.getElementById('chatOverlay').style.display = 'flex';
+          document.getElementById('chatBubble').classList.add('hidden');
+          document.getElementById('chatWindow').classList.add('open');
           document.getElementById('chatInput').focus();
+          updateChatStatus();
+          updateChatContextBar();
         }
 
         function closeChat() {
           chatOpen = false;
-          document.getElementById('chatOverlay').style.display = 'none';
+          document.getElementById('chatWindow').classList.remove('open');
+          document.getElementById('chatBubble').classList.remove('hidden');
+        }
+
+        function toggleChat() {
+          if (chatOpen) {
+            closeChat();
+          } else {
+            openChat();
+          }
+        }
+
+        function clearChatHistory() {
+          chatMessages = [];
+          var container = document.getElementById('chatMessages');
+          container.innerHTML = '<div class="chat-welcome">' +
+            '<span class="welcome-icon">🦛</span>' +
+            '<h3>Chat with your files</h3>' +
+            '<p>Ask questions about your documents and I\'ll find answers using local AI.</p>' +
+            '<div class="quick-actions">' +
+            '<button class="quick-action-btn" data-action="summarize"><span class="icon icon-sm" id="qaSum"></span> Summarize recent</button>' +
+            '<button class="quick-action-btn" data-action="find-duplicates"><span class="icon icon-sm" id="qaDup"></span> Find duplicates</button>' +
+            '<button class="quick-action-btn" data-action="organize"><span class="icon icon-sm" id="qaOrg"></span> Suggest organization</button>' +
+            '</div></div>';
+          // Re-add icons
+          document.getElementById('qaSum').innerHTML = icons.doc;
+          document.getElementById('qaDup').innerHTML = icons.file;
+          document.getElementById('qaOrg').innerHTML = icons.folder;
+          // Re-attach quick action handlers
+          attachQuickActionHandlers();
+        }
+
+        function updateChatStatus() {
+          var statusDot = document.getElementById('ollamaStatusDot');
+          var statusText = document.getElementById('chatStatusText');
+
+          invoke('ollama_status').then(function(status) {
+            if (status.available) {
+              statusDot.className = 'status-dot online';
+              statusText.textContent = 'Ollama ready';
+              ollamaAvailable = true;
+            } else {
+              statusDot.className = 'status-dot offline';
+              statusText.textContent = 'Ollama offline';
+              ollamaAvailable = false;
+            }
+          }).catch(function() {
+            statusDot.className = 'status-dot error';
+            statusText.textContent = 'Connection error';
+            ollamaAvailable = false;
+          });
+        }
+
+        function updateChatContextBar() {
+          var contextBar = document.getElementById('chatContextBar');
+          var contextText = document.getElementById('contextText');
+          var attachBtn = document.getElementById('attachFileBtn');
+
+          if (selectedIds.length > 0) {
+            contextBar.style.display = 'flex';
+            contextText.textContent = selectedIds.length + ' file' + (selectedIds.length > 1 ? 's' : '') + ' selected';
+            chatContextFiles = selectedIds.slice(); // Copy selected files to context
+            attachBtn.classList.add('has-files');
+          } else if (chatContextFiles.length > 0) {
+            contextBar.style.display = 'flex';
+            contextText.textContent = chatContextFiles.length + ' file' + (chatContextFiles.length > 1 ? 's' : '') + ' in context';
+            attachBtn.classList.add('has-files');
+          } else {
+            contextBar.style.display = 'none';
+            attachBtn.classList.remove('has-files');
+          }
+        }
+
+        function clearChatContext() {
+          chatContextFiles = [];
+          updateChatContextBar();
+        }
+
+        function attachSelectedFiles() {
+          if (selectedIds.length > 0) {
+            chatContextFiles = selectedIds.slice();
+            updateChatContextBar();
+            showToast(chatContextFiles.length + ' files attached to chat', 'success');
+          } else {
+            showToast('No files selected. Select files first.', 'info');
+          }
+        }
+
+        function analyzeSelectedFiles() {
+          var filesToAnalyze = chatContextFiles.length > 0 ? chatContextFiles : selectedIds;
+          if (filesToAnalyze.length === 0) {
+            showToast('No files to analyze', 'info');
+            return;
+          }
+
+          // Get file paths for analysis
+          var filePaths = filesToAnalyze.map(function(id) {
+            var mem = memories.find(function(m) { return m.id === id; });
+            return mem ? mem.path : null;
+          }).filter(Boolean);
+
+          if (filePaths.length === 0) return;
+
+          // Open chat if not open
+          if (!chatOpen) openChat();
+
+          var query = 'Analyze these ' + filePaths.length + ' files: ' + filePaths.map(function(p) { return p.split('/').pop(); }).join(', ');
+          addChatMessage('user', query);
+
+          document.getElementById('chatInput').disabled = true;
+          document.getElementById('chatSendBtn').disabled = true;
+          addChatLoading();
+
+          // Use ollama_analyze for file analysis
+          invoke('ollama_analyze', { filePaths: filePaths }).then(function(response) {
+            removeChatLoading();
+            addChatMessage('assistant', response);
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('chatSendBtn').disabled = false;
+          }).catch(function(e) {
+            removeChatLoading();
+            addChatMessage('assistant', 'Analysis failed: ' + e);
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('chatSendBtn').disabled = false;
+          });
+        }
+
+        function summarizeSelectedFiles() {
+          var filesToSummarize = chatContextFiles.length > 0 ? chatContextFiles : selectedIds;
+          if (filesToSummarize.length === 0) {
+            showToast('No files to summarize', 'info');
+            return;
+          }
+
+          var filePaths = filesToSummarize.map(function(id) {
+            var mem = memories.find(function(m) { return m.id === id; });
+            return mem ? mem.path : null;
+          }).filter(Boolean);
+
+          if (filePaths.length === 0) return;
+
+          if (!chatOpen) openChat();
+
+          var query = 'Summarize these files: ' + filePaths.map(function(p) { return p.split('/').pop(); }).join(', ');
+          addChatMessage('user', query);
+
+          document.getElementById('chatInput').disabled = true;
+          document.getElementById('chatSendBtn').disabled = true;
+          addChatLoading();
+
+          invoke('ollama_summarize', { filePaths: filePaths }).then(function(response) {
+            removeChatLoading();
+            addChatMessage('assistant', response);
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('chatSendBtn').disabled = false;
+          }).catch(function(e) {
+            removeChatLoading();
+            addChatMessage('assistant', 'Summarization failed: ' + e);
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('chatSendBtn').disabled = false;
+          });
+        }
+
+        function handleQuickAction(action) {
+          if (!chatOpen) openChat();
+
+          var query = '';
+          switch(action) {
+            case 'summarize':
+              query = 'Summarize my most recent files and what they contain';
+              break;
+            case 'find-duplicates':
+              query = 'Are there any duplicate or very similar files in my collection?';
+              break;
+            case 'organize':
+              query = 'How would you suggest organizing my files better?';
+              break;
+            default:
+              return;
+          }
+
+          sendChatQuery(query);
+        }
+
+        function attachQuickActionHandlers() {
+          document.querySelectorAll('.quick-action-btn').forEach(function(btn) {
+            btn.onclick = function() {
+              handleQuickAction(btn.dataset.action);
+            };
+          });
         }
 
         function sendChatMessage() {
           var input = document.getElementById('chatInput');
           var query = input.value.trim();
           if (!query) return;
+          sendChatQuery(query);
+          input.value = '';
+        }
+
+        function sendChatQuery(query) {
+          var input = document.getElementById('chatInput');
 
           // Add user message
           addChatMessage('user', query);
-          input.value = '';
           input.disabled = true;
           document.getElementById('chatSendBtn').disabled = true;
 
@@ -1985,11 +2469,20 @@
 
         // Chat event bindings
         document.getElementById('chatBtn').onclick = openChat;
-        document.getElementById('closeChat').onclick = closeChat;
+        document.getElementById('chatBubble').onclick = openChat;
+        document.getElementById('chatMinimizeBtn').onclick = closeChat;
+        document.getElementById('chatClearBtn').onclick = clearChatHistory;
         document.getElementById('chatSendBtn').onclick = sendChatMessage;
         document.getElementById('chatInput').onkeypress = function(e) {
           if (e.key === 'Enter') sendChatMessage();
         };
+        // File context actions
+        document.getElementById('analyzeSelectedBtn').onclick = analyzeSelectedFiles;
+        document.getElementById('summarizeSelectedBtn').onclick = summarizeSelectedFiles;
+        document.getElementById('clearContextBtn').onclick = clearChatContext;
+        document.getElementById('attachFileBtn').onclick = attachSelectedFiles;
+        // Quick action handlers
+        attachQuickActionHandlers();
 
         // Search mode buttons
         document.querySelectorAll('.search-mode-btn').forEach(function(btn) {
