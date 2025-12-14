@@ -197,6 +197,54 @@
     .toast.error { background: #dc2626; }
     @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
+    /* Bulk Selection */
+    .card.selected, .list-item.selected { outline: 2px solid #3b82f6; outline-offset: -2px; }
+    body.dark .card.selected, body.dark .list-item.selected { outline-color: #60a5fa; }
+    .card-checkbox, .list-checkbox { position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; border-radius: 4px; background: rgba(255,255,255,0.9); border: 2px solid #d6d3d1; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0; transition: all 0.15s; z-index: 5; }
+    .card:hover .card-checkbox, .list-item:hover .list-checkbox, .card-checkbox.visible, .list-checkbox.visible { opacity: 1; }
+    .card-checkbox.checked, .list-checkbox.checked { background: #3b82f6; border-color: #3b82f6; opacity: 1; }
+    .card-checkbox.checked .icon, .list-checkbox.checked .icon { color: white; }
+    .list-checkbox { position: relative; top: auto; left: auto; flex-shrink: 0; }
+
+    /* Bulk Action Bar */
+    .bulk-bar { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #292524; border-radius: 12px; padding: 12px 20px; display: none; align-items: center; gap: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); z-index: 900; animation: bulkSlideUp 0.2s ease; }
+    .bulk-bar.open { display: flex; }
+    body.dark .bulk-bar { background: #fafaf9; }
+    @keyframes bulkSlideUp { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+    .bulk-count { color: white; font-size: 14px; font-weight: 500; white-space: nowrap; }
+    body.dark .bulk-count { color: #292524; }
+    .bulk-divider { width: 1px; height: 24px; background: #57534e; }
+    body.dark .bulk-divider { background: #d6d3d1; }
+    .bulk-btn { padding: 8px 14px; background: #44403c; border: none; border-radius: 8px; color: white; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.15s; }
+    .bulk-btn:hover { background: #57534e; }
+    body.dark .bulk-btn { background: #e7e5e4; color: #292524; }
+    body.dark .bulk-btn:hover { background: #d6d3d1; }
+    .bulk-btn.danger { background: #dc2626; }
+    .bulk-btn.danger:hover { background: #b91c1c; }
+    body.dark .bulk-btn.danger { background: #dc2626; color: white; }
+    .bulk-close { padding: 6px; background: transparent; border: none; color: #a8a29e; cursor: pointer; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+    .bulk-close:hover { background: #44403c; color: white; }
+    body.dark .bulk-close:hover { background: #e7e5e4; color: #292524; }
+
+    /* Bulk Tag Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1001; display: none; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+    .modal-overlay.open { display: flex; }
+    .modal { background: white; border-radius: 12px; padding: 24px; width: 360px; max-width: 90vw; animation: modalFade 0.15s ease; }
+    body.dark .modal { background: #292524; }
+    @keyframes modalFade { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    .modal-title { font-size: 16px; font-weight: 600; color: #292524; margin-bottom: 16px; }
+    body.dark .modal-title { color: #fafaf9; }
+    .modal-input { width: 100%; padding: 12px; border: 1px solid #e7e5e4; border-radius: 8px; font-size: 14px; outline: none; margin-bottom: 16px; }
+    .modal-input:focus { border-color: #3b82f6; }
+    body.dark .modal-input { background: #1c1917; border-color: #44403c; color: #fafaf9; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .modal-btn { padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; border: none; transition: all 0.15s; }
+    .modal-btn.primary { background: #3b82f6; color: white; }
+    .modal-btn.primary:hover { background: #2563eb; }
+    .modal-btn.secondary { background: #f5f5f4; color: #44403c; }
+    .modal-btn.secondary:hover { background: #e7e5e4; }
+    body.dark .modal-btn.secondary { background: #44403c; color: #d6d3d1; }
+
     /* Empty state */
     .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #a8a29e; text-align: center; }
     .empty-icon { font-size: 48px; margin-bottom: 16px; }
@@ -329,6 +377,28 @@
 
   <div class="toast-container" id="toastContainer"></div>
 
+  <!-- Bulk Action Bar -->
+  <div class="bulk-bar" id="bulkBar">
+    <span class="bulk-count" id="bulkCount">0 selected</span>
+    <div class="bulk-divider"></div>
+    <button class="bulk-btn" id="bulkFavorite"><span class="icon icon-sm" id="bulkStarIcon"></span> Favorite</button>
+    <button class="bulk-btn" id="bulkTag"><span class="icon icon-sm" id="bulkTagIcon"></span> Add Tag</button>
+    <button class="bulk-btn" id="bulkSelectAll"><span class="icon icon-sm" id="bulkSelectIcon"></span> Select All</button>
+    <button class="bulk-close" id="bulkClose"><span class="icon icon-sm" id="bulkCloseIcon"></span></button>
+  </div>
+
+  <!-- Bulk Tag Modal -->
+  <div class="modal-overlay" id="tagModal">
+    <div class="modal">
+      <h3 class="modal-title">Add Tag to Selected Files</h3>
+      <input type="text" class="modal-input" id="bulkTagInput" placeholder="Enter tag name...">
+      <div class="modal-actions">
+        <button class="modal-btn secondary" id="tagModalCancel">Cancel</button>
+        <button class="modal-btn primary" id="tagModalConfirm">Add Tag</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Command Palette -->
   <div class="cmd-overlay" id="cmdOverlay">
     <div class="cmd-palette">
@@ -376,7 +446,9 @@
         filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>',
         externalLink: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
         command: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>',
-        zap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
+        zap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+        check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+        checkSquare: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
       };
 
       // State
@@ -390,6 +462,10 @@
       var darkMode = localStorage.getItem('hippo-dark') === 'true';
       var convertFileSrc = null;
       var invoke = null;
+
+      // Bulk selection state
+      var selectedIds = [];
+      var lastSelectedIdx = -1;
 
       // Apply dark mode on load
       if (darkMode) document.body.classList.add('dark');
@@ -412,6 +488,11 @@
         document.getElementById('starIcon').innerHTML = icons.star;
         document.getElementById('previewIcon').innerHTML = icons.file;
         document.getElementById('cmdSearchIcon').innerHTML = icons.command;
+        // Bulk bar icons
+        document.getElementById('bulkStarIcon').innerHTML = icons.star;
+        document.getElementById('bulkTagIcon').innerHTML = icons.tag;
+        document.getElementById('bulkSelectIcon').innerHTML = icons.checkSquare;
+        document.getElementById('bulkCloseIcon').innerHTML = icons.close;
         // Filter icons
         document.querySelectorAll('.filter-icon').forEach(function(el) {
           var iconName = el.dataset.icon;
@@ -817,8 +898,12 @@
           var color = getColor(mem.kind);
           var type = getType(mem.kind);
           var isFav = mem.is_favorite;
+          var isSelected = selectedIds.indexOf(mem.id) !== -1;
 
-          var html = '<div class="card" data-idx="' + idx + '">';
+          var html = '<div class="card' + (isSelected ? ' selected' : '') + '" data-idx="' + idx + '" data-id="' + mem.id + '">';
+          html += '<div class="card-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
+          html += '<span class="icon icon-sm">' + icons.check + '</span>';
+          html += '</div>';
           html += '<div class="card-preview" style="background:' + color + '">';
           if ((type === 'image' || type === 'video') && convertFileSrc) {
             html += '<img src="' + convertFileSrc(mem.path) + '" onerror="this.style.display=\'none\'" loading="lazy">';
@@ -837,8 +922,12 @@
           var title = (mem.metadata && mem.metadata.title) || mem.path.split('/').pop();
           var color = getColor(mem.kind);
           var type = getType(mem.kind);
+          var isSelected = selectedIds.indexOf(mem.id) !== -1;
 
-          var html = '<div class="list-item" data-idx="' + idx + '">';
+          var html = '<div class="list-item' + (isSelected ? ' selected' : '') + '" data-idx="' + idx + '" data-id="' + mem.id + '">';
+          html += '<div class="list-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
+          html += '<span class="icon icon-sm">' + icons.check + '</span>';
+          html += '</div>';
           html += '<div class="list-thumb" style="background:' + color + '">';
           if ((type === 'image' || type === 'video') && convertFileSrc) {
             html += '<img src="' + convertFileSrc(mem.path) + '" onerror="this.style.display=\'none\'" loading="lazy">';
@@ -857,18 +946,157 @@
         }
 
         function bindCardEvents() {
+          // Checkbox click handlers
+          document.querySelectorAll('.card-checkbox, .list-checkbox').forEach(function(cb) {
+            cb.onclick = function(e) {
+              e.stopPropagation();
+              var id = cb.dataset.id;
+              var idx = parseInt(cb.dataset.idx);
+
+              // Shift+click for range selection
+              if (e.shiftKey && lastSelectedIdx !== -1) {
+                var filtered = getFiltered();
+                var start = Math.min(lastSelectedIdx, idx);
+                var end = Math.max(lastSelectedIdx, idx);
+                for (var i = start; i <= end; i++) {
+                  var memId = filtered[i].id;
+                  if (selectedIds.indexOf(memId) === -1) {
+                    selectedIds.push(memId);
+                  }
+                }
+              } else {
+                // Toggle single selection
+                var pos = selectedIds.indexOf(id);
+                if (pos === -1) {
+                  selectedIds.push(id);
+                } else {
+                  selectedIds.splice(pos, 1);
+                }
+              }
+
+              lastSelectedIdx = idx;
+              updateBulkBar();
+              renderFiles();
+            };
+          });
+
+          // Card/list item click
           document.querySelectorAll('.card, .list-item').forEach(function(el) {
             el.onclick = function(e) {
-              if (e.target.classList.contains('card-star')) return;
+              if (e.target.classList.contains('card-star') ||
+                  e.target.closest('.card-checkbox') ||
+                  e.target.closest('.list-checkbox')) return;
               var idx = parseInt(el.dataset.idx);
               selectMemory(getFiltered()[idx]);
             };
           });
+
           document.querySelectorAll('.card-star').forEach(function(btn) {
             btn.onclick = function(e) {
               e.stopPropagation();
               toggleFavorite(btn.dataset.id);
             };
+          });
+        }
+
+        // Bulk operations
+        function updateBulkBar() {
+          var bulkBar = document.getElementById('bulkBar');
+          var bulkCount = document.getElementById('bulkCount');
+          if (selectedIds.length > 0) {
+            bulkBar.classList.add('open');
+            bulkCount.textContent = selectedIds.length + ' selected';
+          } else {
+            bulkBar.classList.remove('open');
+          }
+        }
+
+        function clearSelection() {
+          selectedIds = [];
+          lastSelectedIdx = -1;
+          updateBulkBar();
+          renderFiles();
+        }
+
+        function selectAll() {
+          var filtered = getFiltered();
+          selectedIds = filtered.map(function(m) { return m.id; });
+          updateBulkBar();
+          renderFiles();
+        }
+
+        function bulkToggleFavorite() {
+          if (selectedIds.length === 0) return;
+          var pending = selectedIds.length;
+          var successCount = 0;
+
+          selectedIds.forEach(function(id) {
+            invoke('toggle_favorite', { memoryId: id }).then(function(isFav) {
+              memories.forEach(function(m) {
+                if (m.id === id) m.is_favorite = isFav;
+              });
+              successCount++;
+              pending--;
+              if (pending === 0) {
+                showToast(successCount + ' files updated', 'success');
+                clearSelection();
+              }
+            }).catch(function() {
+              pending--;
+              if (pending === 0) {
+                showToast(successCount + ' files updated', 'success');
+                clearSelection();
+              }
+            });
+          });
+        }
+
+        function openTagModal() {
+          document.getElementById('tagModal').classList.add('open');
+          document.getElementById('bulkTagInput').value = '';
+          document.getElementById('bulkTagInput').focus();
+        }
+
+        function closeTagModal() {
+          document.getElementById('tagModal').classList.remove('open');
+        }
+
+        function bulkAddTag() {
+          var tag = document.getElementById('bulkTagInput').value.trim().toLowerCase();
+          if (!tag || selectedIds.length === 0) return;
+
+          var pending = selectedIds.length;
+          var successCount = 0;
+
+          selectedIds.forEach(function(id) {
+            invoke('add_tag', { memoryId: id, tag: tag }).then(function() {
+              memories.forEach(function(m) {
+                if (m.id === id) {
+                  if (!m.tags) m.tags = [];
+                  if (!m.tags.some(function(t) { return t.name === tag; })) {
+                    m.tags.push({ name: tag, source: 'User' });
+                  }
+                }
+              });
+              successCount++;
+              pending--;
+              if (pending === 0) {
+                showToast('Tag added to ' + successCount + ' files', 'success');
+                closeTagModal();
+                clearSelection();
+                invoke('get_tags').then(function(tags) {
+                  allTags = tags || [];
+                  renderTagBar();
+                });
+              }
+            }).catch(function() {
+              pending--;
+              if (pending === 0) {
+                showToast('Tag added to ' + successCount + ' files', 'success');
+                closeTagModal();
+                clearSelection();
+              }
+            });
           });
         }
 
@@ -1077,6 +1305,50 @@
           renderFiles();
         };
 
+        // Bulk action bar event bindings
+        document.getElementById('bulkFavorite').onclick = function() {
+          bulkToggleFavorite();
+        };
+
+        document.getElementById('bulkTag').onclick = function() {
+          openTagModal();
+        };
+
+        document.getElementById('bulkSelectAll').onclick = function() {
+          var filtered = getFiltered();
+          if (selectedIds.length === filtered.length) {
+            clearSelection();
+          } else {
+            selectAll();
+          }
+        };
+
+        document.getElementById('bulkClose').onclick = function() {
+          clearSelection();
+        };
+
+        // Tag modal event bindings
+        document.getElementById('tagModalCancel').onclick = function() {
+          closeTagModal();
+        };
+
+        document.getElementById('tagModalConfirm').onclick = function() {
+          bulkAddTag();
+        };
+
+        document.getElementById('bulkTagInput').onkeydown = function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            bulkAddTag();
+          } else if (e.key === 'Escape') {
+            closeTagModal();
+          }
+        };
+
+        document.getElementById('tagModal').onclick = function(e) {
+          if (e.target === this) closeTagModal();
+        };
+
         // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
           // Command palette
@@ -1100,10 +1372,20 @@
               e.preventDefault();
               document.getElementById('searchInput').focus();
             }
+            // Select all with Cmd+A
+            if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+              e.preventDefault();
+              selectAll();
+            }
           }
           if (e.key === 'Escape') {
-            if (document.getElementById('cmdOverlay').classList.contains('open')) {
+            // Close modals in order of priority
+            if (document.getElementById('tagModal').classList.contains('open')) {
+              closeTagModal();
+            } else if (document.getElementById('cmdOverlay').classList.contains('open')) {
               closeCommandPalette();
+            } else if (selectedIds.length > 0) {
+              clearSelection();
             } else {
               document.getElementById('detailPanel').classList.remove('open');
               selectedMemory = null;
