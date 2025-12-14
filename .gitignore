@@ -1,0 +1,24 @@
+# Build artifacts
+/target/
+*/target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Rust
+**/*.rs.bk
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+
+# Database (local dev)
+*.db
+*.db-journal

@@ -1,0 +1,39 @@
+[package]
+name = "hippo-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CLI for Hippo - The Memory That Never Forgets"
+
+[[bin]]
+name = "hippo"
+path = "src/main.rs"
+
+[dependencies]
+hippo-core = { path = "../hippo-core" }
+
+# Async
+tokio = { workspace = true }
+
+# CLI
+clap = { workspace = true }
+colored = { workspace = true }
+indicatif = { workspace = true }
+dialoguer = { workspace = true }
+tabled = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Utils
+chrono = { workspace = true }
+directories = { workspace = true }
+anyhow = { workspace = true }
+
+# AI
+reqwest = { workspace = true }
+
+# Hashing for duplicates
+sha2 = { workspace = true }

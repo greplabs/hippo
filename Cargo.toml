@@ -1,0 +1,83 @@
+[workspace]
+resolver = "2"
+members = [
+    "hippo-core",      # Core library: indexing, embeddings, search
+    "hippo-tauri",     # Desktop app with Tauri
+    "hippo-cli",       # CLI for shell usage
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Hippo Contributors"]
+license = "MIT"
+repository = "https://github.com/user/hippo"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Vector database
+qdrant-client = "1.12"
+
+# Embeddings & ML
+ort = { version = "2.0.0-rc.10", features = ["download-binaries"] }  # ONNX Runtime
+ndarray = "0.16"
+
+# File processing
+walkdir = "2.5"
+mime_guess = "2.0"
+image = "0.25"
+symphonia = "0.5"          # Audio metadata
+pdf-extract = "0.7"
+zip = "2.2"
+
+# Metadata extraction
+kamadak-exif = "0.5"       # EXIF for images
+tree-sitter = "0.24"       # Code parsing
+tree-sitter-rust = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-javascript = "0.23"
+
+# Database for metadata
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Cloud providers
+google-drive3 = "6.0"
+aws-sdk-s3 = "1.60"
+
+# Crypto & auth
+keyring = "3"              # System keychain
+oauth2 = "4.4"
+
+# Utils
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+thiserror = "2.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+directories = "5.0"
+notify = "7.0"             # File system watching
+rayon = "1.10"             # Parallel processing
+
+# Tauri specific
+tauri = "2.1"
+tauri-build = "2.0"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "color", "env"] }
+colored = "2.1"
+indicatif = "0.17"         # Progress bars
+dialoguer = "0.11"         # Interactive prompts
+tabled = "0.16"            # Table output
+
+# AI / HTTP
+reqwest = { version = "0.12", features = ["json"] }
+sha2 = "0.10"              # For duplicate detection

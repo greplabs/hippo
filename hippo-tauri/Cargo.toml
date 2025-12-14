@@ -1,0 +1,25 @@
+[package]
+name = "hippo-tauri"
+version = "0.1.0"
+edition = "2021"
+description = "Hippo desktop app - The memory that never forgets"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+hippo-core = { path = "../hippo-core" }
+tauri = { version = "2.1", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.40", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+directories = "5"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

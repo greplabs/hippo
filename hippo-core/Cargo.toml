@@ -1,0 +1,55 @@
+[package]
+name = "hippo-core"
+version.workspace = true
+edition = "2021"
+description = "Core library for Hippo - intelligent file memory system"
+
+[dependencies]
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Vector DB
+qdrant-client = { workspace = true }
+
+# ML/Embeddings
+ort = { workspace = true }
+ndarray = { workspace = true }
+
+# File processing
+walkdir = { workspace = true }
+mime_guess = { workspace = true }
+image = { workspace = true }
+kamadak-exif = { workspace = true }
+
+# Code parsing
+tree-sitter = { workspace = true }
+tree-sitter-rust = { workspace = true }
+tree-sitter-python = { workspace = true }
+tree-sitter-javascript = { workspace = true }
+
+# Storage
+rusqlite = { workspace = true }
+
+# Utils
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+directories = { workspace = true }
+notify = { workspace = true }
+rayon = { workspace = true }
+
+# AI / HTTP
+reqwest = { workspace = true }
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"
+tokio-test = "0.4"
