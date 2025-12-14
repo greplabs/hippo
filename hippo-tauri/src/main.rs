@@ -795,47 +795,110 @@ async fn ollama_rag_query(
         return Err("Ollama is not running. Please start Ollama first.".to_string());
     }
 
-    // Get query embedding
-    let query_embedding = ai_client.embed_single(&query).await
-        .map_err(|e| format!("Embedding failed: {}", e))?;
-
-    // Get all memories and find similar ones
+    // Get all memories
     let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+    let query_lower = query.to_lowercase();
 
-    let mut context_docs: Vec<(String, String, f32)> = Vec::new();
+    // Build context from files - use metadata and content
+    let mut context_parts: Vec<String> = Vec::new();
 
-    // Find similar files and extract their content
-    for memory in memories.iter().take(100) {
-        // For text-based files, compute similarity
-        if matches!(memory.kind, hippo_core::MemoryKind::Document { .. } | hippo_core::MemoryKind::Code { .. }) {
+    // Collect file statistics
+    let mut file_types: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut total_size: u64 = 0;
+
+    for memory in &memories {
+        let type_name = match &memory.kind {
+            hippo_core::MemoryKind::Image { .. } => "image",
+            hippo_core::MemoryKind::Video { .. } => "video",
+            hippo_core::MemoryKind::Audio { .. } => "audio",
+            hippo_core::MemoryKind::Document { .. } => "document",
+            hippo_core::MemoryKind::Code { .. } => "code",
+            hippo_core::MemoryKind::Archive { .. } => "archive",
+            _ => "other",
+        };
+        *file_types.entry(type_name.to_string()).or_insert(0) += 1;
+        total_size += memory.metadata.file_size;
+    }
+
+    // Add collection summary
+    let summary = format!(
+        "File collection: {} total files, {:.1} MB total size. Types: {}",
+        memories.len(),
+        total_size as f64 / 1_000_000.0,
+        file_types.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join(", ")
+    );
+    context_parts.push(summary);
+
+    // For text/code files, include content samples
+    let mut text_files_added = 0;
+    for memory in memories.iter() {
+        if text_files_added >= 10 { break; }
+
+        let is_text_file = matches!(&memory.kind,
+            hippo_core::MemoryKind::Document { .. } | hippo_core::MemoryKind::Code { .. });
+
+        if is_text_file {
             if let Ok(content) = std::fs::read_to_string(&memory.path) {
-                // Truncate content for context
-                let truncated: String = content.chars().take(2000).collect();
-                if let Ok(emb) = ai_client.embed_single(&truncated).await {
-                    let similarity = cosine_similarity(&query_embedding, &emb);
-                    if similarity > 0.3 {
-                        context_docs.push((
-                            truncated,
-                            memory.path.to_string_lossy().to_string(),
-                            similarity
-                        ));
-                    }
+                let filename = memory.path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+
+                // Check if relevant to query
+                let content_lower = content.to_lowercase();
+                let filename_lower = filename.to_lowercase();
+                let is_relevant = query_lower.split_whitespace().any(|word| {
+                    content_lower.contains(word) || filename_lower.contains(word)
+                });
+
+                if is_relevant || text_files_added < 3 {
+                    let preview: String = content.chars().take(1000).collect();
+                    let lang = if let hippo_core::MemoryKind::Code { language, .. } = &memory.kind {
+                        format!(" ({})", language)
+                    } else { String::new() };
+                    context_parts.push(format!("File: {}{}\n{}", filename, lang, preview));
+                    text_files_added += 1;
                 }
             }
         }
     }
 
-    // Sort by similarity and take top results
-    context_docs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
-    context_docs.truncate(5);
+    // For images, include metadata
+    let mut image_info: Vec<String> = Vec::new();
+    for memory in memories.iter().filter(|m| matches!(m.kind, hippo_core::MemoryKind::Image { .. })).take(20) {
+        let filename = memory.path.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
 
-    if context_docs.is_empty() {
-        return Ok("I couldn't find any relevant documents to answer your question. Try indexing more files or asking a different question.".to_string());
+        let mut details = vec![filename.clone()];
+        if let hippo_core::MemoryKind::Image { width, height, .. } = &memory.kind {
+            details.push(format!("{}x{}", width, height));
+        }
+        // Add modified date from memory
+        details.push(memory.modified_at.format("%Y-%m-%d").to_string());
+        image_info.push(details.join(" - "));
     }
 
-    // Generate response using RAG
-    let response = ai_client.rag_query(&query, context_docs).await
-        .map_err(|e| format!("RAG query failed: {}", e))?;
+    if !image_info.is_empty() {
+        context_parts.push(format!("Recent images:\n{}", image_info.join("\n")));
+    }
+
+    let context = context_parts.join("\n\n---\n\n");
+
+    // Build the prompt
+    let prompt = format!(
+        "You are a helpful file assistant. Based on the user's file collection, answer their question.\n\n\
+        USER'S FILES:\n{}\n\n\
+        USER'S QUESTION: {}\n\n\
+        Provide a helpful, concise answer based on the files above. If you can't answer from the files, say so.",
+        context, query
+    );
+
+    println!("[Hippo] Sending to Ollama ({} chars context)", context.len());
+
+    // Use generate API with system prompt
+    let system = "You are a helpful file assistant. Answer questions about the user's files based on the provided context. Be concise and helpful.";
+    let response = ai_client.ollama().generate(&prompt, Some(system)).await
+        .map_err(|e| format!("Generation failed: {}", e))?;
 
     Ok(response)
 }
@@ -855,7 +918,8 @@ async fn get_recommended_models() -> Result<serde_json::Value, String> {
     }))
 }
 
-// Helper function for cosine similarity
+// Helper function for cosine similarity (kept for future semantic search)
+#[allow(dead_code)]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
