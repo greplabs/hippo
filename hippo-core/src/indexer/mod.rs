@@ -303,7 +303,15 @@ impl Indexer {
         memory.metadata.mime_type = mime_guess::from_path(path)
             .first()
             .map(|m| m.to_string());
-        
+
+        // Compute content hash for duplicate detection
+        // Skip very large files (> 500MB) to avoid slowdowns
+        if memory.metadata.file_size < 500 * 1024 * 1024 {
+            if let Ok(hash) = crate::duplicates::compute_file_hash(path) {
+                memory.metadata.hash = Some(hash);
+            }
+        }
+
         // Add system tags based on file type
         memory.tags.push(Tag::system(format!("type:{}", memory.kind_name())));
         

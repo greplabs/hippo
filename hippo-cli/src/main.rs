@@ -450,59 +450,67 @@ async fn main() -> Result<()> {
                     .template("{spinner:.green} {msg}")
                     .unwrap(),
             );
-            pb.set_message("Analyzing files...");
+            pb.set_message("Scanning and hashing files...");
             pb.enable_steady_tick(std::time::Duration::from_millis(100));
 
-            // Get all memories
-            let results = hippo
-                .search_advanced(SearchQuery {
-                    limit: 10000,
-                    ..Default::default()
-                })
-                .await?;
-
-            // Group by size first (quick filter)
-            use std::collections::HashMap;
-            let mut by_size: HashMap<u64, Vec<_>> = HashMap::new();
-
-            for r in &results.memories {
-                let size = r.memory.metadata.file_size;
-                if size >= min_size {
-                    by_size.entry(size).or_default().push(&r.memory);
-                }
-            }
-
-            // Find groups with multiple files of same size
-            let mut duplicates: Vec<Vec<_>> = Vec::new();
-            for (_, files) in by_size {
-                if files.len() > 1 {
-                    duplicates.push(files);
-                }
-            }
+            // Use real hash-based duplicate detection
+            let (duplicate_groups, summary) = hippo.find_duplicates(min_size).await?;
 
             pb.finish_and_clear();
 
-            if duplicates.is_empty() {
+            if duplicate_groups.is_empty() {
                 print_success("No duplicate files found!");
+                println!("\n  {} files scanned", summary.files_scanned);
             } else {
+                // Print summary
                 println!(
-                    "\n{} {} potential duplicate groups:\n",
+                    "\n{} {} duplicate groups ({} duplicate files):\n",
                     "Found".bright_yellow(),
-                    duplicates.len()
+                    summary.duplicate_groups,
+                    summary.total_duplicates
                 );
 
-                for (i, group) in duplicates.iter().enumerate() {
+                println!(
+                    "  {} {} wasted by duplicates\n",
+                    "💾".bright_red(),
+                    format_bytes(summary.wasted_bytes).bright_red()
+                );
+
+                // Print each group
+                for (i, group) in duplicate_groups.iter().take(20).enumerate() {
                     println!(
-                        "{} {} ({}):",
+                        "{} {} files × {} = {} wasted",
                         format!("Group {}:", i + 1).bright_cyan(),
-                        group.len(),
-                        format_bytes(group[0].metadata.file_size)
+                        group.memory_ids.len(),
+                        format_bytes(group.size),
+                        format_bytes(group.wasted_bytes()).bright_yellow()
                     );
-                    for mem in group {
-                        println!("  - {}", mem.path.display());
+
+                    // Show hash (truncated)
+                    println!("  {} {}", "Hash:".dimmed(), &group.hash[..16]);
+
+                    // List files
+                    for path in &group.paths {
+                        let name = path.file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| path.display().to_string());
+                        println!("  - {}", name.bright_white());
+                        println!("    {}", path.display().to_string().dimmed());
                     }
                     println!();
                 }
+
+                // Show summary if there are more groups
+                if duplicate_groups.len() > 20 {
+                    println!(
+                        "  {} {} more groups not shown",
+                        "...".dimmed(),
+                        duplicate_groups.len() - 20
+                    );
+                }
+
+                // Cleanup suggestion
+                println!("\n{}", "Tip: Review duplicates carefully before deleting. Keep the file in the best location.".dimmed());
             }
         }
 

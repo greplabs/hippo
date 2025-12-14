@@ -71,6 +71,7 @@ pub mod storage;
 pub mod error;
 pub mod ai;
 pub mod watcher;
+pub mod duplicates;
 
 pub use models::*;
 pub use error::{HippoError, Result};
@@ -83,6 +84,9 @@ pub use ai::{ClaudeClient, FileAnalysis, TagSuggestion, OrganizationSuggestion};
 
 // Re-export watcher types
 pub use watcher::{FileWatcher, WatchEvent, WatchStats};
+
+// Re-export duplicates types
+pub use duplicates::{DuplicateGroup, DuplicateSummary, compute_file_hash, find_duplicates_by_scanning};
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -357,6 +361,19 @@ impl Hippo {
         } else {
             vec![]
         }
+    }
+
+    // === Duplicate Detection ===
+
+    /// Find duplicate files in the index
+    pub async fn find_duplicates(&self, min_size: u64) -> Result<(Vec<DuplicateGroup>, DuplicateSummary)> {
+        let memories = self.storage.get_all_memories().await?;
+        Ok(duplicates::find_duplicates_by_scanning(&memories, min_size)?)
+    }
+
+    /// Get all memories (for duplicate scanning)
+    pub async fn get_all_memories(&self) -> Result<Vec<Memory>> {
+        self.storage.get_all_memories().await
     }
 }
 
