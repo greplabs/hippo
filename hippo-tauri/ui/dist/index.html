@@ -272,6 +272,122 @@
     .ai-topic { padding: 3px 8px; background: #ede9fe; border-radius: 4px; font-size: 11px; color: #6366f1; }
     body.dark .ai-topic { background: #4c1d95; color: #c4b5fd; }
 
+    /* AI Actions Grid */
+    .ai-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .ai-action-btn {
+      padding: 10px 8px;
+      background: #f5f5f4;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .ai-action-btn:hover { background: #e7e5e4; border-color: #d6d3d1; }
+    .ai-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ai-action-btn.loading .icon { animation: spin 0.8s linear infinite; }
+    body.dark .ai-action-btn { background: #1c1917; border-color: #44403c; }
+    body.dark .ai-action-btn:hover { background: #292524; border-color: #57534e; }
+    .ai-action-btn .icon { color: #6366f1; width: 18px; height: 18px; }
+    .ai-action-btn span:not(.icon) { font-size: 11px; color: #57534e; }
+    body.dark .ai-action-btn span:not(.icon) { color: #a8a29e; }
+
+    /* AI Results Panel */
+    .ai-results-panel {
+      margin-top: 12px;
+      padding: 12px;
+      background: #fafaf9;
+      border-radius: 8px;
+      border: 1px solid #e7e5e4;
+    }
+    body.dark .ai-results-panel { background: #1c1917; border-color: #44403c; }
+    .ai-results-title {
+      font-size: 11px;
+      color: #8b5cf6;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ai-results-title .icon { width: 14px; height: 14px; }
+    .ai-tag-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .ai-tag-suggestion {
+      padding: 4px 10px;
+      background: #ede9fe;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #6366f1;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ai-tag-suggestion:hover { background: #ddd6fe; }
+    body.dark .ai-tag-suggestion { background: #4c1d95; color: #c4b5fd; }
+    body.dark .ai-tag-suggestion:hover { background: #5b21b6; }
+    .ai-similar-files {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .ai-similar-file {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      background: white;
+      border: 1px solid #e7e5e4;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ai-similar-file:hover { background: #f5f5f4; }
+    body.dark .ai-similar-file { background: #292524; border-color: #44403c; }
+    body.dark .ai-similar-file:hover { background: #44403c; }
+    .ai-similar-file .icon { width: 20px; height: 20px; color: #78716c; flex-shrink: 0; }
+    .ai-similar-file-info { flex: 1; min-width: 0; }
+    .ai-similar-file-name { font-size: 12px; color: #44403c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    body.dark .ai-similar-file-name { color: #e7e5e4; }
+    .ai-similar-file-reasons { font-size: 10px; color: #a8a29e; }
+    .ai-rename-suggestions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .ai-rename-suggestion {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      background: white;
+      border: 1px solid #e7e5e4;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #44403c;
+    }
+    body.dark .ai-rename-suggestion { background: #292524; border-color: #44403c; color: #e7e5e4; }
+    .ai-rename-suggestion button {
+      padding: 4px 8px;
+      background: #6366f1;
+      border: none;
+      border-radius: 4px;
+      color: white;
+      font-size: 10px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .ai-rename-suggestion button:hover { background: #4f46e5; }
+
     /* Search Mode Toggle */
     .search-mode { display: flex; gap: 2px; background: #f5f5f4; padding: 3px; border-radius: 8px; margin-left: 8px; }
     body.dark .search-mode { background: #44403c; }
@@ -461,6 +577,25 @@
               <div class="ai-topics" id="aiTopics"></div>
             </div>
           </div>
+          <div class="ai-actions-grid">
+            <button class="ai-action-btn" id="aiSuggestTagsBtn" title="Get AI-suggested tags">
+              <span class="icon" id="suggestTagsIcon"></span>
+              <span>Suggest Tags</span>
+            </button>
+            <button class="ai-action-btn" id="aiFindSimilarBtn" title="Find similar files">
+              <span class="icon" id="findSimilarIcon"></span>
+              <span>Find Similar</span>
+            </button>
+            <button class="ai-action-btn" id="aiSmartRenameBtn" title="Get AI rename suggestions">
+              <span class="icon" id="smartRenameIcon"></span>
+              <span>Smart Rename</span>
+            </button>
+            <button class="ai-action-btn" id="aiAskAboutBtn" title="Ask AI about this file">
+              <span class="icon" id="askAboutIcon"></span>
+              <span>Ask About</span>
+            </button>
+          </div>
+          <div id="aiActionResults" style="display:none;"></div>
         </div>
       </div>
     </aside>
@@ -1080,6 +1215,125 @@
     .chat-loading span:nth-child(1) { animation-delay: -0.32s; }
     .chat-loading span:nth-child(2) { animation-delay: -0.16s; }
     @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+    /* File Preview Cards in Chat */
+    .chat-file-previews {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(0,0,0,0.08);
+    }
+    body.dark .chat-file-previews { border-color: rgba(255,255,255,0.08); }
+
+    .chat-file-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: white;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      max-width: 200px;
+      min-width: 140px;
+    }
+    .chat-file-card:hover { background: #fafaf9; border-color: #d6d3d1; transform: translateY(-1px); }
+    body.dark .chat-file-card { background: #1c1917; border-color: #44403c; }
+    body.dark .chat-file-card:hover { background: #292524; border-color: #57534e; }
+
+    .chat-file-thumb {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      position: relative;
+    }
+    .chat-file-thumb.image { background: #fef2f2; color: #dc2626; }
+    .chat-file-thumb.code { background: #f0fdf4; color: #16a34a; }
+    .chat-file-thumb.document { background: #eff6ff; color: #2563eb; }
+    .chat-file-thumb.video { background: #faf5ff; color: #9333ea; }
+    .chat-file-thumb.audio { background: #fdf4ff; color: #c026d3; }
+    .chat-file-thumb.file { background: #f5f5f4; color: #78716c; }
+    body.dark .chat-file-thumb.image { background: #450a0a; }
+    body.dark .chat-file-thumb.code { background: #052e16; }
+    body.dark .chat-file-thumb.document { background: #172554; }
+    body.dark .chat-file-thumb.video { background: #3b0764; }
+    body.dark .chat-file-thumb.audio { background: #4a044e; }
+    body.dark .chat-file-thumb.file { background: #292524; }
+
+    .chat-file-thumb img {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+
+    .chat-file-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .chat-file-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: #44403c;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    body.dark .chat-file-name { color: #e7e5e4; }
+    .chat-file-meta {
+      font-size: 10px;
+      color: #a8a29e;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .chat-file-relevance {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .chat-file-relevance.high { background: #22c55e; }
+    .chat-file-relevance.medium { background: #f59e0b; }
+    .chat-file-relevance.low { background: #94a3b8; }
+
+    /* File Preview Header */
+    .chat-files-header {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #78716c;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chat-files-header .icon { width: 12px; height: 12px; }
+    body.dark .chat-files-header { color: #a8a29e; }
+
+    /* AI Stats */
+    .ai-stats {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(0,0,0,0.08);
+      font-size: 10px;
+      color: #a8a29e;
+    }
+    body.dark .ai-stats { border-color: rgba(255,255,255,0.08); }
+    .ai-stat { display: flex; align-items: center; gap: 4px; }
+    .ai-stat .icon { width: 12px; height: 12px; }
   </style>
 
   <script>
@@ -1214,6 +1468,11 @@
         document.getElementById('aiProgressIcon').innerHTML = icons.refresh;
         document.getElementById('sendIcon').innerHTML = icons.send;
         document.getElementById('ollamaStatusIcon').innerHTML = icons.checkCircle;
+        // AI Action icons
+        document.getElementById('suggestTagsIcon').innerHTML = icons.tag;
+        document.getElementById('findSimilarIcon').innerHTML = icons.file;
+        document.getElementById('smartRenameIcon').innerHTML = icons.doc;
+        document.getElementById('askAboutIcon').innerHTML = icons.messageCircle;
         // Filter icons
         document.querySelectorAll('.filter-icon').forEach(function(el) {
           var iconName = el.dataset.icon;
@@ -2272,11 +2531,15 @@
             updateAiProgress('Still processing...');
           }, 5000);
 
-          invoke('ollama_rag_query', { query: query }).then(function(response) {
+          invoke('ollama_rag_query', { query: query }).then(function(data) {
             clearTimeout(timeoutId);
             hideAiProgress();
             removeChatLoading();
-            addChatMessage('assistant', response);
+            // Handle new JSON response format with files and stats
+            var response = typeof data === 'object' ? data.response : data;
+            var files = typeof data === 'object' ? data.files : null;
+            var stats = typeof data === 'object' ? data.stats : null;
+            addChatMessage('assistant', response, files, stats);
             input.disabled = false;
             document.getElementById('chatSendBtn').disabled = false;
             input.focus();
@@ -2298,7 +2561,70 @@
           });
         }
 
-        function addChatMessage(role, content) {
+        function getFileTypeFromPath(filePath, fileType) {
+          if (fileType) {
+            if (fileType === 'image') return 'image';
+            if (fileType.startsWith('code:')) return 'code';
+            if (fileType === 'document') return 'document';
+            if (fileType === 'video') return 'video';
+            if (fileType === 'audio') return 'audio';
+          }
+          var ext = filePath.split('.').pop().toLowerCase();
+          if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)) return 'image';
+          if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return 'video';
+          if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext)) return 'audio';
+          if (['js', 'ts', 'jsx', 'tsx', 'py', 'rs', 'go', 'java', 'c', 'cpp', 'h', 'css', 'html', 'json', 'yaml', 'yml', 'sh', 'bash', 'rb', 'php', 'swift', 'kt'].includes(ext)) return 'code';
+          if (['pdf', 'doc', 'docx', 'txt', 'md', 'rtf', 'odt'].includes(ext)) return 'document';
+          return 'file';
+        }
+
+        function getFileIcon(fileType) {
+          switch(fileType) {
+            case 'image': return icons.image;
+            case 'video': return icons.video;
+            case 'audio': return icons.audio;
+            case 'code': return icons.code;
+            case 'document': return icons.doc;
+            default: return icons.file;
+          }
+        }
+
+        function renderFilePreviewCards(files) {
+          if (!files || files.length === 0) return '';
+
+          var html = '<div class="chat-file-previews">';
+          html += '<div class="chat-files-header" style="width:100%"><span class="icon">' + icons.folder + '</span> Referenced Files</div>';
+
+          files.forEach(function(file) {
+            var fileType = getFileTypeFromPath(file.path, file.type);
+            var isImage = fileType === 'image';
+            var thumbContent = isImage
+              ? '<img src="' + esc(file.path) + '" alt="' + esc(file.name) + '" onerror="this.style.display=\'none\'; this.parentNode.innerHTML=\'' + getFileIcon(fileType).replace(/'/g, "\\'") + '\'">'
+              : '<span class="icon icon-sm">' + getFileIcon(fileType) + '</span>';
+
+            var sizeStr = file.size ? formatBytes(file.size) : '';
+            var relevance = file.relevance || 'low';
+
+            html += '<div class="chat-file-card" data-path="' + esc(file.path) + '" onclick="openChatFile(\'' + esc(file.path).replace(/'/g, "\\'") + '\')">';
+            html += '<div class="chat-file-thumb ' + fileType + '">' + thumbContent + '</div>';
+            html += '<div class="chat-file-info">';
+            html += '<span class="chat-file-name" title="' + esc(file.name) + '">' + esc(file.name) + '</span>';
+            html += '<span class="chat-file-meta"><span class="chat-file-relevance ' + relevance + '"></span>' + sizeStr + '</span>';
+            html += '</div>';
+            html += '</div>';
+          });
+
+          html += '</div>';
+          return html;
+        }
+
+        function openChatFile(path) {
+          invoke('open_file', { path: path }).catch(function(e) {
+            showToast('Failed to open file', 'error');
+          });
+        }
+
+        function addChatMessage(role, content, files, stats) {
           var container = document.getElementById('chatMessages');
           // Remove welcome message if present
           var welcome = container.querySelector('.chat-welcome');
@@ -2306,10 +2632,31 @@
 
           var msgDiv = document.createElement('div');
           msgDiv.className = 'chat-message ' + role;
-          msgDiv.innerHTML = '<div class="bubble">' + esc(content) + '</div>';
+
+          var bubbleContent = '<div class="bubble">' + esc(content);
+
+          // Add file previews for assistant messages
+          if (role === 'assistant' && files && files.length > 0) {
+            bubbleContent += renderFilePreviewCards(files);
+          }
+
+          // Add stats for assistant messages
+          if (role === 'assistant' && stats) {
+            bubbleContent += '<div class="ai-stats">';
+            if (stats.total_files) {
+              bubbleContent += '<span class="ai-stat"><span class="icon">' + icons.folder + '</span>' + stats.total_files + ' files analyzed</span>';
+            }
+            if (stats.context_size) {
+              bubbleContent += '<span class="ai-stat"><span class="icon">' + icons.zap + '</span>' + Math.round(stats.context_size / 100) / 10 + 'KB context</span>';
+            }
+            bubbleContent += '</div>';
+          }
+
+          bubbleContent += '</div>';
+          msgDiv.innerHTML = bubbleContent;
           container.appendChild(msgDiv);
           container.scrollTop = container.scrollHeight;
-          chatMessages.push({ role: role, content: content });
+          chatMessages.push({ role: role, content: content, files: files });
         }
 
         function addChatLoading() {
@@ -2464,6 +2811,165 @@
             btn.disabled = false;
             showToast('Analysis failed: ' + e, 'error');
           });
+        }
+
+        function aiSuggestTags() {
+          if (!selectedMemory) return;
+
+          var btn = document.getElementById('aiSuggestTagsBtn');
+          btn.classList.add('loading');
+          btn.disabled = true;
+          var resultsDiv = document.getElementById('aiActionResults');
+          resultsDiv.innerHTML = '';
+          resultsDiv.style.display = 'none';
+
+          invoke('ai_suggest_tags', { filePath: selectedMemory.path }).then(function(result) {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+
+            if (result.suggested_tags && result.suggested_tags.length > 0) {
+              var html = '<div class="ai-results-panel">';
+              html += '<div class="ai-results-title"><span class="icon">' + icons.tag + '</span> Suggested Tags</div>';
+              html += '<div class="ai-tag-suggestions">';
+              result.suggested_tags.forEach(function(tag) {
+                html += '<button class="ai-tag-suggestion" onclick="addSuggestedTag(\'' + esc(tag).replace(/'/g, "\\'") + '\')">' + esc(tag) + '</button>';
+              });
+              html += '</div></div>';
+              resultsDiv.innerHTML = html;
+              resultsDiv.style.display = 'block';
+            } else {
+              showToast('No tag suggestions found', 'info');
+            }
+          }).catch(function(e) {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            showToast('Tag suggestion failed: ' + e, 'error');
+          });
+        }
+
+        function addSuggestedTag(tagName) {
+          if (!selectedMemory) return;
+          invoke('add_tag', { memoryId: selectedMemory.id, tag: tagName }).then(function() {
+            showToast('Tag "' + tagName + '" added!', 'success');
+            // Refresh tags
+            refreshData();
+            // Remove the button
+            document.querySelectorAll('.ai-tag-suggestion').forEach(function(btn) {
+              if (btn.textContent === tagName) {
+                btn.remove();
+              }
+            });
+          }).catch(function(e) {
+            showToast('Failed to add tag: ' + e, 'error');
+          });
+        }
+
+        function aiFindSimilar() {
+          if (!selectedMemory) return;
+
+          var btn = document.getElementById('aiFindSimilarBtn');
+          btn.classList.add('loading');
+          btn.disabled = true;
+          var resultsDiv = document.getElementById('aiActionResults');
+          resultsDiv.innerHTML = '';
+          resultsDiv.style.display = 'none';
+
+          invoke('ai_find_similar', { filePath: selectedMemory.path }).then(function(result) {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+
+            if (result.similar && result.similar.length > 0) {
+              var html = '<div class="ai-results-panel">';
+              html += '<div class="ai-results-title"><span class="icon">' + icons.file + '</span> Similar Files</div>';
+              html += '<div class="ai-similar-files">';
+              result.similar.slice(0, 5).forEach(function(file) {
+                var icon = getFileIcon(getFileTypeFromPath(file.path, file.type));
+                var reasons = file.reasons ? file.reasons.join(', ') : '';
+                html += '<div class="ai-similar-file" onclick="openSimilarFile(\'' + esc(file.path).replace(/'/g, "\\'") + '\')">';
+                html += '<span class="icon">' + icon + '</span>';
+                html += '<div class="ai-similar-file-info">';
+                html += '<div class="ai-similar-file-name" title="' + esc(file.name) + '">' + esc(file.name) + '</div>';
+                html += '<div class="ai-similar-file-reasons">' + esc(reasons) + '</div>';
+                html += '</div></div>';
+              });
+              html += '</div></div>';
+              resultsDiv.innerHTML = html;
+              resultsDiv.style.display = 'block';
+            } else {
+              showToast('No similar files found', 'info');
+            }
+          }).catch(function(e) {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            showToast('Find similar failed: ' + e, 'error');
+          });
+        }
+
+        function openSimilarFile(path) {
+          // Find the memory by path and select it
+          var mem = memories.find(function(m) { return m.path === path; });
+          if (mem) {
+            selectMemory(mem);
+          } else {
+            invoke('open_in_finder', { path: path }).catch(function() {
+              showToast('Could not locate file', 'error');
+            });
+          }
+        }
+
+        function aiSmartRename() {
+          if (!selectedMemory) return;
+
+          var btn = document.getElementById('aiSmartRenameBtn');
+          btn.classList.add('loading');
+          btn.disabled = true;
+          var resultsDiv = document.getElementById('aiActionResults');
+          resultsDiv.innerHTML = '';
+          resultsDiv.style.display = 'none';
+
+          invoke('ai_smart_rename', { filePath: selectedMemory.path }).then(function(result) {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+
+            if (result.suggestions && result.suggestions.length > 0) {
+              var html = '<div class="ai-results-panel">';
+              html += '<div class="ai-results-title"><span class="icon">' + icons.doc + '</span> Rename Suggestions</div>';
+              html += '<div class="ai-rename-suggestions">';
+              result.suggestions.forEach(function(name) {
+                html += '<div class="ai-rename-suggestion">';
+                html += '<span title="' + esc(name) + '">' + esc(name) + '</span>';
+                html += '<button onclick="copyToClipboard(\'' + esc(name).replace(/'/g, "\\'") + '\')">Copy</button>';
+                html += '</div>';
+              });
+              html += '</div></div>';
+              resultsDiv.innerHTML = html;
+              resultsDiv.style.display = 'block';
+            } else {
+              showToast('No rename suggestions found', 'info');
+            }
+          }).catch(function(e) {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            showToast('Smart rename failed: ' + e, 'error');
+          });
+        }
+
+        function copyToClipboard(text) {
+          navigator.clipboard.writeText(text).then(function() {
+            showToast('Copied to clipboard!', 'success');
+          }).catch(function() {
+            showToast('Failed to copy', 'error');
+          });
+        }
+
+        function aiAskAboutFile() {
+          if (!selectedMemory) return;
+          // Open chat and pre-fill with a question about this file
+          if (!chatOpen) openChat();
+          var filename = selectedMemory.path.split('/').pop();
+          var input = document.getElementById('chatInput');
+          input.value = 'Tell me about the file "' + filename + '"';
+          input.focus();
         }
 
         function selectMemory(mem) {
@@ -2726,6 +3232,12 @@
         // AI analyze button
         document.getElementById('aiAnalyzeBtn').onclick = analyzeWithAI;
 
+        // AI action buttons
+        document.getElementById('aiSuggestTagsBtn').onclick = aiSuggestTags;
+        document.getElementById('aiFindSimilarBtn').onclick = aiFindSimilar;
+        document.getElementById('aiSmartRenameBtn').onclick = aiSmartRename;
+        document.getElementById('aiAskAboutBtn').onclick = aiAskAboutFile;
+
         // Initialize search mode from saved preference
         setSearchMode(searchMode);
 
@@ -2821,6 +3333,10 @@
         window.openInFinder = function(path) {
           invoke('open_in_finder', { path: path });
         };
+        window.addSuggestedTag = addSuggestedTag;
+        window.openSimilarFile = openSimilarFile;
+        window.copyToClipboard = copyToClipboard;
+        window.openChatFile = openChatFile;
       });
 
       // Helpers

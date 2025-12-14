@@ -784,7 +784,7 @@ async fn ollama_chat(
 async fn ollama_rag_query(
     query: String,
     state: State<'_, AppState>,
-) -> Result<String, String> {
+) -> Result<serde_json::Value, String> {
     println!("[Hippo] RAG query: {}", query);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
@@ -798,6 +798,9 @@ async fn ollama_rag_query(
     // Get all memories
     let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
     let query_lower = query.to_lowercase();
+
+    // Track relevant files for preview
+    let mut relevant_files: Vec<serde_json::Value> = Vec::new();
 
     // Build context from files - use metadata and content
     let mut context_parts: Vec<String> = Vec::new();
@@ -857,12 +860,27 @@ async fn ollama_rag_query(
                     } else { String::new() };
                     context_parts.push(format!("File: {}{}\n{}", filename, lang, preview));
                     text_files_added += 1;
+
+                    // Add to relevant files
+                    let file_type = match &memory.kind {
+                        hippo_core::MemoryKind::Code { language, .. } => format!("code:{}", language),
+                        hippo_core::MemoryKind::Document { .. } => "document".to_string(),
+                        _ => "file".to_string(),
+                    };
+                    relevant_files.push(serde_json::json!({
+                        "id": memory.id.to_string(),
+                        "path": memory.path.to_string_lossy(),
+                        "name": filename,
+                        "type": file_type,
+                        "size": memory.metadata.file_size,
+                        "relevance": if is_relevant { "high" } else { "medium" }
+                    }));
                 }
             }
         }
     }
 
-    // For images, include metadata
+    // For images, include metadata and add to relevant files
     let mut image_info: Vec<String> = Vec::new();
     for memory in memories.iter().filter(|m| matches!(m.kind, hippo_core::MemoryKind::Image { .. })).take(20) {
         let filename = memory.path.file_name()
@@ -870,12 +888,32 @@ async fn ollama_rag_query(
             .unwrap_or_default();
 
         let mut details = vec![filename.clone()];
-        if let hippo_core::MemoryKind::Image { width, height, .. } = &memory.kind {
+        let (width, height) = if let hippo_core::MemoryKind::Image { width, height, .. } = &memory.kind {
             details.push(format!("{}x{}", width, height));
-        }
+            (*width, *height)
+        } else {
+            (0, 0)
+        };
         // Add modified date from memory
         details.push(memory.modified_at.format("%Y-%m-%d").to_string());
         image_info.push(details.join(" - "));
+
+        // Check relevance for images
+        let filename_lower = filename.to_lowercase();
+        let is_relevant = query_lower.split_whitespace().any(|word| filename_lower.contains(word));
+
+        if relevant_files.len() < 12 {
+            relevant_files.push(serde_json::json!({
+                "id": memory.id.to_string(),
+                "path": memory.path.to_string_lossy(),
+                "name": filename,
+                "type": "image",
+                "size": memory.metadata.file_size,
+                "width": width,
+                "height": height,
+                "relevance": if is_relevant { "high" } else { "low" }
+            }));
+        }
     }
 
     if !image_info.is_empty() {
@@ -900,7 +938,288 @@ async fn ollama_rag_query(
     let response = ai_client.ollama().generate(&prompt, Some(system)).await
         .map_err(|e| format!("Generation failed: {}", e))?;
 
-    Ok(response)
+    // Sort relevant files by relevance (high first)
+    relevant_files.sort_by(|a, b| {
+        let rel_a = a["relevance"].as_str().unwrap_or("low");
+        let rel_b = b["relevance"].as_str().unwrap_or("low");
+        let score_a = match rel_a { "high" => 3, "medium" => 2, _ => 1 };
+        let score_b = match rel_b { "high" => 3, "medium" => 2, _ => 1 };
+        score_b.cmp(&score_a)
+    });
+
+    // Return response with relevant files
+    Ok(serde_json::json!({
+        "response": response,
+        "files": relevant_files.into_iter().take(8).collect::<Vec<_>>(),
+        "stats": {
+            "total_files": memories.len(),
+            "context_size": context.len()
+        }
+    }))
+}
+
+#[tauri::command]
+async fn ai_suggest_tags(
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] AI suggest tags for: {}", file_path);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let ai_client = UnifiedAiClient::with_ollama(None);
+    if !ai_client.is_available().await {
+        return Err("Ollama is not running".to_string());
+    }
+
+    // Get memory for the file
+    let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+    let memory = memories.iter()
+        .find(|m| m.path.to_string_lossy() == file_path)
+        .ok_or("File not found in index")?;
+
+    let filename = memory.path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    // Build context about the file
+    let file_info = match &memory.kind {
+        hippo_core::MemoryKind::Image { width, height, format } => {
+            format!("Image file: {}x{} {}", width, height, format)
+        }
+        hippo_core::MemoryKind::Code { language, lines } => {
+            let content_preview = std::fs::read_to_string(&memory.path)
+                .map(|c| c.chars().take(500).collect::<String>())
+                .unwrap_or_default();
+            format!("Code file ({}, {} lines):\n{}", language, lines, content_preview)
+        }
+        hippo_core::MemoryKind::Document { format, .. } => {
+            format!("Document file: {:?}", format)
+        }
+        _ => format!("File type: {:?}", memory.kind)
+    };
+
+    let existing_tags: Vec<String> = memory.tags.iter().map(|t| t.name.clone()).collect();
+
+    let prompt = format!(
+        "Suggest 3-5 relevant tags for this file. Only output the tags as a comma-separated list, nothing else.\n\n\
+        Filename: {}\nFile info: {}\nExisting tags: {}\n\nSuggested tags:",
+        filename, file_info, existing_tags.join(", ")
+    );
+
+    let response = ai_client.ollama().generate(&prompt, Some("You are a file tagging assistant. Suggest concise, relevant tags.")).await
+        .map_err(|e| format!("Generation failed: {}", e))?;
+
+    // Parse tags from response
+    let suggested: Vec<String> = response
+        .split(',')
+        .map(|s| s.trim().to_lowercase().replace(['#', '"', '\'', '.'], ""))
+        .filter(|s| !s.is_empty() && s.len() < 30)
+        .take(5)
+        .collect();
+
+    Ok(serde_json::json!({
+        "file": filename,
+        "existing_tags": existing_tags,
+        "suggested_tags": suggested
+    }))
+}
+
+#[tauri::command]
+async fn ai_find_similar(
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] AI find similar to: {}", file_path);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    // Get all memories
+    let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+    let target = memories.iter()
+        .find(|m| m.path.to_string_lossy() == file_path)
+        .ok_or("File not found in index")?;
+
+    let target_name = target.path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    // Find similar files based on type, name patterns, and tags
+    let mut similar_files: Vec<serde_json::Value> = Vec::new();
+
+    let target_type = std::mem::discriminant(&target.kind);
+    let target_ext = target.path.extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let target_name_lower = target_name.to_lowercase();
+
+    for memory in &memories {
+        if memory.path == target.path { continue; }
+
+        let mut score: u32 = 0;
+        let mut reasons: Vec<&str> = Vec::new();
+
+        // Same type
+        if std::mem::discriminant(&memory.kind) == target_type {
+            score += 30;
+            reasons.push("same type");
+        }
+
+        // Same extension
+        let ext = memory.path.extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        if ext == target_ext && !target_ext.is_empty() {
+            score += 20;
+        }
+
+        // Similar name
+        let name = memory.path.file_name()
+            .map(|n| n.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+
+        // Check for common words in filename
+        let target_words: std::collections::HashSet<&str> = target_name_lower
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|s| s.len() > 2)
+            .collect();
+        let name_words: std::collections::HashSet<&str> = name
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|s| s.len() > 2)
+            .collect();
+        let common_words = target_words.intersection(&name_words).count();
+        if common_words > 0 {
+            score += (common_words * 15) as u32;
+            reasons.push("similar name");
+        }
+
+        // Same directory
+        if memory.path.parent() == target.path.parent() {
+            score += 10;
+            reasons.push("same folder");
+        }
+
+        // Shared tags
+        let shared_tags: Vec<String> = memory.tags.iter()
+            .filter(|t| target.tags.iter().any(|tt| tt.name == t.name))
+            .map(|t| t.name.clone())
+            .collect();
+        if !shared_tags.is_empty() {
+            score += (shared_tags.len() * 20) as u32;
+            reasons.push("shared tags");
+        }
+
+        // Similar file size (within 50%)
+        if target.metadata.file_size > 0 {
+            let size_ratio = memory.metadata.file_size as f64 / target.metadata.file_size as f64;
+            if size_ratio > 0.5 && size_ratio < 2.0 {
+                score += 5;
+            }
+        }
+
+        // Similar dimensions for images
+        if let (hippo_core::MemoryKind::Image { width: tw, height: th, .. },
+                hippo_core::MemoryKind::Image { width: mw, height: mh, .. }) = (&target.kind, &memory.kind) {
+            let w_ratio = *mw as f64 / *tw as f64;
+            let h_ratio = *mh as f64 / *th as f64;
+            if (0.8..1.2).contains(&w_ratio) && (0.8..1.2).contains(&h_ratio) {
+                score += 15;
+                reasons.push("similar dimensions");
+            }
+        }
+
+        if score >= 25 {
+            similar_files.push(serde_json::json!({
+                "id": memory.id.to_string(),
+                "path": memory.path.to_string_lossy(),
+                "name": memory.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                "score": score,
+                "reasons": reasons,
+                "type": format!("{:?}", memory.kind).split('{').next().unwrap_or("Unknown").trim()
+            }));
+        }
+    }
+
+    // Sort by score descending
+    similar_files.sort_by(|a, b| {
+        b["score"].as_u64().unwrap_or(0).cmp(&a["score"].as_u64().unwrap_or(0))
+    });
+
+    Ok(serde_json::json!({
+        "target": target_name,
+        "similar": similar_files.into_iter().take(10).collect::<Vec<_>>()
+    }))
+}
+
+#[tauri::command]
+async fn ai_smart_rename(
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] AI smart rename for: {}", file_path);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let ai_client = UnifiedAiClient::with_ollama(None);
+    if !ai_client.is_available().await {
+        return Err("Ollama is not running".to_string());
+    }
+
+    // Get memory for the file
+    let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+    let memory = memories.iter()
+        .find(|m| m.path.to_string_lossy() == file_path)
+        .ok_or("File not found in index")?;
+
+    let current_name = memory.path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let extension = memory.path.extension()
+        .map(|e| e.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    // Build context about the file
+    let file_info = match &memory.kind {
+        hippo_core::MemoryKind::Image { width, height, .. } => {
+            format!("Image ({}x{})", width, height)
+        }
+        hippo_core::MemoryKind::Code { language, lines } => {
+            let content_preview = std::fs::read_to_string(&memory.path)
+                .map(|c| c.chars().take(300).collect::<String>())
+                .unwrap_or_default();
+            format!("Code ({}, {} lines): {}", language, lines, content_preview)
+        }
+        hippo_core::MemoryKind::Document { .. } => "Document".to_string(),
+        _ => "File".to_string()
+    };
+
+    let date_str = memory.modified_at.format("%Y-%m-%d").to_string();
+    let tags: Vec<String> = memory.tags.iter().map(|t| t.name.clone()).collect();
+
+    let prompt = format!(
+        "Suggest 3 better file names for this file. Keep the same extension (.{}). \
+        Names should be descriptive, use-lowercase-with-dashes, and be concise. \
+        Only output the 3 suggested names, one per line, nothing else.\n\n\
+        Current name: {}\nFile type: {}\nDate: {}\nTags: {}\n\nSuggested names:",
+        extension, current_name, file_info, date_str, tags.join(", ")
+    );
+
+    let response = ai_client.ollama().generate(&prompt, Some("You are a file naming assistant. Suggest clean, descriptive file names.")).await
+        .map_err(|e| format!("Generation failed: {}", e))?;
+
+    // Parse suggestions from response
+    let suggestions: Vec<String> = response
+        .lines()
+        .map(|s| s.trim().trim_start_matches(|c: char| c.is_numeric() || c == '.' || c == ')' || c == '-'))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && s.len() < 100)
+        .take(3)
+        .collect();
+
+    Ok(serde_json::json!({
+        "current_name": current_name,
+        "suggestions": suggestions
+    }))
 }
 
 #[tauri::command]
@@ -997,6 +1316,10 @@ fn main() {
             ollama_chat,
             ollama_rag_query,
             get_recommended_models,
+            // AI Actions
+            ai_suggest_tags,
+            ai_find_similar,
+            ai_smart_rename,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
