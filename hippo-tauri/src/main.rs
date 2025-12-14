@@ -531,6 +531,80 @@ async fn semantic_search(
 }
 
 #[tauri::command]
+async fn search_symbols(
+    query: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Symbol search: {}", query);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+    let query_lower = query.to_lowercase();
+
+    let mut results: Vec<serde_json::Value> = Vec::new();
+
+    for memory in memories {
+        if let hippo_core::MemoryKind::Code { .. } = &memory.kind {
+            if let Some(code_info) = &memory.metadata.code_info {
+                // Search functions
+                for func in &code_info.functions {
+                    if func.name.to_lowercase().contains(&query_lower) {
+                        results.push(serde_json::json!({
+                            "type": "function",
+                            "name": func.name,
+                            "file": memory.path.to_string_lossy(),
+                            "line": func.line_start,
+                            "is_public": func.is_public,
+                            "doc": func.doc_comment,
+                            "language": code_info.language
+                        }));
+                    }
+                }
+
+                // Search exports
+                for export in &code_info.exports {
+                    if export.to_lowercase().contains(&query_lower) {
+                        results.push(serde_json::json!({
+                            "type": "export",
+                            "name": export,
+                            "file": memory.path.to_string_lossy(),
+                            "language": code_info.language
+                        }));
+                    }
+                }
+
+                // Search imports
+                for import in &code_info.imports {
+                    if import.to_lowercase().contains(&query_lower) {
+                        results.push(serde_json::json!({
+                            "type": "import",
+                            "name": import,
+                            "file": memory.path.to_string_lossy(),
+                            "language": code_info.language
+                        }));
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by relevance (exact match first)
+    results.sort_by(|a, b| {
+        let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let name_b = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let exact_a = name_a.to_lowercase() == query_lower;
+        let exact_b = name_b.to_lowercase() == query_lower;
+        exact_b.cmp(&exact_a)
+    });
+
+    results.truncate(100);  // Limit results
+
+    println!("[Hippo] Symbol search found {} results", results.len());
+    Ok(serde_json::Value::Array(results))
+}
+
+#[tauri::command]
 async fn add_source_path(
     path: String,
     state: State<'_, AppState>,
@@ -589,6 +663,8 @@ fn main() {
             summarize_document,
             get_organization_suggestions,
             semantic_search,
+            // Code Engine
+            search_symbols,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
