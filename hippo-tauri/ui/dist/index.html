@@ -2513,8 +2513,8 @@
           html += '<span class="icon icon-sm">' + icons.check + '</span>';
           html += '</div>';
           html += '<div class="card-preview" style="background:' + color + '">';
-          if (type === 'image' && convertFileSrc) {
-            // Use thumbnail for images (loaded async)
+          if ((type === 'image' || type === 'video') && convertFileSrc) {
+            // Use thumbnail for images and videos (loaded async)
             var thumbSrc = thumbnailCache[mem.path];
             if (thumbSrc) {
               html += '<img src="' + convertFileSrc(thumbSrc) + '" onerror="this.style.display=\'none\'" loading="lazy">';
@@ -2522,8 +2522,6 @@
               // Show placeholder, thumbnail will load async
               html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" style="display:none" loading="lazy">';
             }
-          } else if (type === 'video' && convertFileSrc) {
-            html += '<img src="' + convertFileSrc(mem.path) + '" onerror="this.style.display=\'none\'" loading="lazy">';
           }
           html += getIcon(mem.kind, 'xl');
           html += '</div>';
@@ -2546,15 +2544,13 @@
           html += '<span class="icon icon-sm">' + icons.check + '</span>';
           html += '</div>';
           html += '<div class="list-thumb" style="background:' + color + '">';
-          if (type === 'image' && convertFileSrc) {
+          if ((type === 'image' || type === 'video') && convertFileSrc) {
             var thumbSrc = thumbnailCache[mem.path];
             if (thumbSrc) {
               html += '<img src="' + convertFileSrc(thumbSrc) + '" onerror="this.style.display=\'none\'" loading="lazy">';
             } else {
               html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" style="display:none" loading="lazy">';
             }
-          } else if (type === 'video' && convertFileSrc) {
-            html += '<img src="' + convertFileSrc(mem.path) + '" onerror="this.style.display=\'none\'" loading="lazy">';
           }
           html += getIcon(mem.kind, 'lg');
           html += '</div>';

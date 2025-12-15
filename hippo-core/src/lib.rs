@@ -91,7 +91,7 @@ pub use watcher::{FileWatcher, WatchEvent, WatchStats};
 pub use duplicates::{DuplicateGroup, DuplicateSummary, compute_file_hash, find_duplicates_by_scanning};
 
 // Re-export thumbnail types
-pub use thumbnails::{ThumbnailManager, ThumbnailStats, is_supported_image, THUMBNAIL_SIZE};
+pub use thumbnails::{ThumbnailManager, ThumbnailStats, is_supported_image, is_supported_video, is_ffmpeg_available, THUMBNAIL_SIZE};
 
 // Re-export embeddings types
 pub use embeddings::{Embedder, VectorIndex, TEXT_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, CODE_EMBEDDING_DIM};
@@ -397,6 +397,11 @@ impl Hippo {
     /// Get or generate a thumbnail for an image file
     pub fn get_thumbnail(&self, image_path: &std::path::Path) -> Result<PathBuf> {
         self.thumbnail_manager.generate_thumbnail(image_path)
+    }
+
+    /// Get or generate a thumbnail for a video file
+    pub fn get_video_thumbnail(&self, video_path: &std::path::Path) -> Result<PathBuf> {
+        self.thumbnail_manager.generate_video_thumbnail(video_path)
     }
 
     /// Get the thumbnail path without generating (may not exist)

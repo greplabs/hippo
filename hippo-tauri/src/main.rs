@@ -359,15 +359,24 @@ async fn get_thumbnail(
     let file_path = std::path::Path::new(&path);
 
     // Check if this is a supported image format
-    if !hippo_core::is_supported_image(file_path) {
-        return Err("Not a supported image format".to_string());
+    if hippo_core::is_supported_image(file_path) {
+        // Generate or get cached image thumbnail
+        match hippo.get_thumbnail(file_path) {
+            Ok(thumb_path) => return Ok(thumb_path.to_string_lossy().to_string()),
+            Err(e) => return Err(format!("Failed to generate thumbnail: {}", e))
+        }
     }
 
-    // Generate or get cached thumbnail
-    match hippo.get_thumbnail(file_path) {
-        Ok(thumb_path) => Ok(thumb_path.to_string_lossy().to_string()),
-        Err(e) => Err(format!("Failed to generate thumbnail: {}", e))
+    // Check if this is a supported video format
+    if hippo_core::is_supported_video(file_path) {
+        // Generate or get cached video thumbnail
+        match hippo.get_video_thumbnail(file_path) {
+            Ok(thumb_path) => return Ok(thumb_path.to_string_lossy().to_string()),
+            Err(e) => return Err(format!("Failed to generate video thumbnail: {}", e))
+        }
     }
+
+    Err("Not a supported image or video format".to_string())
 }
 
 #[tauri::command]

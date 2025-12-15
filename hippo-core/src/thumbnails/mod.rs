@@ -1,9 +1,10 @@
-//! Thumbnail generation and caching for fast image previews
+//! Thumbnail generation and caching for fast image and video previews
 
 use crate::error::{HippoError, Result};
 use image::{DynamicImage, ImageFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use tracing::{debug, warn};
 
 /// Default thumbnail size (width and height)
@@ -169,6 +170,83 @@ impl ThumbnailManager {
         // Use thumbnail method which maintains aspect ratio
         img.thumbnail(self.size, self.size)
     }
+
+    /// Generate a thumbnail for a video file by extracting a frame
+    /// Returns the path to the thumbnail if successful
+    pub fn generate_video_thumbnail(&self, video_path: &Path) -> Result<PathBuf> {
+        // Check if ffmpeg is available
+        if !is_ffmpeg_available() {
+            return Err(HippoError::Other(
+                "ffmpeg not available - cannot generate video thumbnails".to_string(),
+            ));
+        }
+
+        // Generate a unique filename based on the original path
+        let thumbnail_name = self.get_thumbnail_name(video_path);
+        let thumbnail_path = self.cache_dir.join(&thumbnail_name);
+
+        // Check if thumbnail already exists and is newer than source
+        if thumbnail_path.exists() {
+            if let (Ok(src_meta), Ok(thumb_meta)) =
+                (fs::metadata(video_path), fs::metadata(&thumbnail_path))
+            {
+                if let (Ok(src_time), Ok(thumb_time)) =
+                    (src_meta.modified(), thumb_meta.modified())
+                {
+                    if thumb_time >= src_time {
+                        debug!("Using cached video thumbnail: {:?}", thumbnail_path);
+                        return Ok(thumbnail_path);
+                    }
+                }
+            }
+        }
+
+        debug!("Generating video thumbnail for: {:?}", video_path);
+
+        // Try to extract frame at 2 seconds, fall back to 0 if video is short
+        let seek_times = ["2", "1", "0"];
+
+        for seek_time in seek_times {
+            let output = Command::new("ffmpeg")
+                .args([
+                    "-y",                    // Overwrite output
+                    "-ss", seek_time,        // Seek to timestamp
+                    "-i",
+                ])
+                .arg(video_path)
+                .args([
+                    "-vframes", "1",         // Extract single frame
+                    "-vf", &format!("scale={}:{}:force_original_aspect_ratio=decrease", self.size, self.size),
+                    "-f", "image2",          // Output format
+                ])
+                .arg(&thumbnail_path)
+                .output();
+
+            match output {
+                Ok(result) if result.status.success() && thumbnail_path.exists() => {
+                    debug!("Video thumbnail saved: {:?}", thumbnail_path);
+                    return Ok(thumbnail_path);
+                }
+                Ok(result) => {
+                    debug!(
+                        "ffmpeg failed at seek={}: {}",
+                        seek_time,
+                        String::from_utf8_lossy(&result.stderr)
+                    );
+                    // Try next seek time
+                }
+                Err(e) => {
+                    warn!("Failed to run ffmpeg: {}", e);
+                    break;
+                }
+            }
+        }
+
+        Err(HippoError::Other(format!(
+            "Failed to generate video thumbnail for {:?}",
+            video_path
+        )))
+    }
 }
 
 impl Default for ThumbnailManager {
@@ -203,6 +281,25 @@ pub fn is_supported_image(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Check if a file is a supported video format for thumbnails
+pub fn is_supported_video(path: &Path) -> bool {
+    let supported_extensions = ["mp4", "mov", "avi", "mkv", "webm", "m4v"];
+
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| supported_extensions.contains(&ext.to_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// Check if ffmpeg is available on the system
+pub fn is_ffmpeg_available() -> bool {
+    Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,5 +329,15 @@ mod tests {
         assert!(is_supported_image(Path::new("test.webp")));
         assert!(!is_supported_image(Path::new("test.txt")));
         assert!(!is_supported_image(Path::new("test.mp4")));
+    }
+
+    #[test]
+    fn test_is_supported_video() {
+        assert!(is_supported_video(Path::new("test.mp4")));
+        assert!(is_supported_video(Path::new("test.MOV")));
+        assert!(is_supported_video(Path::new("test.mkv")));
+        assert!(is_supported_video(Path::new("test.webm")));
+        assert!(!is_supported_video(Path::new("test.jpg")));
+        assert!(!is_supported_video(Path::new("test.txt")));
     }
 }

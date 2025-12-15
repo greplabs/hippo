@@ -123,6 +123,7 @@ UI Features
 ✅ Open file / Reveal in Finder buttons
 ✅ Keyboard shortcuts (⌘K to focus search, Esc to close)
 ✅ Image thumbnails (256x256 JPEG, cached with smart invalidation)
+✅ Video thumbnails (frame extraction via ffmpeg, graceful fallback)
 ✅ Async thumbnail loading with placeholders
 
 Source Management
@@ -214,8 +215,8 @@ Embeddings - Implement ONNX models for semantic search
 Better code preview - Syntax highlighting in detail panel
 Bulk operations - Multi-select and bulk tagging
 Export/Import - Backup and restore index data
-Video thumbnails - Extract frame from videos
 PDF previews - Generate thumbnails for documents
+Audio waveforms - Visual preview for audio files
 
 
 
