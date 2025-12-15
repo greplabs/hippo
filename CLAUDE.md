@@ -15,6 +15,8 @@ hippo/
 │       │   ├── mod.rs            # File discovery & background worker
 │       │   ├── extractors.rs     # EXIF, document, code metadata extraction
 │       │   └── code_parser.rs    # AST parsing for Rust/Python/JS/Go
+│       ├── thumbnails/
+│       │   └── mod.rs            # Image thumbnail generation & caching
 │       ├── embeddings/
 │       │   └── mod.rs            # ONNX embedding stubs (not implemented)
 │       ├── storage/
@@ -120,6 +122,8 @@ UI Features
 ✅ Detail panel with file info
 ✅ Open file / Reveal in Finder buttons
 ✅ Keyboard shortcuts (⌘K to focus search, Esc to close)
+✅ Image thumbnails (256x256 JPEG, cached with smart invalidation)
+✅ Async thumbnail loading with placeholders
 
 Source Management
 
@@ -144,12 +148,15 @@ Cloud file syncing
 
 Advanced Features
 
-File watching (notify crate) - auto-detect changes
-Image thumbnails
-Duplicate detection
 Face clustering
-AI captioning (Claude API)
 Knowledge graph visualization (D3.js)
+
+Already Implemented (moved from here)
+
+✅ File watching (notify crate) - `hippo wade` command
+✅ Image thumbnails - 256x256 cached JPEGs
+✅ Duplicate detection - hash-based via `hippo twins` command
+✅ AI tagging (Claude API) - `hippo brain` command
 
 
 Dependencies
@@ -201,14 +208,14 @@ The UI is a single HTML file with embedded JavaScript (no build step):
 
 Next Steps to Consider
 
-File watching - notify crate to auto-detect new/changed files
-Thumbnails - Generate and cache image thumbnails
 Favorites - Star important files
 Dark mode - Theme toggle
 Embeddings - Implement ONNX models for semantic search
 Better code preview - Syntax highlighting in detail panel
 Bulk operations - Multi-select and bulk tagging
 Export/Import - Backup and restore index data
+Video thumbnails - Extract frame from videos
+PDF previews - Generate thumbnails for documents
 
 
 

@@ -266,7 +266,7 @@ git push origin feature/amazing-feature
 - [x] Duplicate detection
 - [x] File watching
 - [x] Custom icons & branding
-- [ ] Image thumbnails
+- [x] Image thumbnails
 - [ ] Face detection/clustering
 - [ ] Mobile companion app
 - [ ] Browser extension
