@@ -28,6 +28,7 @@ impl Storage {
     }
     
     fn init_schema(conn: &Connection) -> Result<()> {
+        // First, create core tables
         conn.execute_batch(r#"
             CREATE TABLE IF NOT EXISTS memories (
                 id TEXT PRIMARY KEY,
@@ -70,21 +71,79 @@ impl Storage {
                 name TEXT PRIMARY KEY,
                 count INTEGER NOT NULL DEFAULT 0
             );
+
+            -- Embeddings table for semantic search
+            CREATE TABLE IF NOT EXISTS embeddings (
+                memory_id TEXT PRIMARY KEY,
+                embedding BLOB NOT NULL,
+                model TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
         "#)?;
 
         // Migration: Add is_favorite column if it doesn't exist (for existing databases)
         let _ = conn.execute(
             "ALTER TABLE memories ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0",
             [],
-        ); // Ignore error if column already exists
+        );
 
-        // Create index for favorites (after migration)
+        // Migration: Add searchable columns
+        let _ = conn.execute("ALTER TABLE memories ADD COLUMN title TEXT", []);
+        let _ = conn.execute("ALTER TABLE memories ADD COLUMN filename TEXT", []);
+        let _ = conn.execute("ALTER TABLE memories ADD COLUMN extension TEXT", []);
+        let _ = conn.execute("ALTER TABLE memories ADD COLUMN kind_name TEXT", []);
+        let _ = conn.execute("ALTER TABLE memories ADD COLUMN tags_text TEXT", []);
+
+        // Create indexes for new columns (after migration)
         let _ = conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_memories_favorite ON memories(is_favorite)",
             [],
         );
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories(kind_name)",
+            [],
+        );
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memories_extension ON memories(extension)",
+            [],
+        );
+
+        // Populate new columns for existing data
+        let _ = conn.execute(r#"
+            UPDATE memories
+            SET filename = SUBSTR(path, INSTR(path, '/') + 1),
+                kind_name = CASE
+                    WHEN kind_json LIKE '%"Image"%' THEN 'image'
+                    WHEN kind_json LIKE '%"Video"%' THEN 'video'
+                    WHEN kind_json LIKE '%"Audio"%' THEN 'audio'
+                    WHEN kind_json LIKE '%"Document"%' THEN 'document'
+                    WHEN kind_json LIKE '%"Code"%' THEN 'code'
+                    WHEN kind_json LIKE '%"Spreadsheet"%' THEN 'spreadsheet'
+                    WHEN kind_json LIKE '%"Presentation"%' THEN 'presentation'
+                    WHEN kind_json LIKE '%"Archive"%' THEN 'archive'
+                    ELSE 'unknown'
+                END
+            WHERE filename IS NULL OR kind_name IS NULL
+        "#, []);
 
         Ok(())
+    }
+
+    /// Get kind name for indexing
+    fn get_kind_name(kind: &MemoryKind) -> &'static str {
+        match kind {
+            MemoryKind::Image { .. } => "image",
+            MemoryKind::Video { .. } => "video",
+            MemoryKind::Audio { .. } => "audio",
+            MemoryKind::Document { .. } => "document",
+            MemoryKind::Spreadsheet { .. } => "spreadsheet",
+            MemoryKind::Presentation { .. } => "presentation",
+            MemoryKind::Code { .. } => "code",
+            MemoryKind::Archive { .. } => "archive",
+            MemoryKind::Database => "database",
+            MemoryKind::Folder => "folder",
+            MemoryKind::Unknown => "unknown",
+        }
     }
     
     // === Memory Operations ===
@@ -92,11 +151,26 @@ impl Storage {
     pub async fn upsert_memory(&self, memory: &Memory) -> Result<()> {
         let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
 
+        // Extract searchable fields
+        let title = memory.metadata.title.clone().unwrap_or_default();
+        let filename = memory.path.file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let extension = memory.path.extension()
+            .map(|e| e.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let kind_name = Self::get_kind_name(&memory.kind);
+        let tags_text = memory.tags.iter()
+            .map(|t| t.name.clone())
+            .collect::<Vec<_>>()
+            .join(" ");
+
         db.execute(
             r#"INSERT OR REPLACE INTO memories
                (id, path, source_json, kind_json, metadata_json, tags_json,
-                embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"#,
+                embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at,
+                title, filename, extension, kind_name, tags_text)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)"#,
             params![
                 memory.id.to_string(),
                 memory.path.to_string_lossy(),
@@ -110,9 +184,14 @@ impl Storage {
                 memory.created_at.to_rfc3339(),
                 memory.modified_at.to_rfc3339(),
                 memory.indexed_at.to_rfc3339(),
+                title,
+                filename,
+                extension,
+                kind_name,
+                tags_text,
             ],
         )?;
-        
+
         // Update tag counts
         for tag in &memory.tags {
             db.execute(
@@ -120,7 +199,7 @@ impl Storage {
                 params![tag.name],
             )?;
         }
-        
+
         Ok(())
     }
     
@@ -459,8 +538,310 @@ impl Storage {
         Ok(vec![])
     }
     
+    // === Fast SQL Search ===
+
+    /// Search memories using FTS5 full-text search
+    pub async fn search_fts(&self, query: &str, limit: usize, offset: usize) -> Result<Vec<Memory>> {
+        let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        // Prepare query for FTS5 - escape special characters and add wildcards
+        let fts_query = query.split_whitespace()
+            .map(|word| format!("{}*", word.replace('"', "")))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let mut stmt = db.prepare(
+            r#"SELECT m.id, m.path, m.source_json, m.kind_json, m.metadata_json, m.tags_json,
+                      m.embedding_id, m.connections_json, m.is_favorite, m.created_at, m.modified_at, m.indexed_at
+               FROM memories m
+               JOIN memories_fts fts ON m.id = fts.id
+               WHERE memories_fts MATCH ?1
+               ORDER BY rank
+               LIMIT ?2 OFFSET ?3"#
+        )?;
+
+        let memories = stmt.query_map(params![fts_query, limit as i64, offset as i64], |row| {
+            Ok(Memory {
+                id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                path: PathBuf::from(row.get::<_, String>(1)?),
+                source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+                kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+                metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+                tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+                embedding_id: row.get(6)?,
+                connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+                is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
+                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
+                    .unwrap().with_timezone(&chrono::Utc),
+                modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
+                    .unwrap().with_timezone(&chrono::Utc),
+                indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
+                    .unwrap().with_timezone(&chrono::Utc),
+            })
+        })?.filter_map(|r| r.ok()).collect();
+
+        Ok(memories)
+    }
+
+    /// Search memories using LIKE pattern matching (fallback when FTS fails)
+    pub async fn search_like(&self, query: &str, kind: Option<&str>, limit: usize, offset: usize) -> Result<Vec<Memory>> {
+        let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        let pattern = format!("%{}%", query.to_lowercase());
+
+        let sql = if kind.is_some() {
+            r#"SELECT id, path, source_json, kind_json, metadata_json, tags_json,
+                      embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
+               FROM memories
+               WHERE kind_name = ?1 AND (
+                   LOWER(filename) LIKE ?2 OR
+                   LOWER(title) LIKE ?2 OR
+                   LOWER(path) LIKE ?2 OR
+                   LOWER(tags_text) LIKE ?2
+               )
+               ORDER BY modified_at DESC
+               LIMIT ?3 OFFSET ?4"#
+        } else {
+            r#"SELECT id, path, source_json, kind_json, metadata_json, tags_json,
+                      embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
+               FROM memories
+               WHERE LOWER(filename) LIKE ?1 OR
+                     LOWER(title) LIKE ?1 OR
+                     LOWER(path) LIKE ?1 OR
+                     LOWER(tags_text) LIKE ?1
+               ORDER BY modified_at DESC
+               LIMIT ?2 OFFSET ?3"#
+        };
+
+        let mut stmt = db.prepare(sql)?;
+        let memories: Vec<Memory> = if let Some(k) = kind {
+            let rows = stmt.query_map(params![k, pattern, limit as i64, offset as i64], Self::row_to_memory)?;
+            rows.filter_map(|r| r.ok()).collect()
+        } else {
+            let rows = stmt.query_map(params![pattern, limit as i64, offset as i64], Self::row_to_memory)?;
+            rows.filter_map(|r| r.ok()).collect()
+        };
+
+        Ok(memories)
+    }
+
+    /// Helper to convert a row to Memory
+    fn row_to_memory(row: &rusqlite::Row) -> rusqlite::Result<Memory> {
+        Ok(Memory {
+            id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+            path: PathBuf::from(row.get::<_, String>(1)?),
+            source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+            kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+            metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+            tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+            embedding_id: row.get(6)?,
+            connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+            is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
+            created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
+                .unwrap().with_timezone(&chrono::Utc),
+            modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
+                .unwrap().with_timezone(&chrono::Utc),
+            indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
+                .unwrap().with_timezone(&chrono::Utc),
+        })
+    }
+
+    /// Search with tag filters
+    pub async fn search_with_tags(&self, query: Option<&str>, tags: &[String], kind: Option<&str>, limit: usize, offset: usize) -> Result<Vec<Memory>> {
+        let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        // Build dynamic SQL based on filters
+        let mut conditions = Vec::new();
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        // Text search condition
+        if let Some(q) = query {
+            if !q.trim().is_empty() {
+                let pattern = format!("%{}%", q.to_lowercase());
+                conditions.push("(LOWER(filename) LIKE ? OR LOWER(title) LIKE ? OR LOWER(path) LIKE ? OR LOWER(tags_text) LIKE ?)".to_string());
+                params_vec.push(Box::new(pattern.clone()));
+                params_vec.push(Box::new(pattern.clone()));
+                params_vec.push(Box::new(pattern.clone()));
+                params_vec.push(Box::new(pattern));
+            }
+        }
+
+        // Tag filters
+        for tag in tags {
+            conditions.push("LOWER(tags_text) LIKE ?".to_string());
+            params_vec.push(Box::new(format!("%{}%", tag.to_lowercase())));
+        }
+
+        // Kind filter
+        if let Some(k) = kind {
+            conditions.push("kind_name = ?".to_string());
+            params_vec.push(Box::new(k.to_string()));
+        }
+
+        let where_clause = if conditions.is_empty() {
+            "1=1".to_string()
+        } else {
+            conditions.join(" AND ")
+        };
+
+        let sql = format!(
+            r#"SELECT id, path, source_json, kind_json, metadata_json, tags_json,
+                      embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
+               FROM memories
+               WHERE {}
+               ORDER BY modified_at DESC
+               LIMIT ? OFFSET ?"#,
+            where_clause
+        );
+
+        params_vec.push(Box::new(limit as i64));
+        params_vec.push(Box::new(offset as i64));
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+        let mut stmt = db.prepare(&sql)?;
+        let memories = stmt.query_map(params_refs.as_slice(), |row| {
+            Ok(Memory {
+                id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                path: PathBuf::from(row.get::<_, String>(1)?),
+                source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+                kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+                metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+                tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+                embedding_id: row.get(6)?,
+                connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+                is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
+                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
+                    .unwrap().with_timezone(&chrono::Utc),
+                modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
+                    .unwrap().with_timezone(&chrono::Utc),
+                indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
+                    .unwrap().with_timezone(&chrono::Utc),
+            })
+        })?.filter_map(|r| r.ok()).collect();
+
+        Ok(memories)
+    }
+
+    /// Count total memories matching a search
+    pub async fn count_search_results(&self, query: Option<&str>, tags: &[String], kind: Option<&str>) -> Result<usize> {
+        let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        let mut conditions = Vec::new();
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(q) = query {
+            if !q.trim().is_empty() {
+                let pattern = format!("%{}%", q.to_lowercase());
+                conditions.push("(LOWER(filename) LIKE ? OR LOWER(title) LIKE ? OR LOWER(path) LIKE ? OR LOWER(tags_text) LIKE ?)".to_string());
+                params_vec.push(Box::new(pattern.clone()));
+                params_vec.push(Box::new(pattern.clone()));
+                params_vec.push(Box::new(pattern.clone()));
+                params_vec.push(Box::new(pattern));
+            }
+        }
+
+        for tag in tags {
+            conditions.push("LOWER(tags_text) LIKE ?".to_string());
+            params_vec.push(Box::new(format!("%{}%", tag.to_lowercase())));
+        }
+
+        if let Some(k) = kind {
+            conditions.push("kind_name = ?".to_string());
+            params_vec.push(Box::new(k.to_string()));
+        }
+
+        let where_clause = if conditions.is_empty() {
+            "1=1".to_string()
+        } else {
+            conditions.join(" AND ")
+        };
+
+        let sql = format!("SELECT COUNT(*) FROM memories WHERE {}", where_clause);
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+        let mut stmt = db.prepare(&sql)?;
+        let count: i64 = stmt.query_row(params_refs.as_slice(), |row| row.get(0))?;
+
+        Ok(count as usize)
+    }
+
+    /// Store embedding for a memory
+    pub async fn store_embedding(&self, memory_id: MemoryId, embedding: &[f32], model: &str) -> Result<()> {
+        let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        // Convert embedding to bytes
+        let embedding_bytes: Vec<u8> = embedding.iter()
+            .flat_map(|f| f.to_le_bytes())
+            .collect();
+
+        db.execute(
+            r#"INSERT OR REPLACE INTO embeddings (memory_id, embedding, model, created_at)
+               VALUES (?1, ?2, ?3, ?4)"#,
+            params![
+                memory_id.to_string(),
+                embedding_bytes,
+                model,
+                chrono::Utc::now().to_rfc3339(),
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    /// Get embedding for a memory
+    pub async fn get_embedding(&self, memory_id: MemoryId) -> Result<Option<Vec<f32>>> {
+        let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        let mut stmt = db.prepare("SELECT embedding FROM embeddings WHERE memory_id = ?1")?;
+        let result = stmt.query_row(params![memory_id.to_string()], |row| {
+            let bytes: Vec<u8> = row.get(0)?;
+            Ok(bytes)
+        });
+
+        match result {
+            Ok(bytes) => {
+                // Convert bytes back to f32 vector
+                let floats: Vec<f32> = bytes.chunks(4)
+                    .map(|chunk| {
+                        let arr: [u8; 4] = chunk.try_into().unwrap_or([0; 4]);
+                        f32::from_le_bytes(arr)
+                    })
+                    .collect();
+                Ok(Some(floats))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Get all embeddings for similarity search
+    pub async fn get_all_embeddings(&self) -> Result<Vec<(MemoryId, Vec<f32>)>> {
+        let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        let mut stmt = db.prepare("SELECT memory_id, embedding FROM embeddings")?;
+        let embeddings = stmt.query_map([], |row| {
+            let id_str: String = row.get(0)?;
+            let bytes: Vec<u8> = row.get(1)?;
+            Ok((id_str, bytes))
+        })?.filter_map(|r| r.ok())
+        .map(|(id_str, bytes)| {
+            let id = uuid::Uuid::parse_str(&id_str).unwrap();
+            let floats: Vec<f32> = bytes.chunks(4)
+                .map(|chunk| {
+                    let arr: [u8; 4] = chunk.try_into().unwrap_or([0; 4]);
+                    f32::from_le_bytes(arr)
+                })
+                .collect();
+            (id, floats)
+        })
+        .collect();
+
+        Ok(embeddings)
+    }
+
     // === Stats ===
-    
+
     pub async fn get_all_memories(&self) -> Result<Vec<Memory>> {
         let db = self.db.lock().map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
 
