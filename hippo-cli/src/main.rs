@@ -2,7 +2,9 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use dialoguer::Confirm;
-use hippo_core::{Hippo, SearchQuery, Source, Tag, TagSource, TagFilter, TagFilterMode, ClaudeClient};
+use hippo_core::{
+    ClaudeClient, Hippo, SearchQuery, Source, Tag, TagFilter, TagFilterMode, TagSource,
+};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::PathBuf;
 use tabled::{Table, Tabled};
@@ -241,7 +243,9 @@ async fn main() -> Result<()> {
             pb.set_message("Indexing files...");
             pb.enable_steady_tick(std::time::Duration::from_millis(100));
 
-            let source = Source::Local { root_path: path.clone() };
+            let source = Source::Local {
+                root_path: path.clone(),
+            };
             hippo.add_source(source).await?;
 
             pb.finish_with_message("Done!");
@@ -262,7 +266,10 @@ async fn main() -> Result<()> {
                 text: Some(query),
                 tags: tags
                     .into_iter()
-                    .map(|t| TagFilter { tag: t, mode: TagFilterMode::Include })
+                    .map(|t| TagFilter {
+                        tag: t,
+                        mode: TagFilterMode::Include,
+                    })
                     .collect(),
                 limit,
                 ..Default::default()
@@ -284,16 +291,12 @@ async fn main() -> Result<()> {
                     .iter()
                     .map(|r| {
                         let mem = &r.memory;
-                        let name = mem
-                            .metadata
-                            .title
-                            .clone()
-                            .unwrap_or_else(|| {
-                                mem.path
-                                    .file_name()
-                                    .map(|n| n.to_string_lossy().to_string())
-                                    .unwrap_or_default()
-                            });
+                        let name = mem.metadata.title.clone().unwrap_or_else(|| {
+                            mem.path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_default()
+                        });
                         let kind = get_kind_string(&mem.kind);
                         let size = format_bytes(mem.metadata.file_size);
                         let tags = mem
@@ -303,7 +306,12 @@ async fn main() -> Result<()> {
                             .collect::<Vec<_>>()
                             .join(", ");
 
-                        MemoryRow { name, kind, size, tags }
+                        MemoryRow {
+                            name,
+                            kind,
+                            size,
+                            tags,
+                        }
                     })
                     .collect();
 
@@ -336,16 +344,12 @@ async fn main() -> Result<()> {
                     .iter()
                     .map(|r| {
                         let mem = &r.memory;
-                        let name = mem
-                            .metadata
-                            .title
-                            .clone()
-                            .unwrap_or_else(|| {
-                                mem.path
-                                    .file_name()
-                                    .map(|n| n.to_string_lossy().to_string())
-                                    .unwrap_or_default()
-                            });
+                        let name = mem.metadata.title.clone().unwrap_or_else(|| {
+                            mem.path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_default()
+                        });
                         let kind = get_kind_string(&mem.kind);
                         let size = format_bytes(mem.metadata.file_size);
                         let tags = mem
@@ -355,7 +359,12 @@ async fn main() -> Result<()> {
                             .collect::<Vec<_>>()
                             .join(", ");
 
-                        MemoryRow { name, kind, size, tags }
+                        MemoryRow {
+                            name,
+                            kind,
+                            size,
+                            tags,
+                        }
                     })
                     .collect();
 
@@ -398,9 +407,7 @@ async fn main() -> Result<()> {
                     .iter()
                     .map(|s| {
                         let path = match &s.source {
-                            Source::Local { root_path } => {
-                                root_path.to_string_lossy().to_string()
-                            }
+                            Source::Local { root_path } => root_path.to_string_lossy().to_string(),
                             _ => "Unknown".to_string(),
                         };
                         SourceRow {
@@ -491,7 +498,8 @@ async fn main() -> Result<()> {
 
                     // List files
                     for path in &group.paths {
-                        let name = path.file_name()
+                        let name = path
+                            .file_name()
                             .map(|n| n.to_string_lossy().to_string())
                             .unwrap_or_else(|| path.display().to_string());
                         println!("  - {}", name.bright_white());
@@ -601,7 +609,8 @@ async fn main() -> Result<()> {
                             continue;
                         }
 
-                        let tag_names: Vec<String> = analysis.tags
+                        let tag_names: Vec<String> = analysis
+                            .tags
                             .iter()
                             .map(|t| format!("{} ({}%)", t.name, t.confidence))
                             .collect();
@@ -752,11 +761,17 @@ async fn main() -> Result<()> {
             // Start watching each path
             let mut watched_count = 0;
             for path in &watch_paths {
-                let source = Source::Local { root_path: path.clone() };
+                let source = Source::Local {
+                    root_path: path.clone(),
+                };
                 match hippo.watch_source(&source).await {
                     Ok(_) => {
                         watched_count += 1;
-                        println!("  {} {}", "✓".bright_green(), path.display().to_string().bright_cyan());
+                        println!(
+                            "  {} {}",
+                            "✓".bright_green(),
+                            path.display().to_string().bright_cyan()
+                        );
                     }
                     Err(e) => {
                         println!("  {} {} - {}", "✗".bright_red(), path.display(), e);
@@ -769,7 +784,10 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
 
-            println!("\n{}", format!("Watching {} path(s) for changes...", watched_count).bright_green());
+            println!(
+                "\n{}",
+                format!("Watching {} path(s) for changes...", watched_count).bright_green()
+            );
             println!("{}", "Press Ctrl+C to stop".dimmed());
             println!();
 
@@ -778,7 +796,8 @@ async fn main() -> Result<()> {
             let r = running.clone();
             ctrlc::set_handler(move || {
                 r.store(false, std::sync::atomic::Ordering::SeqCst);
-            }).expect("Error setting Ctrl-C handler");
+            })
+            .expect("Error setting Ctrl-C handler");
 
             // Keep running and show status
             let mut last_count = hippo.stats().await?.total_memories;
@@ -812,11 +831,7 @@ async fn main() -> Result<()> {
                 .expect("Failed to get project dirs");
 
             println!("\n{}", "Locations:".bold());
-            println!(
-                "  {} {}",
-                "Data:".bright_blue(),
-                dirs.data_dir().display()
-            );
+            println!("  {} {}", "Data:".bright_blue(), dirs.data_dir().display());
             println!(
                 "  {} {}",
                 "Config:".bright_blue(),
@@ -829,10 +844,7 @@ async fn main() -> Result<()> {
             );
 
             println!("\n{}", "Database:".bold());
-            println!(
-                "  {}",
-                dirs.data_dir().join("hippo.db").display()
-            );
+            println!("  {}", dirs.data_dir().join("hippo.db").display());
         }
 
         Commands::Forget { force } => {

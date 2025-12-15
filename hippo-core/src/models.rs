@@ -1,13 +1,13 @@
 //! Core data models for Hippo
-//! 
+//!
 //! Everything in Hippo is a `Memory` - a file, folder, or derived artifact
 //! that can be searched, tagged, and connected to other memories.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use std::path::PathBuf;
 use std::collections::HashMap;
+use std::path::PathBuf;
+use uuid::Uuid;
 
 /// Unique identifier for any memory
 pub type MemoryId = Uuid;
@@ -21,9 +21,9 @@ pub struct Memory {
     pub kind: MemoryKind,
     pub metadata: MemoryMetadata,
     pub tags: Vec<Tag>,
-    pub embedding_id: Option<String>,  // Reference to vector in Qdrant
+    pub embedding_id: Option<String>, // Reference to vector in Qdrant
     pub connections: Vec<Connection>,
-    pub is_favorite: bool,  // User starred/favorited this file
+    pub is_favorite: bool, // User starred/favorited this file
     pub created_at: DateTime<Utc>,
     pub modified_at: DateTime<Utc>,
     pub indexed_at: DateTime<Utc>,
@@ -54,22 +54,44 @@ impl Memory {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MemoryKind {
     // Media
-    Image { width: u32, height: u32, format: String },
-    Video { duration_ms: u64, format: String },  // Changed to ms as u64
-    Audio { duration_ms: u64, format: String },  // Changed to ms as u64
-    
+    Image {
+        width: u32,
+        height: u32,
+        format: String,
+    },
+    Video {
+        duration_ms: u64,
+        format: String,
+    }, // Changed to ms as u64
+    Audio {
+        duration_ms: u64,
+        format: String,
+    }, // Changed to ms as u64
+
     // Documents
-    Document { format: DocumentFormat, page_count: Option<u32> },
-    Spreadsheet { sheet_count: u32 },
-    Presentation { slide_count: u32 },
-    
+    Document {
+        format: DocumentFormat,
+        page_count: Option<u32>,
+    },
+    Spreadsheet {
+        sheet_count: u32,
+    },
+    Presentation {
+        slide_count: u32,
+    },
+
     // Code
-    Code { language: String, lines: u32 },
-    
+    Code {
+        language: String,
+        lines: u32,
+    },
+
     // Data
-    Archive { item_count: u32 },
+    Archive {
+        item_count: u32,
+    },
     Database,
-    
+
     // Other
     Folder,
     Unknown,
@@ -96,7 +118,7 @@ pub enum Source {
     Dropbox { account_id: String },
     OneDrive { account_id: String },
     S3 { bucket: String, region: String },
-    Custom { name: String },  // Simplified - config stored elsewhere
+    Custom { name: String }, // Simplified - config stored elsewhere
 }
 
 impl Source {
@@ -111,7 +133,7 @@ impl Source {
             Source::Custom { name } => name,
         }
     }
-    
+
     pub fn icon_name(&self) -> &str {
         match self {
             Source::Local { .. } => "device",
@@ -133,31 +155,31 @@ pub struct MemoryMetadata {
     pub description: Option<String>,
     pub file_size: u64,
     pub mime_type: Option<String>,
-    pub hash: Option<String>,  // Content hash for deduplication
-    
+    pub hash: Option<String>, // Content hash for deduplication
+
     // Image/Video specific
     pub exif: Option<ExifData>,
     pub dimensions: Option<(u32, u32)>,
     pub duration: Option<f64>,
-    
+
     // Location
     pub location: Option<GeoLocation>,
-    
+
     // People (face clusters, not recognition)
     pub face_cluster_ids: Vec<String>,
-    
+
     // Document specific
-    pub text_preview: Option<String>,  // First ~500 chars
+    pub text_preview: Option<String>, // First ~500 chars
     pub word_count: Option<u32>,
-    
+
     // Code specific
     pub code_info: Option<CodeInfo>,
-    
+
     // AI-generated
     pub ai_summary: Option<String>,
     pub ai_tags: Vec<String>,
-    pub scene_tags: Vec<String>,  // beach, city, food, etc.
-    
+    pub scene_tags: Vec<String>, // beach, city, food, etc.
+
     // Custom fields
     pub custom: HashMap<String, serde_json::Value>,
 }
@@ -180,7 +202,7 @@ pub struct GeoLocation {
     pub latitude: f64,
     pub longitude: f64,
     pub altitude: Option<f64>,
-    pub place_name: Option<String>,  // Reverse geocoded
+    pub place_name: Option<String>, // Reverse geocoded
     pub city: Option<String>,
     pub country: Option<String>,
 }
@@ -210,7 +232,7 @@ pub struct FunctionInfo {
 pub struct Tag {
     pub name: String,
     pub source: TagSource,
-    pub confidence: Option<u8>,  // 0-100 percentage for AI tags
+    pub confidence: Option<u8>, // 0-100 percentage for AI tags
 }
 
 impl Tag {
@@ -221,7 +243,7 @@ impl Tag {
             confidence: None,
         }
     }
-    
+
     pub fn ai(name: impl Into<String>, confidence: u8) -> Self {
         Self {
             name: name.into(),
@@ -229,7 +251,7 @@ impl Tag {
             confidence: Some(confidence.min(100)),
         }
     }
-    
+
     pub fn system(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -241,10 +263,10 @@ impl Tag {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum TagSource {
-    User,       // Manually added
-    Ai,         // AI-suggested and accepted
-    System,     // Auto-derived (file type, folder name, etc.)
-    Imported,   // From file metadata
+    User,     // Manually added
+    Ai,       // AI-suggested and accepted
+    System,   // Auto-derived (file type, folder name, etc.)
+    Imported, // From file metadata
 }
 
 /// A connection between two memories
@@ -252,7 +274,7 @@ pub enum TagSource {
 pub struct Connection {
     pub target_id: MemoryId,
     pub kind: ConnectionKind,
-    pub strength: f32,  // 0.0 - 1.0
+    pub strength: f32, // 0.0 - 1.0
     pub bidirectional: bool,
 }
 
@@ -262,18 +284,18 @@ pub enum ConnectionKind {
     SameFolder,
     SameAlbum,
     LinkedInDocument,
-    
+
     // Code-specific
     Imports,
     ImportedBy,
     References,
-    
+
     // AI-derived
-    SimilarContent,   // High vector similarity
-    SameEvent,        // Temporal + location clustering
-    SamePerson,       // Face cluster match
-    SameProject,      // Inferred project grouping
-    
+    SimilarContent, // High vector similarity
+    SameEvent,      // Temporal + location clustering
+    SamePerson,     // Face cluster match
+    SameProject,    // Inferred project grouping
+
     // User-defined
     Custom(String),
 }
@@ -304,10 +326,10 @@ pub enum ClusterKind {
 /// Search query structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchQuery {
-    pub text: Option<String>,           // Semantic search text
-    pub tags: Vec<TagFilter>,           // Tag filters
-    pub sources: Vec<Source>,           // Filter by source
-    pub kinds: Vec<MemoryKind>,         // Filter by type
+    pub text: Option<String>,   // Semantic search text
+    pub tags: Vec<TagFilter>,   // Tag filters
+    pub sources: Vec<Source>,   // Filter by source
+    pub kinds: Vec<MemoryKind>, // Filter by type
     pub date_range: Option<DateRange>,
     pub location: Option<LocationFilter>,
     pub sort: SortOrder,
@@ -373,7 +395,7 @@ pub struct SearchResults {
     pub memories: Vec<MemorySearchResult>,
     pub total_count: usize,
     pub suggested_tags: Vec<String>,
-    pub clusters: Vec<Cluster>,  // Related clusters
+    pub clusters: Vec<Cluster>, // Related clusters
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

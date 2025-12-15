@@ -62,8 +62,7 @@ impl ThumbnailManager {
             if let (Ok(src_meta), Ok(thumb_meta)) =
                 (fs::metadata(image_path), fs::metadata(&thumbnail_path))
             {
-                if let (Ok(src_time), Ok(thumb_time)) =
-                    (src_meta.modified(), thumb_meta.modified())
+                if let (Ok(src_time), Ok(thumb_time)) = (src_meta.modified(), thumb_meta.modified())
                 {
                     if thumb_time >= src_time {
                         debug!("Using cached thumbnail: {:?}", thumbnail_path);
@@ -190,8 +189,7 @@ impl ThumbnailManager {
             if let (Ok(src_meta), Ok(thumb_meta)) =
                 (fs::metadata(video_path), fs::metadata(&thumbnail_path))
             {
-                if let (Ok(src_time), Ok(thumb_time)) =
-                    (src_meta.modified(), thumb_meta.modified())
+                if let (Ok(src_time), Ok(thumb_time)) = (src_meta.modified(), thumb_meta.modified())
                 {
                     if thumb_time >= src_time {
                         debug!("Using cached video thumbnail: {:?}", thumbnail_path);
@@ -209,15 +207,21 @@ impl ThumbnailManager {
         for seek_time in seek_times {
             let output = Command::new("ffmpeg")
                 .args([
-                    "-y",                    // Overwrite output
-                    "-ss", seek_time,        // Seek to timestamp
+                    "-y", // Overwrite output
+                    "-ss", seek_time, // Seek to timestamp
                     "-i",
                 ])
                 .arg(video_path)
                 .args([
-                    "-vframes", "1",         // Extract single frame
-                    "-vf", &format!("scale={}:{}:force_original_aspect_ratio=decrease", self.size, self.size),
-                    "-f", "image2",          // Output format
+                    "-vframes",
+                    "1", // Extract single frame
+                    "-vf",
+                    &format!(
+                        "scale={}:{}:force_original_aspect_ratio=decrease",
+                        self.size, self.size
+                    ),
+                    "-f",
+                    "image2", // Output format
                 ])
                 .arg(&thumbnail_path)
                 .output();

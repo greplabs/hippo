@@ -5,21 +5,21 @@
 
 use crate::{
     error::{HippoError, Result},
+    indexer::Indexer,
     models::Source,
     storage::Storage,
-    indexer::Indexer,
 };
 
 use notify::{
-    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
     event::{CreateKind, ModifyKind, RemoveKind, RenameMode},
+    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{info, warn, debug, error};
+use tracing::{debug, error, info, warn};
 
 /// File system watcher that monitors sources for changes
 #[allow(dead_code)]
@@ -95,9 +95,7 @@ impl FileWatcher {
     /// Start watching a source
     pub async fn watch(&self, source: &Source) -> Result<()> {
         match source {
-            Source::Local { root_path } => {
-                self.watch_path(root_path, source.clone()).await
-            }
+            Source::Local { root_path } => self.watch_path(root_path, source.clone()).await,
             _ => {
                 warn!("File watching not supported for cloud sources");
                 Ok(())
@@ -142,10 +140,12 @@ impl FileWatcher {
             Config::default()
                 .with_poll_interval(Duration::from_secs(2))
                 .with_compare_contents(false),
-        ).map_err(|e| HippoError::Other(format!("Failed to create watcher: {}", e)))?;
+        )
+        .map_err(|e| HippoError::Other(format!("Failed to create watcher: {}", e)))?;
 
         // Start watching
-        watcher.watch(&path, RecursiveMode::Recursive)
+        watcher
+            .watch(&path, RecursiveMode::Recursive)
             .map_err(|e| HippoError::Other(format!("Failed to watch path: {}", e)))?;
 
         info!("Started watching: {:?}", path);
@@ -167,7 +167,7 @@ impl FileWatcher {
                 }
                 Ok(())
             }
-            _ => Ok(())
+            _ => Ok(()),
         }
     }
 
@@ -213,9 +213,7 @@ impl FileWatcher {
         }
 
         match &event.kind {
-            EventKind::Create(CreateKind::File) => {
-                Some(WatchEvent::Created(paths[0].clone()))
-            }
+            EventKind::Create(CreateKind::File) => Some(WatchEvent::Created(paths[0].clone())),
             EventKind::Create(CreateKind::Any) => {
                 // Check if it's a file
                 if paths[0].is_file() {
@@ -224,16 +222,14 @@ impl FileWatcher {
                     None
                 }
             }
-            EventKind::Modify(ModifyKind::Data(_)) |
-            EventKind::Modify(ModifyKind::Any) => {
+            EventKind::Modify(ModifyKind::Data(_)) | EventKind::Modify(ModifyKind::Any) => {
                 if paths[0].is_file() {
                     Some(WatchEvent::Modified(paths[0].clone()))
                 } else {
                     None
                 }
             }
-            EventKind::Remove(RemoveKind::File) |
-            EventKind::Remove(RemoveKind::Any) => {
+            EventKind::Remove(RemoveKind::File) | EventKind::Remove(RemoveKind::Any) => {
                 Some(WatchEvent::Deleted(paths[0].clone()))
             }
             EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
@@ -249,7 +245,7 @@ impl FileWatcher {
             EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
                 Some(WatchEvent::Created(paths[0].clone()))
             }
-            _ => None
+            _ => None,
         }
     }
 

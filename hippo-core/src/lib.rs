@@ -1,12 +1,12 @@
 //! # Hippo Core
-//! 
+//!
 //! The memory that never forgets. 🦛
-//! 
+//!
 //! Hippo is an intelligent file memory system that indexes, understands,
 //! and connects all your files across local storage and cloud providers.
-//! 
+//!
 //! ## Architecture
-//! 
+//!
 //! ```text
 //! ┌─────────────────────────────────────────────────────────────┐
 //! │                         Hippo Core                          │
@@ -35,20 +35,20 @@
 //! │                                                             │
 //! └─────────────────────────────────────────────────────────────┘
 //! ```
-//! 
+//!
 //! ## Quick Start
-//! 
+//!
 //! ```rust,ignore
 //! use hippo_core::Hippo;
-//! 
+//!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
 //!     // Initialize Hippo
 //!     let hippo = Hippo::new().await?;
 //!     
 //!     // Add a local folder to index
-//!     hippo.add_source(Source::Local { 
-//!         root_path: "/Users/you/Photos".into() 
+//!     hippo.add_source(Source::Local {
+//!         root_path: "/Users/you/Photos".into()
 //!     }).await?;
 //!     
 //!     // Search semantically
@@ -61,43 +61,56 @@
 //! }
 //! ```
 
-pub mod models;
-pub mod indexer;
+pub mod ai;
+pub mod duplicates;
 pub mod embeddings;
+pub mod error;
+pub mod graph;
+pub mod indexer;
+pub mod models;
+pub mod ollama;
 pub mod search;
 pub mod sources;
-pub mod graph;
 pub mod storage;
-pub mod error;
-pub mod ai;
-pub mod watcher;
-pub mod duplicates;
 pub mod thumbnails;
-pub mod ollama;
+pub mod watcher;
 
-pub use models::*;
 pub use error::{HippoError, Result};
+pub use models::*;
 
 // Re-export graph types for the API
 pub use graph::MindMap;
 
 // Re-export AI types
-pub use ai::{ClaudeClient, FileAnalysis, TagSuggestion, OrganizationSuggestion, DocumentSummary, CodeSummary, ExtractedEntities, UnifiedAiClient, AiProvider, AiConfig};
+pub use ai::{
+    AiConfig, AiProvider, ClaudeClient, CodeSummary, DocumentSummary, ExtractedEntities,
+    FileAnalysis, OrganizationSuggestion, TagSuggestion, UnifiedAiClient,
+};
 
 // Re-export watcher types
 pub use watcher::{FileWatcher, WatchEvent, WatchStats};
 
 // Re-export duplicates types
-pub use duplicates::{DuplicateGroup, DuplicateSummary, compute_file_hash, find_duplicates_by_scanning};
+pub use duplicates::{
+    compute_file_hash, find_duplicates_by_scanning, DuplicateGroup, DuplicateSummary,
+};
 
 // Re-export thumbnail types
-pub use thumbnails::{ThumbnailManager, ThumbnailStats, is_supported_image, is_supported_video, is_ffmpeg_available, THUMBNAIL_SIZE};
+pub use thumbnails::{
+    is_ffmpeg_available, is_supported_image, is_supported_video, ThumbnailManager, ThumbnailStats,
+    THUMBNAIL_SIZE,
+};
 
 // Re-export embeddings types
-pub use embeddings::{Embedder, VectorIndex, TEXT_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, CODE_EMBEDDING_DIM};
+pub use embeddings::{
+    Embedder, VectorIndex, CODE_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, TEXT_EMBEDDING_DIM,
+};
 
 // Re-export Ollama types
-pub use ollama::{OllamaClient, OllamaConfig, OllamaModel, LocalAnalysis, ChatMessage, RagContext, RagDocument, RecommendedModels};
+pub use ollama::{
+    ChatMessage, LocalAnalysis, OllamaClient, OllamaConfig, OllamaModel, RagContext, RagDocument,
+    RecommendedModels,
+};
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -121,16 +134,16 @@ pub struct Hippo {
 pub struct HippoConfig {
     /// Directory to store Hippo data (indexes, cache, etc.)
     pub data_dir: PathBuf,
-    
+
     /// Whether to run embedding models locally
     pub local_embeddings: bool,
-    
+
     /// API key for cloud AI services (optional)
     pub ai_api_key: Option<String>,
-    
+
     /// Qdrant connection settings
     pub qdrant_url: String,
-    
+
     /// Maximum concurrent indexing operations
     pub indexing_parallelism: usize,
 }
@@ -140,7 +153,7 @@ impl Default for HippoConfig {
         let data_dir = directories::ProjectDirs::from("", "", "Hippo")
             .map(|d| d.data_dir().to_path_buf())
             .unwrap_or_else(|| PathBuf::from(".hippo"));
-        
+
         Self {
             data_dir,
             local_embeddings: true,
@@ -156,12 +169,12 @@ impl Hippo {
     pub async fn new() -> Result<Self> {
         Self::with_config(HippoConfig::default()).await
     }
-    
+
     /// Create a new Hippo instance with custom configuration
     pub async fn with_config(config: HippoConfig) -> Result<Self> {
         // Ensure data directory exists
         std::fs::create_dir_all(&config.data_dir)?;
-        
+
         // Initialize components
         let storage = Arc::new(storage::Storage::new(&config).await?);
         let embedder = Arc::new(embeddings::Embedder::new(&config).await?);
@@ -170,13 +183,10 @@ impl Hippo {
             embedder.clone(),
             &config,
         )?);
-        let searcher = Arc::new(search::Searcher::new(
-            storage.clone(),
-            embedder.clone(),
-            &config,
-        ).await?);
+        let searcher =
+            Arc::new(search::Searcher::new(storage.clone(), embedder.clone(), &config).await?);
         let graph = Arc::new(RwLock::new(graph::KnowledgeGraph::new(storage.clone())));
-        
+
         // Initialize watcher (optional - can be started later)
         let watcher = match watcher::FileWatcher::new(storage.clone(), indexer.clone()) {
             Ok(w) => Some(Arc::new(w)),
@@ -200,45 +210,47 @@ impl Hippo {
             config,
         })
     }
-    
+
     // === Source Management ===
-    
+
     /// Add a new source to index
     pub async fn add_source(&self, source: Source) -> Result<()> {
         self.storage.add_source(source.clone()).await?;
         self.indexer.queue_source(source).await?;
         Ok(())
     }
-    
+
     /// Remove a source and optionally delete indexed memories
     pub async fn remove_source(&self, source: &Source, delete_memories: bool) -> Result<()> {
         if delete_memories {
             // Delete all memories from this source's path
             if let Source::Local { root_path } = source {
-                self.storage.remove_memories_by_path_prefix(root_path.to_string_lossy().as_ref()).await?;
+                self.storage
+                    .remove_memories_by_path_prefix(root_path.to_string_lossy().as_ref())
+                    .await?;
             }
         }
         self.storage.remove_source(source).await?;
         Ok(())
     }
-    
+
     /// Clear all data and reset the index
     pub async fn clear_all(&self) -> Result<()> {
         self.storage.clear_all().await
     }
-    
+
     /// Get all configured sources
     pub async fn list_sources(&self) -> Result<Vec<SourceConfig>> {
         self.storage.list_sources().await
     }
-    
+
     /// Trigger a sync for a specific source
     pub async fn sync_source(&self, source: &Source) -> Result<()> {
         self.indexer.sync_source(source).await
     }
-    
+
     // === Search ===
-    
+
     /// Perform a semantic search
     pub async fn search(&self, query: &str) -> Result<SearchResults> {
         let search_query = SearchQuery {
@@ -247,29 +259,29 @@ impl Hippo {
         };
         self.searcher.search(search_query).await
     }
-    
+
     /// Perform an advanced search with filters
     pub async fn search_advanced(&self, query: SearchQuery) -> Result<SearchResults> {
         self.searcher.search(query).await
     }
-    
+
     /// Get suggested tags based on search text
     pub async fn suggest_tags(&self, text: &str) -> Result<Vec<String>> {
         self.searcher.suggest_tags(text).await
     }
-    
+
     // === Memory Management ===
-    
+
     /// Get a memory by ID
     pub async fn get_memory(&self, id: MemoryId) -> Result<Option<Memory>> {
         self.storage.get_memory(id).await
     }
-    
+
     /// Add a tag to a memory
     pub async fn add_tag(&self, memory_id: MemoryId, tag: Tag) -> Result<()> {
         self.storage.add_tag(memory_id, tag).await
     }
-    
+
     /// Remove a tag from a memory
     pub async fn remove_tag(&self, memory_id: MemoryId, tag_name: &str) -> Result<()> {
         self.storage.remove_tag(memory_id, tag_name).await
@@ -284,38 +296,42 @@ impl Hippo {
     pub async fn list_tags(&self) -> Result<Vec<(String, u64)>> {
         self.storage.list_tags().await
     }
-    
+
     // === Knowledge Graph ===
-    
+
     /// Get the mind map / knowledge graph for a memory
     pub async fn get_mind_map(&self, memory_id: MemoryId, depth: usize) -> Result<graph::MindMap> {
         let graph = self.graph.read().await;
         graph.build_mind_map(memory_id, depth).await
     }
-    
+
     /// Get related memories
     pub async fn get_related(&self, memory_id: MemoryId, limit: usize) -> Result<Vec<Memory>> {
         let graph = self.graph.read().await;
         graph.get_related(memory_id, limit).await
     }
-    
+
     // === Clusters ===
-    
+
     /// Get all clusters
     pub async fn list_clusters(&self) -> Result<Vec<Cluster>> {
         self.storage.list_clusters().await
     }
-    
+
     /// Create a new cluster (album, project, etc.)
     pub async fn create_cluster(&self, name: &str, kind: ClusterKind) -> Result<Cluster> {
         self.storage.create_cluster(name, kind).await
     }
-    
+
     /// Add memories to a cluster
-    pub async fn add_to_cluster(&self, cluster_id: uuid::Uuid, memory_ids: Vec<MemoryId>) -> Result<()> {
+    pub async fn add_to_cluster(
+        &self,
+        cluster_id: uuid::Uuid,
+        memory_ids: Vec<MemoryId>,
+    ) -> Result<()> {
         self.storage.add_to_cluster(cluster_id, memory_ids).await
     }
-    
+
     // === Stats ===
 
     /// Get index statistics
@@ -382,9 +398,14 @@ impl Hippo {
     // === Duplicate Detection ===
 
     /// Find duplicate files in the index
-    pub async fn find_duplicates(&self, min_size: u64) -> Result<(Vec<DuplicateGroup>, DuplicateSummary)> {
+    pub async fn find_duplicates(
+        &self,
+        min_size: u64,
+    ) -> Result<(Vec<DuplicateGroup>, DuplicateSummary)> {
         let memories = self.storage.get_all_memories().await?;
-        Ok(duplicates::find_duplicates_by_scanning(&memories, min_size)?)
+        Ok(duplicates::find_duplicates_by_scanning(
+            &memories, min_size,
+        )?)
     }
 
     /// Get all memories (for duplicate scanning)
@@ -442,14 +463,17 @@ mod num_cpus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_hippo_creation() {
         // This will fail without Qdrant running, but tests the API
         let result = Hippo::new().await;
         // In CI, this might fail - that's OK for now
         if result.is_err() {
-            println!("Hippo creation failed (expected in test env): {:?}", result.err());
+            println!(
+                "Hippo creation failed (expected in test env): {:?}",
+                result.err()
+            );
         }
     }
 }

@@ -111,6 +111,7 @@ struct GenerateOptions {
 
 /// Response from generate endpoint
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Fields required for API deserialization
 struct GenerateResponse {
     response: String,
     #[serde(default)]
@@ -141,6 +142,7 @@ struct ChatRequest {
 
 /// Response from chat endpoint
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Fields required for API deserialization
 struct ChatResponse {
     message: ChatMessage,
     #[serde(default)]
@@ -221,14 +223,18 @@ impl OllamaClient {
 
     /// Get Ollama version info
     pub async fn version(&self) -> Result<String> {
-        let resp = self.client
+        let resp = self
+            .client
             .get(&self.base_url)
             .send()
             .await
             .map_err(|e| HippoError::Other(format!("Failed to connect to Ollama: {}", e)))?;
 
         if resp.status().is_success() {
-            Ok(resp.text().await.unwrap_or_else(|_| "Ollama is running".to_string()))
+            Ok(resp
+                .text()
+                .await
+                .unwrap_or_else(|_| "Ollama is running".to_string()))
         } else {
             Err(HippoError::Other("Ollama not available".to_string()))
         }
@@ -237,7 +243,8 @@ impl OllamaClient {
     /// List available models
     pub async fn list_models(&self) -> Result<Vec<OllamaModel>> {
         let url = format!("{}/api/tags", self.base_url);
-        let resp = self.client
+        let resp = self
+            .client
             .get(&url)
             .send()
             .await
@@ -247,7 +254,9 @@ impl OllamaClient {
             return Err(HippoError::Other("Failed to list models".to_string()));
         }
 
-        let models: ModelsResponse = resp.json().await
+        let models: ModelsResponse = resp
+            .json()
+            .await
             .map_err(|e| HippoError::Other(format!("Failed to parse models: {}", e)))?;
 
         Ok(models.models)
@@ -271,7 +280,8 @@ impl OllamaClient {
             stream: false,
         };
 
-        let resp = self.client
+        let resp = self
+            .client
             .post(&url)
             .json(&request)
             .send()
@@ -280,7 +290,10 @@ impl OllamaClient {
 
         if !resp.status().is_success() {
             let error = resp.text().await.unwrap_or_default();
-            return Err(HippoError::Other(format!("Failed to pull model: {}", error)));
+            return Err(HippoError::Other(format!(
+                "Failed to pull model: {}",
+                error
+            )));
         }
 
         info!("Model {} pulled successfully", name);
@@ -302,7 +315,8 @@ impl OllamaClient {
 
         debug!("Generating embeddings for {} texts", texts.len());
 
-        let resp = self.client
+        let resp = self
+            .client
             .post(&url)
             .json(&request)
             .send()
@@ -318,7 +332,9 @@ impl OllamaClient {
             )));
         }
 
-        let embed_resp: EmbedResponse = resp.json().await
+        let embed_resp: EmbedResponse = resp
+            .json()
+            .await
             .map_err(|e| HippoError::Other(format!("Failed to parse embeddings: {}", e)))?;
 
         Ok(embed_resp.embeddings)
@@ -327,7 +343,9 @@ impl OllamaClient {
     /// Generate embedding for a single text
     pub async fn embed_single(&self, text: &str) -> Result<Vec<f32>> {
         let embeddings = self.embed(&[text.to_string()]).await?;
-        embeddings.into_iter().next()
+        embeddings
+            .into_iter()
+            .next()
             .ok_or_else(|| HippoError::Other("No embedding returned".to_string()))
     }
 
@@ -350,7 +368,8 @@ impl OllamaClient {
 
         debug!("Generating text with model: {}", self.generation_model);
 
-        let resp = self.client
+        let resp = self
+            .client
             .post(&url)
             .json(&request)
             .send()
@@ -366,7 +385,9 @@ impl OllamaClient {
             )));
         }
 
-        let gen_resp: GenerateResponse = resp.json().await
+        let gen_resp: GenerateResponse = resp
+            .json()
+            .await
             .map_err(|e| HippoError::Other(format!("Failed to parse response: {}", e)))?;
 
         Ok(gen_resp.response)
@@ -387,7 +408,8 @@ impl OllamaClient {
             },
         };
 
-        let resp = self.client
+        let resp = self
+            .client
             .post(&url)
             .json(&request)
             .send()
@@ -399,7 +421,9 @@ impl OllamaClient {
             return Err(HippoError::Other(format!("Chat failed: {}", error)));
         }
 
-        let chat_resp: ChatResponse = resp.json().await
+        let chat_resp: ChatResponse = resp
+            .json()
+            .await
             .map_err(|e| HippoError::Other(format!("Failed to parse chat response: {}", e)))?;
 
         Ok(chat_resp.message.content)
@@ -429,7 +453,12 @@ Respond ONLY with valid JSON, no other text."#;
     }
 
     /// Analyze code and extract information
-    pub async fn analyze_code(&self, code: &str, language: &str, file_name: &str) -> Result<LocalAnalysis> {
+    pub async fn analyze_code(
+        &self,
+        code: &str,
+        language: &str,
+        file_name: &str,
+    ) -> Result<LocalAnalysis> {
         let system_prompt = r#"You are a code analysis assistant. Analyze the provided code and return a JSON response with:
 - summary: What this code does (2-3 sentences)
 - key_topics: Main concepts/patterns used (3-5 items)
@@ -470,7 +499,10 @@ Respond ONLY with valid JSON, no other text."#;
         for (i, doc) in context.documents.iter().enumerate() {
             context_text.push_str(&format!(
                 "\n--- Document {} (source: {}, relevance: {:.2}) ---\n{}\n",
-                i + 1, doc.source, doc.relevance_score, doc.content
+                i + 1,
+                doc.source,
+                doc.relevance_score,
+                doc.content
             ));
         }
 
@@ -481,8 +513,7 @@ Always cite which document(s) you used for your answer."#;
 
         let prompt = format!(
             "Context documents:{}\n\nUser question: {}\n\nAnswer based on the context above:",
-            context_text,
-            context.query
+            context_text, context.query
         );
 
         self.generate(&prompt, Some(system_prompt)).await
@@ -492,7 +523,10 @@ Always cite which document(s) you used for your answer."#;
     pub async fn extract_entities(&self, text: &str) -> Result<Vec<String>> {
         let system_prompt = "Extract named entities (people, organizations, locations, products, technologies) from the text. Return only a JSON array of strings with the entity names.";
 
-        let prompt = format!("Extract entities from:\n\n{}", &text[..text.len().min(4000)]);
+        let prompt = format!(
+            "Extract entities from:\n\n{}",
+            &text[..text.len().min(4000)]
+        );
         let response = self.generate(&prompt, Some(system_prompt)).await?;
 
         // Try to parse as JSON array
@@ -503,7 +537,11 @@ Always cite which document(s) you used for your answer."#;
             Ok(response
                 .lines()
                 .flat_map(|line| line.split(','))
-                .map(|s| s.trim().trim_matches(|c| c == '"' || c == '[' || c == ']').to_string())
+                .map(|s| {
+                    s.trim()
+                        .trim_matches(|c| c == '"' || c == '[' || c == ']')
+                        .to_string()
+                })
                 .filter(|s| !s.is_empty() && s.len() > 1)
                 .collect())
         }
@@ -540,28 +578,39 @@ Always cite which document(s) you used for your answer."#;
         };
 
         match serde_json::from_str::<serde_json::Value>(json_str) {
-            Ok(json) => {
-                Ok(LocalAnalysis {
-                    summary: json.get("summary")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("No summary available")
-                        .to_string(),
-                    key_topics: json.get("key_topics")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                        .unwrap_or_default(),
-                    suggested_tags: json.get("suggested_tags")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                        .unwrap_or_default(),
-                    document_type: json.get("document_type")
-                        .and_then(|v| v.as_str())
-                        .map(String::from),
-                    language: json.get("language")
-                        .and_then(|v| v.as_str())
-                        .map(String::from),
-                })
-            }
+            Ok(json) => Ok(LocalAnalysis {
+                summary: json
+                    .get("summary")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("No summary available")
+                    .to_string(),
+                key_topics: json
+                    .get("key_topics")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                suggested_tags: json
+                    .get("suggested_tags")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                document_type: json
+                    .get("document_type")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                language: json
+                    .get("language")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+            }),
             Err(e) => {
                 warn!("Failed to parse analysis JSON: {}", e);
                 // Return a basic analysis from the raw response
@@ -609,37 +658,37 @@ pub struct RecommendedModels;
 impl RecommendedModels {
     /// Lightweight embedding models
     pub const EMBEDDING_LIGHT: &'static [&'static str] = &[
-        "nomic-embed-text",      // 274MB, 768 dim
-        "all-minilm",            // 45MB, 384 dim
+        "nomic-embed-text", // 274MB, 768 dim
+        "all-minilm",       // 45MB, 384 dim
     ];
 
     /// Standard embedding models
     pub const EMBEDDING_STANDARD: &'static [&'static str] = &[
-        "mxbai-embed-large",     // 670MB, 1024 dim
+        "mxbai-embed-large",      // 670MB, 1024 dim
         "snowflake-arctic-embed", // 669MB, 1024 dim
     ];
 
     /// Lightweight generation models (1-3B params)
     pub const GENERATION_LIGHT: &'static [&'static str] = &[
-        "llama3.2:1b",           // 1.3GB
-        "llama3.2:3b",           // 2GB
-        "phi3:mini",             // 2.3GB
-        "qwen2.5:3b",            // 1.9GB
+        "llama3.2:1b", // 1.3GB
+        "llama3.2:3b", // 2GB
+        "phi3:mini",   // 2.3GB
+        "qwen2.5:3b",  // 1.9GB
     ];
 
     /// Standard generation models (7-8B params)
     pub const GENERATION_STANDARD: &'static [&'static str] = &[
-        "llama3.1:8b",           // 4.7GB
-        "mistral:7b",            // 4.1GB
-        "gemma2:9b",             // 5.5GB
+        "llama3.1:8b", // 4.7GB
+        "mistral:7b",  // 4.1GB
+        "gemma2:9b",   // 5.5GB
     ];
 
     /// Code-specific models
     pub const CODE_MODELS: &'static [&'static str] = &[
-        "codellama:7b",          // 3.8GB
-        "deepseek-coder:6.7b",   // 3.8GB
-        "codegemma:7b",          // 5GB
-        "qwen2.5-coder:7b",      // 4.7GB
+        "codellama:7b",        // 3.8GB
+        "deepseek-coder:6.7b", // 3.8GB
+        "codegemma:7b",        // 5GB
+        "qwen2.5-coder:7b",    // 4.7GB
     ];
 }
 

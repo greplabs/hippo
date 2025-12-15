@@ -5,8 +5,10 @@
 //! - Anthropic's Claude API (cloud)
 //! - Ollama (local, privacy-first)
 
-use crate::{Memory, MemoryKind, Tag, TagSource, Result, HippoError};
-use crate::ollama::{OllamaClient, OllamaConfig, LocalAnalysis, ChatMessage, RagContext, RagDocument};
+use crate::ollama::{
+    ChatMessage, LocalAnalysis, OllamaClient, OllamaConfig, RagContext, RagDocument,
+};
+use crate::{HippoError, Memory, MemoryKind, Result, Tag, TagSource};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -105,7 +107,8 @@ impl ClaudeClient {
 
     /// Analyze a file and suggest tags
     pub async fn analyze_file(&self, memory: &Memory) -> Result<FileAnalysis> {
-        let file_name = memory.path
+        let file_name = memory
+            .path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
@@ -114,7 +117,8 @@ impl ClaudeClient {
         let existing_tags: Vec<String> = memory.tags.iter().map(|t| t.name.clone()).collect();
 
         // Build the prompt
-        let prompt = self.build_analysis_prompt(&file_name, &kind_str, &memory.metadata, &existing_tags);
+        let prompt =
+            self.build_analysis_prompt(&file_name, &kind_str, &memory.metadata, &existing_tags);
 
         // Check if we can analyze the image directly
         let content = if self.is_analyzable_image(&memory.path, &memory.kind) {
@@ -132,7 +136,8 @@ impl ClaudeClient {
             }],
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
@@ -145,7 +150,10 @@ impl ClaudeClient {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(HippoError::Other(format!("Claude API error {}: {}", status, body)));
+            return Err(HippoError::Other(format!(
+                "Claude API error {}: {}",
+                status, body
+            )));
         }
 
         let claude_response: ClaudeResponse = response
@@ -174,22 +182,36 @@ impl ClaudeClient {
     }
 
     /// Get organization suggestions for a set of files
-    pub async fn suggest_organization(&self, memories: &[Memory]) -> Result<Vec<(String, OrganizationSuggestion)>> {
+    pub async fn suggest_organization(
+        &self,
+        memories: &[Memory],
+    ) -> Result<Vec<(String, OrganizationSuggestion)>> {
         if memories.is_empty() {
             return Ok(Vec::new());
         }
 
         // Build a summary of files
-        let file_summary: Vec<String> = memories.iter()
+        let file_summary: Vec<String> = memories
+            .iter()
             .take(50)
             .map(|m| {
-                let name = m.path.file_name()
+                let name = m
+                    .path
+                    .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
                 let kind = Self::kind_to_string(&m.kind);
                 let tags: Vec<String> = m.tags.iter().map(|t| t.name.clone()).collect();
-                format!("- {} ({}){}", name, kind,
-                    if tags.is_empty() { String::new() } else { format!(" [{}]", tags.join(", ")) })
+                format!(
+                    "- {} ({}){}",
+                    name,
+                    kind,
+                    if tags.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" [{}]", tags.join(", "))
+                    }
+                )
             })
             .collect();
 
@@ -230,7 +252,8 @@ Consider:
             }],
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
@@ -243,7 +266,10 @@ Consider:
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(HippoError::Other(format!("Claude API error {}: {}", status, body)));
+            return Err(HippoError::Other(format!(
+                "Claude API error {}: {}",
+                status, body
+            )));
         }
 
         let claude_response: ClaudeResponse = response
@@ -301,7 +327,8 @@ Tag guidelines:
             .await
             .map_err(|e| HippoError::Other(format!("Failed to read image: {}", e)))?;
 
-        let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &image_data);
+        let base64_data =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &image_data);
 
         // Determine media type
         let media_type = match path.extension().and_then(|e| e.to_str()) {
@@ -320,7 +347,9 @@ Tag guidelines:
                     data: base64_data,
                 },
             },
-            ContentBlock::Text { text: prompt.to_string() },
+            ContentBlock::Text {
+                text: prompt.to_string(),
+            },
         ])
     }
 
@@ -344,7 +373,8 @@ Tag guidelines:
     }
 
     fn parse_analysis_response(&self, response: &ClaudeResponse) -> Result<FileAnalysis> {
-        let text = response.content
+        let text = response
+            .content
             .first()
             .and_then(|c| c.text.as_ref())
             .ok_or_else(|| HippoError::Other("Empty response from Claude".to_string()))?;
@@ -368,7 +398,8 @@ Tag guidelines:
 
         match serde_json::from_str::<AnalysisJson>(&json_str) {
             Ok(parsed) => {
-                let tags = parsed.tags
+                let tags = parsed
+                    .tags
                     .into_iter()
                     .map(|t| TagSuggestion {
                         name: t.name.to_lowercase().replace(' ', "-"),
@@ -377,12 +408,12 @@ Tag guidelines:
                     })
                     .collect();
 
-                let organization = parsed.suggested_folder.map(|folder| {
-                    OrganizationSuggestion {
+                let organization = parsed
+                    .suggested_folder
+                    .map(|folder| OrganizationSuggestion {
                         suggested_folder: folder,
                         reason: "AI suggested organization".to_string(),
-                    }
-                });
+                    });
 
                 Ok(FileAnalysis {
                     tags,
@@ -391,7 +422,10 @@ Tag guidelines:
                 })
             }
             Err(e) => {
-                warn!("Failed to parse Claude response as JSON: {}. Raw: {}", e, text);
+                warn!(
+                    "Failed to parse Claude response as JSON: {}. Raw: {}",
+                    e, text
+                );
                 // Return basic analysis based on text
                 Ok(FileAnalysis {
                     tags: Vec::new(),
@@ -405,9 +439,10 @@ Tag guidelines:
     fn parse_organization_response(
         &self,
         response: &ClaudeResponse,
-        memories: &[Memory]
+        memories: &[Memory],
     ) -> Result<Vec<(String, OrganizationSuggestion)>> {
-        let text = response.content
+        let text = response
+            .content
             .first()
             .and_then(|c| c.text.as_ref())
             .ok_or_else(|| HippoError::Other("Empty response from Claude".to_string()))?;
@@ -428,27 +463,34 @@ Tag guidelines:
 
         match serde_json::from_str::<OrgJson>(&json_str) {
             Ok(parsed) => {
-                let results: Vec<(String, OrganizationSuggestion)> = parsed.suggestions
+                let results: Vec<(String, OrganizationSuggestion)> = parsed
+                    .suggestions
                     .into_iter()
                     .filter_map(|s| {
                         // Find the memory ID for this file
-                        memories.iter()
+                        memories
+                            .iter()
                             .find(|m| {
-                                m.path.file_name()
+                                m.path
+                                    .file_name()
                                     .map(|n| n.to_string_lossy().to_string())
-                                    .unwrap_or_default() == s.file
+                                    .unwrap_or_default()
+                                    == s.file
                             })
                             .map(|m| {
-                                (m.id.to_string(), OrganizationSuggestion {
-                                    suggested_folder: s.folder,
-                                    reason: s.reason,
-                                })
+                                (
+                                    m.id.to_string(),
+                                    OrganizationSuggestion {
+                                        suggested_folder: s.folder,
+                                        reason: s.reason,
+                                    },
+                                )
                             })
                     })
                     .collect();
                 Ok(results)
             }
-            Err(_) => Ok(Vec::new())
+            Err(_) => Ok(Vec::new()),
         }
     }
 
@@ -464,20 +506,32 @@ Tag guidelines:
 
     fn kind_to_string(kind: &MemoryKind) -> String {
         match kind {
-            MemoryKind::Image { width, height, format } => {
+            MemoryKind::Image {
+                width,
+                height,
+                format,
+            } => {
                 format!("Image ({}x{}, {})", width, height, format)
             }
-            MemoryKind::Video { duration_ms, format } => {
+            MemoryKind::Video {
+                duration_ms,
+                format,
+            } => {
                 format!("Video ({:.1}s, {})", *duration_ms as f64 / 1000.0, format)
             }
-            MemoryKind::Audio { duration_ms, format } => {
+            MemoryKind::Audio {
+                duration_ms,
+                format,
+            } => {
                 format!("Audio ({:.1}s, {})", *duration_ms as f64 / 1000.0, format)
             }
             MemoryKind::Code { language, lines } => {
                 format!("Code ({}, {} lines)", language, lines)
             }
             MemoryKind::Document { format, page_count } => {
-                let pages = page_count.map(|p| format!(", {} pages", p)).unwrap_or_default();
+                let pages = page_count
+                    .map(|p| format!(", {} pages", p))
+                    .unwrap_or_default();
                 format!("Document ({:?}{})", format, pages)
             }
             MemoryKind::Spreadsheet { sheet_count } => {
@@ -569,7 +623,8 @@ Respond in this exact JSON format:
             }],
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
@@ -582,7 +637,10 @@ Respond in this exact JSON format:
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(HippoError::Other(format!("Claude API error {}: {}", status, body)));
+            return Err(HippoError::Other(format!(
+                "Claude API error {}: {}",
+                status, body
+            )));
         }
 
         let claude_response: ClaudeResponse = response
@@ -594,7 +652,12 @@ Respond in this exact JSON format:
     }
 
     /// Summarize code file
-    pub async fn summarize_code(&self, code: &str, language: &str, file_name: &str) -> Result<CodeSummary> {
+    pub async fn summarize_code(
+        &self,
+        code: &str,
+        language: &str,
+        file_name: &str,
+    ) -> Result<CodeSummary> {
         let max_chars = 30_000;
         let truncated = if code.len() > max_chars {
             &code[..max_chars]
@@ -633,7 +696,8 @@ Respond in this exact JSON format:
             }],
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
@@ -646,7 +710,10 @@ Respond in this exact JSON format:
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(HippoError::Other(format!("Claude API error {}: {}", status, body)));
+            return Err(HippoError::Other(format!(
+                "Claude API error {}: {}",
+                status, body
+            )));
         }
 
         let claude_response: ClaudeResponse = response
@@ -658,7 +725,8 @@ Respond in this exact JSON format:
     }
 
     fn parse_summary_response(&self, response: &ClaudeResponse) -> Result<DocumentSummary> {
-        let text = response.content
+        let text = response
+            .content
             .first()
             .and_then(|c| c.text.as_ref())
             .ok_or_else(|| HippoError::Other("Empty response from Claude".to_string()))?;
@@ -716,7 +784,8 @@ Respond in this exact JSON format:
     }
 
     fn parse_code_summary_response(&self, response: &ClaudeResponse) -> Result<CodeSummary> {
-        let text = response.content
+        let text = response
+            .content
             .first()
             .and_then(|c| c.text.as_ref())
             .ok_or_else(|| HippoError::Other("Empty response from Claude".to_string()))?;
@@ -735,19 +804,20 @@ Respond in this exact JSON format:
         }
 
         match serde_json::from_str::<CodeJson>(&json_str) {
-            Ok(parsed) => {
-                Ok(CodeSummary {
-                    summary: parsed.summary,
-                    purpose: parsed.purpose,
-                    main_functionality: parsed.main_functionality.unwrap_or_default(),
-                    dependencies: parsed.dependencies.unwrap_or_default(),
-                    complexity: parsed.complexity,
-                    patterns: parsed.patterns.unwrap_or_default(),
-                    suggested_tags: parsed.suggested_tags.unwrap_or_default(),
-                })
-            }
+            Ok(parsed) => Ok(CodeSummary {
+                summary: parsed.summary,
+                purpose: parsed.purpose,
+                main_functionality: parsed.main_functionality.unwrap_or_default(),
+                dependencies: parsed.dependencies.unwrap_or_default(),
+                complexity: parsed.complexity,
+                patterns: parsed.patterns.unwrap_or_default(),
+                suggested_tags: parsed.suggested_tags.unwrap_or_default(),
+            }),
             Err(e) => {
-                warn!("Failed to parse code summary response: {}. Raw: {}", e, text);
+                warn!(
+                    "Failed to parse code summary response: {}. Raw: {}",
+                    e, text
+                );
                 Ok(CodeSummary {
                     summary: text.chars().take(500).collect(),
                     purpose: None,
@@ -848,7 +918,10 @@ impl UnifiedAiClient {
 
     /// Create with custom configuration
     pub fn with_config(config: AiConfig) -> Self {
-        let claude = config.claude_api_key.as_ref().map(|key| ClaudeClient::new(key.clone()));
+        let claude = config
+            .claude_api_key
+            .as_ref()
+            .map(|key| ClaudeClient::new(key.clone()));
 
         let ollama_config = OllamaConfig {
             base_url: config.ollama_url.clone(),
@@ -900,7 +973,11 @@ impl UnifiedAiClient {
     }
 
     /// Set Ollama models
-    pub fn set_ollama_models(&mut self, embedding_model: Option<String>, generation_model: Option<String>) {
+    pub fn set_ollama_models(
+        &mut self,
+        embedding_model: Option<String>,
+        generation_model: Option<String>,
+    ) {
         if let Some(model) = embedding_model {
             self.config.ollama_embedding_model = model;
         }
@@ -937,18 +1014,19 @@ impl UnifiedAiClient {
                 if let Some(claude) = &self.claude {
                     claude.analyze_file(memory).await
                 } else {
-                    Err(HippoError::Other("Claude API key not configured".to_string()))
+                    Err(HippoError::Other(
+                        "Claude API key not configured".to_string(),
+                    ))
                 }
             }
-            AiProvider::Ollama => {
-                self.analyze_file_with_ollama(memory).await
-            }
+            AiProvider::Ollama => self.analyze_file_with_ollama(memory).await,
         }
     }
 
     /// Analyze file using Ollama
     async fn analyze_file_with_ollama(&self, memory: &Memory) -> Result<FileAnalysis> {
-        let file_name = memory.path
+        let file_name = memory
+            .path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
@@ -956,7 +1034,10 @@ impl UnifiedAiClient {
         // For code files, read and analyze content
         if let MemoryKind::Code { language, .. } = &memory.kind {
             if let Ok(code) = std::fs::read_to_string(&memory.path) {
-                let analysis = self.ollama.analyze_code(&code, language, &file_name).await?;
+                let analysis = self
+                    .ollama
+                    .analyze_code(&code, language, &file_name)
+                    .await?;
                 return Ok(self.local_analysis_to_file_analysis(analysis));
             }
         }
@@ -986,7 +1067,8 @@ impl UnifiedAiClient {
     }
 
     fn local_analysis_to_file_analysis(&self, analysis: LocalAnalysis) -> FileAnalysis {
-        let tags = analysis.suggested_tags
+        let tags = analysis
+            .suggested_tags
             .into_iter()
             .map(|name| TagSuggestion {
                 name: name.to_lowercase().replace(' ', "-"),
@@ -1031,7 +1113,8 @@ impl UnifiedAiClient {
 
         match serde_json::from_str::<AnalysisJson>(json_str) {
             Ok(parsed) => {
-                let tags = parsed.tags
+                let tags = parsed
+                    .tags
                     .unwrap_or_default()
                     .into_iter()
                     .map(|t| TagSuggestion {
@@ -1065,7 +1148,9 @@ impl UnifiedAiClient {
                 if let Some(claude) = &self.claude {
                     claude.summarize_text(content, file_name).await
                 } else {
-                    Err(HippoError::Other("Claude API key not configured".to_string()))
+                    Err(HippoError::Other(
+                        "Claude API key not configured".to_string(),
+                    ))
                 }
             }
             AiProvider::Ollama => {
@@ -1083,13 +1168,20 @@ impl UnifiedAiClient {
     }
 
     /// Summarize code
-    pub async fn summarize_code(&self, code: &str, language: &str, file_name: &str) -> Result<CodeSummary> {
+    pub async fn summarize_code(
+        &self,
+        code: &str,
+        language: &str,
+        file_name: &str,
+    ) -> Result<CodeSummary> {
         match self.config.provider {
             AiProvider::Claude => {
                 if let Some(claude) = &self.claude {
                     claude.summarize_code(code, language, file_name).await
                 } else {
-                    Err(HippoError::Other("Claude API key not configured".to_string()))
+                    Err(HippoError::Other(
+                        "Claude API key not configured".to_string(),
+                    ))
                 }
             }
             AiProvider::Ollama => {
@@ -1119,7 +1211,11 @@ impl UnifiedAiClient {
     }
 
     /// RAG query - answer questions using context from indexed files
-    pub async fn rag_query(&self, query: &str, documents: Vec<(String, String, f32)>) -> Result<String> {
+    pub async fn rag_query(
+        &self,
+        query: &str,
+        documents: Vec<(String, String, f32)>,
+    ) -> Result<String> {
         let rag_docs: Vec<RagDocument> = documents
             .into_iter()
             .map(|(content, source, score)| RagDocument {
@@ -1148,13 +1244,18 @@ impl UnifiedAiClient {
     }
 
     /// Get organization suggestions
-    pub async fn suggest_organization(&self, memories: &[Memory]) -> Result<Vec<(String, OrganizationSuggestion)>> {
+    pub async fn suggest_organization(
+        &self,
+        memories: &[Memory],
+    ) -> Result<Vec<(String, OrganizationSuggestion)>> {
         match self.config.provider {
             AiProvider::Claude => {
                 if let Some(claude) = &self.claude {
                     claude.suggest_organization(memories).await
                 } else {
-                    Err(HippoError::Other("Claude API key not configured".to_string()))
+                    Err(HippoError::Other(
+                        "Claude API key not configured".to_string(),
+                    ))
                 }
             }
             AiProvider::Ollama => {
@@ -1171,13 +1272,17 @@ impl UnifiedAiClient {
                 let suggestion = self.ollama.suggest_organization(&descriptions).await?;
 
                 // Parse the response and create suggestions
-                Ok(memories.iter()
+                Ok(memories
+                    .iter()
                     .take(20)
                     .map(|m| {
-                        (m.id.to_string(), OrganizationSuggestion {
-                            suggested_folder: "Organized".to_string(),
-                            reason: suggestion.clone(),
-                        })
+                        (
+                            m.id.to_string(),
+                            OrganizationSuggestion {
+                                suggested_folder: "Organized".to_string(),
+                                reason: suggestion.clone(),
+                            },
+                        )
                     })
                     .collect())
             }

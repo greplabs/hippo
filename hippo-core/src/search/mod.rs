@@ -1,9 +1,9 @@
 //! Search engine combining SQL search, fuzzy matching, and semantic search
 
+use crate::embeddings::Embedder;
 use crate::error::Result;
 use crate::models::*;
 use crate::storage::Storage;
-use crate::embeddings::Embedder;
 use crate::HippoConfig;
 use std::sync::Arc;
 use tracing::warn;
@@ -28,7 +28,9 @@ impl Searcher {
         let offset = query.offset;
 
         // Extract tag names for filtering
-        let tag_filters: Vec<String> = query.tags.iter()
+        let tag_filters: Vec<String> = query
+            .tags
+            .iter()
             .filter(|t| matches!(t.mode, TagFilterMode::Include))
             .map(|t| t.tag.clone())
             .collect();
@@ -41,23 +43,27 @@ impl Searcher {
         };
 
         // Use SQL-based search
-        let memories = self.storage.search_with_tags(
-            query.text.as_deref(),
-            &tag_filters,
-            kind_filter,
-            limit,
-            offset,
-        ).await?;
+        let memories = self
+            .storage
+            .search_with_tags(
+                query.text.as_deref(),
+                &tag_filters,
+                kind_filter,
+                limit,
+                offset,
+            )
+            .await?;
 
         // Get total count
-        let total_count = self.storage.count_search_results(
-            query.text.as_deref(),
-            &tag_filters,
-            kind_filter,
-        ).await?;
+        let total_count = self
+            .storage
+            .count_search_results(query.text.as_deref(), &tag_filters, kind_filter)
+            .await?;
 
         // Apply exclusion filters and date range in memory (fast for small result set)
-        let exclude_tags: Vec<String> = query.tags.iter()
+        let exclude_tags: Vec<String> = query
+            .tags
+            .iter()
             .filter(|t| matches!(t.mode, TagFilterMode::Exclude))
             .map(|t| t.tag.to_lowercase())
             .collect();
@@ -113,7 +119,9 @@ impl Searcher {
                     }
 
                     // Filename match
-                    let filename = memory.path.file_name()
+                    let filename = memory
+                        .path
+                        .file_name()
                         .map(|f| f.to_string_lossy().to_string())
                         .unwrap_or_default();
                     if filename.to_lowercase().contains(&text_lower) {
@@ -157,7 +165,9 @@ impl Searcher {
 
         // Sort by score
         results.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Get tag suggestions
@@ -181,12 +191,17 @@ impl Searcher {
         let query_embedding = match self.embedder.embed_query(query).await {
             Ok(emb) => emb,
             Err(e) => {
-                warn!("Failed to generate query embedding: {}, falling back to text search", e);
-                return self.search(SearchQuery {
-                    text: Some(query.to_string()),
-                    limit,
-                    ..Default::default()
-                }).await;
+                warn!(
+                    "Failed to generate query embedding: {}, falling back to text search",
+                    e
+                );
+                return self
+                    .search(SearchQuery {
+                        text: Some(query.to_string()),
+                        limit,
+                        ..Default::default()
+                    })
+                    .await;
             }
         };
 
@@ -195,11 +210,13 @@ impl Searcher {
 
         if stored_embeddings.is_empty() {
             // No embeddings yet, fall back to text search
-            return self.search(SearchQuery {
-                text: Some(query.to_string()),
-                limit,
-                ..Default::default()
-            }).await;
+            return self
+                .search(SearchQuery {
+                    text: Some(query.to_string()),
+                    limit,
+                    ..Default::default()
+                })
+                .await;
         }
 
         // Calculate similarities
@@ -239,11 +256,13 @@ impl Searcher {
     /// Fuzzy search for typo-tolerant matching
     pub async fn fuzzy_search(&self, query: &str, limit: usize) -> Result<SearchResults> {
         // First try exact search
-        let exact_results = self.search(SearchQuery {
-            text: Some(query.to_string()),
-            limit,
-            ..Default::default()
-        }).await?;
+        let exact_results = self
+            .search(SearchQuery {
+                text: Some(query.to_string()),
+                limit,
+                ..Default::default()
+            })
+            .await?;
 
         if !exact_results.memories.is_empty() {
             return Ok(exact_results);
@@ -255,11 +274,13 @@ impl Searcher {
 
         let mut all_results = Vec::new();
         for variation in variations {
-            let results = self.search(SearchQuery {
-                text: Some(variation),
-                limit: limit / 2,
-                ..Default::default()
-            }).await?;
+            let results = self
+                .search(SearchQuery {
+                    text: Some(variation),
+                    limit: limit / 2,
+                    ..Default::default()
+                })
+                .await?;
             all_results.extend(results.memories);
         }
 
@@ -269,7 +290,9 @@ impl Searcher {
 
         // Re-sort by score
         all_results.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         all_results.truncate(limit);
 
@@ -289,7 +312,9 @@ impl Searcher {
 
         // Skip characters (handle missing letters)
         for i in 0..chars.len() {
-            let variation: String = chars.iter().enumerate()
+            let variation: String = chars
+                .iter()
+                .enumerate()
                 .filter(|(j, _)| *j != i)
                 .map(|(_, c)| *c)
                 .collect();
@@ -307,8 +332,14 @@ impl Searcher {
 
         // Common character substitutions
         let substitutions = [
-            ('a', 'e'), ('e', 'a'), ('i', 'y'), ('y', 'i'),
-            ('o', 'u'), ('u', 'o'), ('c', 'k'), ('k', 'c'),
+            ('a', 'e'),
+            ('e', 'a'),
+            ('i', 'y'),
+            ('y', 'i'),
+            ('o', 'u'),
+            ('u', 'o'),
+            ('c', 'k'),
+            ('k', 'c'),
         ];
 
         for (from, to) in substitutions {
@@ -355,8 +386,10 @@ impl Searcher {
                     80.0 // Prefix match
                 } else if name_lower.contains(&text_lower) {
                     50.0 // Contains match
-                } else if name_lower.split(|c: char| !c.is_alphanumeric())
-                    .any(|word| word.starts_with(&text_lower)) {
+                } else if name_lower
+                    .split(|c: char| !c.is_alphanumeric())
+                    .any(|word| word.starts_with(&text_lower))
+                {
                     40.0 // Word boundary match
                 } else {
                     // Try fuzzy match
@@ -378,7 +411,11 @@ impl Searcher {
         // Sort by score descending
         scored_tags.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
 
-        Ok(scored_tags.into_iter().take(10).map(|(name, _, _)| name).collect())
+        Ok(scored_tags
+            .into_iter()
+            .take(10)
+            .map(|(name, _, _)| name)
+            .collect())
     }
 
     /// Calculate string similarity (Jaro-Winkler-like)
@@ -407,7 +444,9 @@ impl Searcher {
         let jaccard = intersection as f32 / union as f32;
 
         // Prefix bonus
-        let common_prefix = s1.chars().zip(s2.chars())
+        let common_prefix = s1
+            .chars()
+            .zip(s2.chars())
             .take_while(|(a, b)| a == b)
             .count();
         let prefix_bonus = (common_prefix.min(4) as f32) * 0.1;

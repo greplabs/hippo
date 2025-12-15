@@ -1,5 +1,5 @@
 //! Hippo Desktop Application
-//! 
+//!
 //! 🦛 The memory that never forgets
 
 #![cfg_attr(
@@ -7,7 +7,9 @@
     windows_subsystem = "windows"
 )]
 
-use hippo_core::{Hippo, SearchQuery, Tag, Source, MemoryId, ClaudeClient, OllamaClient, UnifiedAiClient};
+use hippo_core::{
+    ClaudeClient, Hippo, MemoryId, OllamaClient, SearchQuery, Source, Tag, UnifiedAiClient,
+};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
@@ -20,7 +22,7 @@ struct AppState {
 async fn initialize(state: State<'_, AppState>) -> Result<String, String> {
     println!("[Hippo] Initializing...");
     let mut hippo_lock = state.hippo.write().await;
-    
+
     match Hippo::new().await {
         Ok(hippo) => {
             println!("[Hippo] Initialized successfully!");
@@ -43,18 +45,19 @@ async fn search(
     println!("[Hippo] Search: query='{}', tags={:?}", query, tags);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    
+
     let search_query = SearchQuery {
         text: if query.is_empty() { None } else { Some(query) },
-        tags: tags.into_iter()
-            .map(|t| hippo_core::TagFilter { 
-                tag: t, 
-                mode: hippo_core::TagFilterMode::Include 
+        tags: tags
+            .into_iter()
+            .map(|t| hippo_core::TagFilter {
+                tag: t,
+                mode: hippo_core::TagFilterMode::Include,
             })
             .collect(),
         ..Default::default()
     };
-    
+
     match hippo.search_advanced(search_query).await {
         Ok(results) => {
             println!("[Hippo] Search returned {} results", results.memories.len());
@@ -76,12 +79,14 @@ async fn add_source(
     println!("[Hippo] Adding source: type={}, path={}", source_type, path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    
+
     let source = match source_type.as_str() {
-        "local" => Source::Local { root_path: path.into() },
-        _ => return Err(format!("Unknown source type: {}", source_type))
+        "local" => Source::Local {
+            root_path: path.into(),
+        },
+        _ => return Err(format!("Unknown source type: {}", source_type)),
     };
-    
+
     match hippo.add_source(source).await {
         Ok(_) => {
             println!("[Hippo] Source added successfully, indexing started");
@@ -99,7 +104,7 @@ async fn get_sources(state: State<'_, AppState>) -> Result<serde_json::Value, St
     println!("[Hippo] Getting sources...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    
+
     match hippo.list_sources().await {
         Ok(sources) => {
             println!("[Hippo] Found {} sources", sources.len());
@@ -123,15 +128,15 @@ async fn add_tag(
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
-    hippo.add_tag(id, Tag::user(tag)).await.map_err(|e| e.to_string())?;
+    hippo
+        .add_tag(id, Tag::user(tag))
+        .await
+        .map_err(|e| e.to_string())?;
     Ok("Tag added".to_string())
 }
 
 #[tauri::command]
-async fn toggle_favorite(
-    memory_id: String,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+async fn toggle_favorite(memory_id: String, state: State<'_, AppState>) -> Result<bool, String> {
     println!("[Hippo] Toggling favorite for memory {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
@@ -145,7 +150,7 @@ async fn get_tags(state: State<'_, AppState>) -> Result<serde_json::Value, Strin
     println!("[Hippo] Getting tags...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    
+
     match hippo.list_tags().await {
         Ok(tags) => {
             println!("[Hippo] Found {} tags", tags.len());
@@ -167,12 +172,12 @@ async fn get_mind_map(
     println!("[Hippo] Getting mind map for {} depth {}", memory_id, depth);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    
+
     let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
-    
+
     match hippo.get_mind_map(id, depth).await {
         Ok(map) => serde_json::to_value(map).map_err(|e| e.to_string()),
-        Err(e) => Err(format!("Failed to get mind map: {}", e))
+        Err(e) => Err(format!("Failed to get mind map: {}", e)),
     }
 }
 
@@ -181,7 +186,7 @@ async fn get_stats(state: State<'_, AppState>) -> Result<serde_json::Value, Stri
     println!("[Hippo] Getting stats...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    
+
     match hippo.stats().await {
         Ok(stats) => {
             println!("[Hippo] Stats: {} memories", stats.total_memories);
@@ -198,15 +203,15 @@ async fn get_stats(state: State<'_, AppState>) -> Result<serde_json::Value, Stri
 async fn reset_index(state: State<'_, AppState>) -> Result<String, String> {
     println!("[Hippo] Resetting index...");
     let mut hippo_lock = state.hippo.write().await;
-    
+
     // Drop the current instance
     *hippo_lock = None;
-    
+
     // Delete the database file
     let data_dir = directories::ProjectDirs::from("", "", "Hippo")
         .map(|d| d.data_dir().to_path_buf())
         .unwrap_or_else(|| std::path::PathBuf::from(".hippo"));
-    
+
     let db_path = data_dir.join("hippo.db");
     if db_path.exists() {
         if let Err(e) = std::fs::remove_file(&db_path) {
@@ -215,7 +220,7 @@ async fn reset_index(state: State<'_, AppState>) -> Result<String, String> {
             println!("[Hippo] Deleted database: {:?}", db_path);
         }
     }
-    
+
     // Recreate Hippo
     match Hippo::new().await {
         Ok(hippo) => {
@@ -236,12 +241,17 @@ async fn remove_source(
     delete_files: bool,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!("[Hippo] Removing source: {} (delete_files={})", path, delete_files);
+    println!(
+        "[Hippo] Removing source: {} (delete_files={})",
+        path, delete_files
+    );
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    
-    let source = Source::Local { root_path: path.into() };
-    
+
+    let source = Source::Local {
+        root_path: path.into(),
+    };
+
     match hippo.remove_source(&source, delete_files).await {
         Ok(_) => {
             println!("[Hippo] Source removed successfully");
@@ -255,16 +265,15 @@ async fn remove_source(
 }
 
 #[tauri::command]
-async fn reindex_source(
-    path: String,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+async fn reindex_source(path: String, state: State<'_, AppState>) -> Result<String, String> {
     println!("[Hippo] Re-indexing source: {}", path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    
-    let source = Source::Local { root_path: path.into() };
-    
+
+    let source = Source::Local {
+        root_path: path.into(),
+    };
+
     // Queue for indexing (will update existing entries)
     match hippo.indexer.queue_source(source).await {
         Ok(_) => {
@@ -281,7 +290,7 @@ async fn reindex_source(
 #[tauri::command]
 async fn open_in_finder(path: String) -> Result<(), String> {
     println!("[Hippo] Opening in finder: {}", path);
-    
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
@@ -290,7 +299,7 @@ async fn open_in_finder(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
@@ -299,22 +308,26 @@ async fn open_in_finder(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
-            .arg(std::path::Path::new(&path).parent().unwrap_or(std::path::Path::new(&path)))
+            .arg(
+                std::path::Path::new(&path)
+                    .parent()
+                    .unwrap_or(std::path::Path::new(&path)),
+            )
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
 #[tauri::command]
 async fn open_file(path: String) -> Result<(), String> {
     println!("[Hippo] Opening file: {}", path);
-    
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
@@ -322,7 +335,7 @@ async fn open_file(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
@@ -330,7 +343,7 @@ async fn open_file(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
@@ -338,7 +351,7 @@ async fn open_file(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
@@ -349,10 +362,7 @@ async fn pick_folder() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-async fn get_thumbnail(
-    path: String,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+async fn get_thumbnail(path: String, state: State<'_, AppState>) -> Result<String, String> {
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -363,7 +373,7 @@ async fn get_thumbnail(
         // Generate or get cached image thumbnail
         match hippo.get_thumbnail(file_path) {
             Ok(thumb_path) => return Ok(thumb_path.to_string_lossy().to_string()),
-            Err(e) => return Err(format!("Failed to generate thumbnail: {}", e))
+            Err(e) => return Err(format!("Failed to generate thumbnail: {}", e)),
         }
     }
 
@@ -372,7 +382,7 @@ async fn get_thumbnail(
         // Generate or get cached video thumbnail
         match hippo.get_video_thumbnail(file_path) {
             Ok(thumb_path) => return Ok(thumb_path.to_string_lossy().to_string()),
-            Err(e) => return Err(format!("Failed to generate video thumbnail: {}", e))
+            Err(e) => return Err(format!("Failed to generate video thumbnail: {}", e)),
         }
     }
 
@@ -385,13 +395,12 @@ async fn get_thumbnail_stats(state: State<'_, AppState>) -> Result<serde_json::V
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     match hippo.thumbnail_stats() {
-        Ok(stats) => {
-            serde_json::to_value(serde_json::json!({
-                "count": stats.count,
-                "total_size": stats.total_size
-            })).map_err(|e| e.to_string())
-        }
-        Err(e) => Err(format!("Failed to get thumbnail stats: {}", e))
+        Ok(stats) => serde_json::to_value(serde_json::json!({
+            "count": stats.count,
+            "total_size": stats.total_size
+        }))
+        .map_err(|e| e.to_string()),
+        Err(e) => Err(format!("Failed to get thumbnail stats: {}", e)),
     }
 }
 
@@ -402,7 +411,7 @@ async fn clear_thumbnail_cache(state: State<'_, AppState>) -> Result<String, Str
 
     match hippo.clear_thumbnail_cache() {
         Ok(_) => Ok("Thumbnail cache cleared".to_string()),
-        Err(e) => Err(format!("Failed to clear cache: {}", e))
+        Err(e) => Err(format!("Failed to clear cache: {}", e)),
     }
 }
 
@@ -419,12 +428,16 @@ async fn analyze_file(
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
-    let memory = hippo.get_memory(id).await
+    let memory = hippo
+        .get_memory(id)
+        .await
         .map_err(|e| e.to_string())?
         .ok_or("Memory not found")?;
 
     let client = ClaudeClient::new(api_key);
-    let analysis = client.analyze_file(&memory).await
+    let analysis = client
+        .analyze_file(&memory)
+        .await
         .map_err(|e| format!("Analysis failed: {}", e))?;
 
     // Add AI tags to the memory
@@ -435,7 +448,10 @@ async fn analyze_file(
         }
     }
 
-    println!("[Hippo] AI analysis complete, found {} tags", analysis.tags.len());
+    println!(
+        "[Hippo] AI analysis complete, found {} tags",
+        analysis.tags.len()
+    );
     serde_json::to_value(analysis).map_err(|e| e.to_string())
 }
 
@@ -450,20 +466,26 @@ async fn summarize_document(
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
-    let memory = hippo.get_memory(id).await
+    let memory = hippo
+        .get_memory(id)
+        .await
         .map_err(|e| e.to_string())?
         .ok_or("Memory not found")?;
 
     // Read file content
-    let content = std::fs::read_to_string(&memory.path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        std::fs::read_to_string(&memory.path).map_err(|e| format!("Failed to read file: {}", e))?;
 
-    let file_name = memory.path.file_name()
+    let file_name = memory
+        .path
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
 
     let client = ClaudeClient::new(api_key);
-    let summary = client.summarize_text(&content, &file_name).await
+    let summary = client
+        .summarize_text(&content, &file_name)
+        .await
         .map_err(|e| format!("Summarization failed: {}", e))?;
 
     println!("[Hippo] Document summarized");
@@ -480,14 +502,15 @@ async fn get_organization_suggestions(
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     // Get recent unorganized files
-    let all_memories = hippo.get_all_memories().await
-        .map_err(|e| e.to_string())?;
+    let all_memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
 
     // Take up to 50 files for analysis
     let to_analyze: Vec<_> = all_memories.into_iter().take(50).collect();
 
     let client = ClaudeClient::new(api_key);
-    let suggestions = client.suggest_organization(&to_analyze).await
+    let suggestions = client
+        .suggest_organization(&to_analyze)
+        .await
         .map_err(|e| format!("Organization suggestion failed: {}", e))?;
 
     println!("[Hippo] Got {} organization suggestions", suggestions.len());
@@ -507,7 +530,11 @@ async fn semantic_search(
     let limit = limit.unwrap_or(20);
 
     // Get query embedding
-    let query_embedding = hippo.indexer.embedder().embed_query(&query).await
+    let query_embedding = hippo
+        .indexer
+        .embedder()
+        .embed_query(&query)
+        .await
         .map_err(|e| format!("Embedding failed: {}", e))?;
 
     // Get all memories and their embeddings
@@ -526,7 +553,8 @@ async fn semantic_search(
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(limit);
 
-    let results: Vec<serde_json::Value> = scored.iter()
+    let results: Vec<serde_json::Value> = scored
+        .iter()
         .map(|(mem, score)| {
             serde_json::json!({
                 "memory": mem,
@@ -607,22 +635,21 @@ async fn search_symbols(
         exact_b.cmp(&exact_a)
     });
 
-    results.truncate(100);  // Limit results
+    results.truncate(100); // Limit results
 
     println!("[Hippo] Symbol search found {} results", results.len());
     Ok(serde_json::Value::Array(results))
 }
 
 #[tauri::command]
-async fn add_source_path(
-    path: String,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+async fn add_source_path(path: String, state: State<'_, AppState>) -> Result<String, String> {
     println!("[Hippo] Adding source path: {}", path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    let source = Source::Local { root_path: path.into() };
+    let source = Source::Local {
+        root_path: path.into(),
+    };
 
     match hippo.add_source(source).await {
         Ok(_) => {
@@ -666,10 +693,13 @@ async fn ollama_list_models() -> Result<serde_json::Value, String> {
         return Err("Ollama is not running. Please start Ollama first.".to_string());
     }
 
-    let models = client.list_models().await
+    let models = client
+        .list_models()
+        .await
         .map_err(|e| format!("Failed to list models: {}", e))?;
 
-    let model_info: Vec<serde_json::Value> = models.iter()
+    let model_info: Vec<serde_json::Value> = models
+        .iter()
         .map(|m| {
             serde_json::json!({
                 "name": m.name,
@@ -694,7 +724,9 @@ async fn ollama_pull_model(name: String) -> Result<String, String> {
         return Err("Ollama is not running. Please start Ollama first.".to_string());
     }
 
-    client.pull_model(&name).await
+    client
+        .pull_model(&name)
+        .await
         .map_err(|e| format!("Failed to pull model: {}", e))?;
 
     Ok(format!("Model {} pulled successfully", name))
@@ -710,7 +742,9 @@ async fn ollama_analyze(
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
-    let memory = hippo.get_memory(id).await
+    let memory = hippo
+        .get_memory(id)
+        .await
         .map_err(|e| e.to_string())?
         .ok_or("Memory not found")?;
 
@@ -721,7 +755,9 @@ async fn ollama_analyze(
         return Err("Ollama is not running. Please start Ollama first.".to_string());
     }
 
-    let analysis = ai_client.analyze_file(&memory).await
+    let analysis = ai_client
+        .analyze_file(&memory)
+        .await
         .map_err(|e| format!("Analysis failed: {}", e))?;
 
     // Add AI tags to the memory
@@ -732,7 +768,10 @@ async fn ollama_analyze(
         }
     }
 
-    println!("[Hippo] Ollama analysis complete, found {} tags", analysis.tags.len());
+    println!(
+        "[Hippo] Ollama analysis complete, found {} tags",
+        analysis.tags.len()
+    );
     serde_json::to_value(analysis).map_err(|e| e.to_string())
 }
 
@@ -746,15 +785,19 @@ async fn ollama_summarize(
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
-    let memory = hippo.get_memory(id).await
+    let memory = hippo
+        .get_memory(id)
+        .await
         .map_err(|e| e.to_string())?
         .ok_or("Memory not found")?;
 
     // Read file content
-    let content = std::fs::read_to_string(&memory.path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        std::fs::read_to_string(&memory.path).map_err(|e| format!("Failed to read file: {}", e))?;
 
-    let file_name = memory.path.file_name()
+    let file_name = memory
+        .path
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
 
@@ -764,7 +807,9 @@ async fn ollama_summarize(
         return Err("Ollama is not running. Please start Ollama first.".to_string());
     }
 
-    let summary = ai_client.summarize(&content, &file_name).await
+    let summary = ai_client
+        .summarize(&content, &file_name)
+        .await
         .map_err(|e| format!("Summarization failed: {}", e))?;
 
     println!("[Hippo] Ollama summarization complete");
@@ -772,9 +817,7 @@ async fn ollama_summarize(
 }
 
 #[tauri::command]
-async fn ollama_chat(
-    messages: Vec<(String, String)>,
-) -> Result<String, String> {
+async fn ollama_chat(messages: Vec<(String, String)>) -> Result<String, String> {
     println!("[Hippo] Ollama chat with {} messages", messages.len());
 
     let ai_client = UnifiedAiClient::with_ollama(None);
@@ -783,7 +826,9 @@ async fn ollama_chat(
         return Err("Ollama is not running. Please start Ollama first.".to_string());
     }
 
-    let response = ai_client.chat(messages).await
+    let response = ai_client
+        .chat(messages)
+        .await
         .map_err(|e| format!("Chat failed: {}", e))?;
 
     Ok(response)
@@ -837,42 +882,56 @@ async fn ollama_rag_query(
         "File collection: {} total files, {:.1} MB total size. Types: {}",
         memories.len(),
         total_size as f64 / 1_000_000.0,
-        file_types.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join(", ")
+        file_types
+            .iter()
+            .map(|(k, v)| format!("{}: {}", k, v))
+            .collect::<Vec<_>>()
+            .join(", ")
     );
     context_parts.push(summary);
 
     // For text/code files, include content samples
     let mut text_files_added = 0;
     for memory in memories.iter() {
-        if text_files_added >= 10 { break; }
+        if text_files_added >= 10 {
+            break;
+        }
 
-        let is_text_file = matches!(&memory.kind,
-            hippo_core::MemoryKind::Document { .. } | hippo_core::MemoryKind::Code { .. });
+        let is_text_file = matches!(
+            &memory.kind,
+            hippo_core::MemoryKind::Document { .. } | hippo_core::MemoryKind::Code { .. }
+        );
 
         if is_text_file {
             if let Ok(content) = std::fs::read_to_string(&memory.path) {
-                let filename = memory.path.file_name()
+                let filename = memory
+                    .path
+                    .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
 
                 // Check if relevant to query
                 let content_lower = content.to_lowercase();
                 let filename_lower = filename.to_lowercase();
-                let is_relevant = query_lower.split_whitespace().any(|word| {
-                    content_lower.contains(word) || filename_lower.contains(word)
-                });
+                let is_relevant = query_lower
+                    .split_whitespace()
+                    .any(|word| content_lower.contains(word) || filename_lower.contains(word));
 
                 if is_relevant || text_files_added < 3 {
                     let preview: String = content.chars().take(1000).collect();
                     let lang = if let hippo_core::MemoryKind::Code { language, .. } = &memory.kind {
                         format!(" ({})", language)
-                    } else { String::new() };
+                    } else {
+                        String::new()
+                    };
                     context_parts.push(format!("File: {}{}\n{}", filename, lang, preview));
                     text_files_added += 1;
 
                     // Add to relevant files
                     let file_type = match &memory.kind {
-                        hippo_core::MemoryKind::Code { language, .. } => format!("code:{}", language),
+                        hippo_core::MemoryKind::Code { language, .. } => {
+                            format!("code:{}", language)
+                        }
                         hippo_core::MemoryKind::Document { .. } => "document".to_string(),
                         _ => "file".to_string(),
                     };
@@ -891,25 +950,34 @@ async fn ollama_rag_query(
 
     // For images, include metadata and add to relevant files
     let mut image_info: Vec<String> = Vec::new();
-    for memory in memories.iter().filter(|m| matches!(m.kind, hippo_core::MemoryKind::Image { .. })).take(20) {
-        let filename = memory.path.file_name()
+    for memory in memories
+        .iter()
+        .filter(|m| matches!(m.kind, hippo_core::MemoryKind::Image { .. }))
+        .take(20)
+    {
+        let filename = memory
+            .path
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
 
         let mut details = vec![filename.clone()];
-        let (width, height) = if let hippo_core::MemoryKind::Image { width, height, .. } = &memory.kind {
-            details.push(format!("{}x{}", width, height));
-            (*width, *height)
-        } else {
-            (0, 0)
-        };
+        let (width, height) =
+            if let hippo_core::MemoryKind::Image { width, height, .. } = &memory.kind {
+                details.push(format!("{}x{}", width, height));
+                (*width, *height)
+            } else {
+                (0, 0)
+            };
         // Add modified date from memory
         details.push(memory.modified_at.format("%Y-%m-%d").to_string());
         image_info.push(details.join(" - "));
 
         // Check relevance for images
         let filename_lower = filename.to_lowercase();
-        let is_relevant = query_lower.split_whitespace().any(|word| filename_lower.contains(word));
+        let is_relevant = query_lower
+            .split_whitespace()
+            .any(|word| filename_lower.contains(word));
 
         if relevant_files.len() < 12 {
             relevant_files.push(serde_json::json!({
@@ -940,19 +1008,33 @@ async fn ollama_rag_query(
         context, query
     );
 
-    println!("[Hippo] Sending to Ollama ({} chars context)", context.len());
+    println!(
+        "[Hippo] Sending to Ollama ({} chars context)",
+        context.len()
+    );
 
     // Use generate API with system prompt
     let system = "You are a helpful file assistant. Answer questions about the user's files based on the provided context. Be concise and helpful.";
-    let response = ai_client.ollama().generate(&prompt, Some(system)).await
+    let response = ai_client
+        .ollama()
+        .generate(&prompt, Some(system))
+        .await
         .map_err(|e| format!("Generation failed: {}", e))?;
 
     // Sort relevant files by relevance (high first)
     relevant_files.sort_by(|a, b| {
         let rel_a = a["relevance"].as_str().unwrap_or("low");
         let rel_b = b["relevance"].as_str().unwrap_or("low");
-        let score_a = match rel_a { "high" => 3, "medium" => 2, _ => 1 };
-        let score_b = match rel_b { "high" => 3, "medium" => 2, _ => 1 };
+        let score_a = match rel_a {
+            "high" => 3,
+            "medium" => 2,
+            _ => 1,
+        };
+        let score_b = match rel_b {
+            "high" => 3,
+            "medium" => 2,
+            _ => 1,
+        };
         score_b.cmp(&score_a)
     });
 
@@ -983,29 +1065,39 @@ async fn ai_suggest_tags(
 
     // Get memory for the file
     let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
-    let memory = memories.iter()
+    let memory = memories
+        .iter()
         .find(|m| m.path.to_string_lossy() == file_path)
         .ok_or("File not found in index")?;
 
-    let filename = memory.path.file_name()
+    let filename = memory
+        .path
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
 
     // Build context about the file
     let file_info = match &memory.kind {
-        hippo_core::MemoryKind::Image { width, height, format } => {
+        hippo_core::MemoryKind::Image {
+            width,
+            height,
+            format,
+        } => {
             format!("Image file: {}x{} {}", width, height, format)
         }
         hippo_core::MemoryKind::Code { language, lines } => {
             let content_preview = std::fs::read_to_string(&memory.path)
                 .map(|c| c.chars().take(500).collect::<String>())
                 .unwrap_or_default();
-            format!("Code file ({}, {} lines):\n{}", language, lines, content_preview)
+            format!(
+                "Code file ({}, {} lines):\n{}",
+                language, lines, content_preview
+            )
         }
         hippo_core::MemoryKind::Document { format, .. } => {
             format!("Document file: {:?}", format)
         }
-        _ => format!("File type: {:?}", memory.kind)
+        _ => format!("File type: {:?}", memory.kind),
     };
 
     let existing_tags: Vec<String> = memory.tags.iter().map(|t| t.name.clone()).collect();
@@ -1016,7 +1108,13 @@ async fn ai_suggest_tags(
         filename, file_info, existing_tags.join(", ")
     );
 
-    let response = ai_client.ollama().generate(&prompt, Some("You are a file tagging assistant. Suggest concise, relevant tags.")).await
+    let response = ai_client
+        .ollama()
+        .generate(
+            &prompt,
+            Some("You are a file tagging assistant. Suggest concise, relevant tags."),
+        )
+        .await
         .map_err(|e| format!("Generation failed: {}", e))?;
 
     // Parse tags from response
@@ -1045,11 +1143,14 @@ async fn ai_find_similar(
 
     // Get all memories
     let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
-    let target = memories.iter()
+    let target = memories
+        .iter()
         .find(|m| m.path.to_string_lossy() == file_path)
         .ok_or("File not found in index")?;
 
-    let target_name = target.path.file_name()
+    let target_name = target
+        .path
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
 
@@ -1057,13 +1158,17 @@ async fn ai_find_similar(
     let mut similar_files: Vec<serde_json::Value> = Vec::new();
 
     let target_type = std::mem::discriminant(&target.kind);
-    let target_ext = target.path.extension()
+    let target_ext = target
+        .path
+        .extension()
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_default();
     let target_name_lower = target_name.to_lowercase();
 
     for memory in &memories {
-        if memory.path == target.path { continue; }
+        if memory.path == target.path {
+            continue;
+        }
 
         let mut score: u32 = 0;
         let mut reasons: Vec<&str> = Vec::new();
@@ -1075,7 +1180,9 @@ async fn ai_find_similar(
         }
 
         // Same extension
-        let ext = memory.path.extension()
+        let ext = memory
+            .path
+            .extension()
             .map(|e| e.to_string_lossy().to_lowercase())
             .unwrap_or_default();
         if ext == target_ext && !target_ext.is_empty() {
@@ -1083,7 +1190,9 @@ async fn ai_find_similar(
         }
 
         // Similar name
-        let name = memory.path.file_name()
+        let name = memory
+            .path
+            .file_name()
             .map(|n| n.to_string_lossy().to_lowercase())
             .unwrap_or_default();
 
@@ -1109,7 +1218,9 @@ async fn ai_find_similar(
         }
 
         // Shared tags
-        let shared_tags: Vec<String> = memory.tags.iter()
+        let shared_tags: Vec<String> = memory
+            .tags
+            .iter()
             .filter(|t| target.tags.iter().any(|tt| tt.name == t.name))
             .map(|t| t.name.clone())
             .collect();
@@ -1127,8 +1238,19 @@ async fn ai_find_similar(
         }
 
         // Similar dimensions for images
-        if let (hippo_core::MemoryKind::Image { width: tw, height: th, .. },
-                hippo_core::MemoryKind::Image { width: mw, height: mh, .. }) = (&target.kind, &memory.kind) {
+        if let (
+            hippo_core::MemoryKind::Image {
+                width: tw,
+                height: th,
+                ..
+            },
+            hippo_core::MemoryKind::Image {
+                width: mw,
+                height: mh,
+                ..
+            },
+        ) = (&target.kind, &memory.kind)
+        {
             let w_ratio = *mw as f64 / *tw as f64;
             let h_ratio = *mh as f64 / *th as f64;
             if (0.8..1.2).contains(&w_ratio) && (0.8..1.2).contains(&h_ratio) {
@@ -1151,7 +1273,10 @@ async fn ai_find_similar(
 
     // Sort by score descending
     similar_files.sort_by(|a, b| {
-        b["score"].as_u64().unwrap_or(0).cmp(&a["score"].as_u64().unwrap_or(0))
+        b["score"]
+            .as_u64()
+            .unwrap_or(0)
+            .cmp(&a["score"].as_u64().unwrap_or(0))
     });
 
     Ok(serde_json::json!({
@@ -1176,14 +1301,19 @@ async fn ai_smart_rename(
 
     // Get memory for the file
     let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
-    let memory = memories.iter()
+    let memory = memories
+        .iter()
         .find(|m| m.path.to_string_lossy() == file_path)
         .ok_or("File not found in index")?;
 
-    let current_name = memory.path.file_name()
+    let current_name = memory
+        .path
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
-    let extension = memory.path.extension()
+    let extension = memory
+        .path
+        .extension()
         .map(|e| e.to_string_lossy().to_string())
         .unwrap_or_default();
 
@@ -1199,7 +1329,7 @@ async fn ai_smart_rename(
             format!("Code ({}, {} lines): {}", language, lines, content_preview)
         }
         hippo_core::MemoryKind::Document { .. } => "Document".to_string(),
-        _ => "File".to_string()
+        _ => "File".to_string(),
     };
 
     let date_str = memory.modified_at.format("%Y-%m-%d").to_string();
@@ -1210,16 +1340,29 @@ async fn ai_smart_rename(
         Names should be descriptive, use-lowercase-with-dashes, and be concise. \
         Only output the 3 suggested names, one per line, nothing else.\n\n\
         Current name: {}\nFile type: {}\nDate: {}\nTags: {}\n\nSuggested names:",
-        extension, current_name, file_info, date_str, tags.join(", ")
+        extension,
+        current_name,
+        file_info,
+        date_str,
+        tags.join(", ")
     );
 
-    let response = ai_client.ollama().generate(&prompt, Some("You are a file naming assistant. Suggest clean, descriptive file names.")).await
+    let response = ai_client
+        .ollama()
+        .generate(
+            &prompt,
+            Some("You are a file naming assistant. Suggest clean, descriptive file names."),
+        )
+        .await
         .map_err(|e| format!("Generation failed: {}", e))?;
 
     // Parse suggestions from response
     let suggestions: Vec<String> = response
         .lines()
-        .map(|s| s.trim().trim_start_matches(|c: char| c.is_numeric() || c == '.' || c == ')' || c == '-'))
+        .map(|s| {
+            s.trim()
+                .trim_start_matches(|c: char| c.is_numeric() || c == '.' || c == ')' || c == '-')
+        })
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty() && s.len() < 100)
         .take(3)
@@ -1281,7 +1424,7 @@ fn format_bytes(bytes: u64) -> String {
 fn main() {
     println!("[Hippo] Starting application...");
     tracing_subscriber::fmt::init();
-    
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

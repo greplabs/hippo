@@ -2,8 +2,8 @@
 //!
 //! Provides SHA-256 based file hashing and duplicate detection.
 
-use crate::{Memory, MemoryId, Result, HippoError};
-use sha2::{Sha256, Digest};
+use crate::{HippoError, Memory, MemoryId, Result};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
@@ -57,7 +57,8 @@ pub fn compute_file_hash(path: &Path) -> Result<String> {
     let file = std::fs::File::open(path)
         .map_err(|e| HippoError::Other(format!("Failed to open file: {}", e)))?;
 
-    let metadata = file.metadata()
+    let metadata = file
+        .metadata()
         .map_err(|e| HippoError::Other(format!("Failed to get metadata: {}", e)))?;
 
     let mut hasher = Sha256::new();
@@ -69,7 +70,8 @@ pub fn compute_file_hash(path: &Path) -> Result<String> {
         let mut buffer = vec![0u8; CHUNK_SIZE];
 
         // First chunk
-        let n = reader.read(&mut buffer)
+        let n = reader
+            .read(&mut buffer)
             .map_err(|e| HippoError::Other(format!("Read error: {}", e)))?;
         hasher.update(&buffer[..n]);
 
@@ -79,7 +81,8 @@ pub fn compute_file_hash(path: &Path) -> Result<String> {
         // Hash entire file for smaller files
         let mut buffer = vec![0u8; CHUNK_SIZE];
         loop {
-            let n = reader.read(&mut buffer)
+            let n = reader
+                .read(&mut buffer)
                 .map_err(|e| HippoError::Other(format!("Read error: {}", e)))?;
             if n == 0 {
                 break;
@@ -97,7 +100,8 @@ pub fn compute_quick_hash(path: &Path) -> Result<String> {
     let file = std::fs::File::open(path)
         .map_err(|e| HippoError::Other(format!("Failed to open file: {}", e)))?;
 
-    let metadata = file.metadata()
+    let metadata = file
+        .metadata()
         .map_err(|e| HippoError::Other(format!("Failed to get metadata: {}", e)))?;
 
     let mut hasher = Sha256::new();
@@ -108,7 +112,8 @@ pub fn compute_quick_hash(path: &Path) -> Result<String> {
     // Read first 4KB
     let mut reader = std::io::BufReader::new(file);
     let mut buffer = vec![0u8; 4096];
-    let n = reader.read(&mut buffer)
+    let n = reader
+        .read(&mut buffer)
         .map_err(|e| HippoError::Other(format!("Read error: {}", e)))?;
     hasher.update(&buffer[..n]);
 
@@ -117,7 +122,10 @@ pub fn compute_quick_hash(path: &Path) -> Result<String> {
 }
 
 /// Find duplicates from a list of memories
-pub fn find_duplicates(memories: &[Memory], min_size: u64) -> (Vec<DuplicateGroup>, DuplicateSummary) {
+pub fn find_duplicates(
+    memories: &[Memory],
+    min_size: u64,
+) -> (Vec<DuplicateGroup>, DuplicateSummary) {
     let mut summary = DuplicateSummary {
         files_scanned: memories.len(),
         ..Default::default()
@@ -166,7 +174,10 @@ pub fn find_duplicates(memories: &[Memory], min_size: u64) -> (Vec<DuplicateGrou
 }
 
 /// Find duplicates by scanning file system and computing hashes
-pub fn find_duplicates_by_scanning(memories: &[Memory], min_size: u64) -> Result<(Vec<DuplicateGroup>, DuplicateSummary)> {
+pub fn find_duplicates_by_scanning(
+    memories: &[Memory],
+    min_size: u64,
+) -> Result<(Vec<DuplicateGroup>, DuplicateSummary)> {
     let mut summary = DuplicateSummary {
         files_scanned: 0,
         ..Default::default()
@@ -177,7 +188,10 @@ pub fn find_duplicates_by_scanning(memories: &[Memory], min_size: u64) -> Result
 
     for memory in memories {
         if memory.metadata.file_size >= min_size && memory.path.exists() {
-            size_groups.entry(memory.metadata.file_size).or_default().push(memory);
+            size_groups
+                .entry(memory.metadata.file_size)
+                .or_default()
+                .push(memory);
             summary.files_scanned += 1;
         }
     }

@@ -16,15 +16,16 @@ use std::path::Path;
 use tracing::{debug, info, warn};
 
 /// Embedding dimension for different model types
-pub const TEXT_EMBEDDING_DIM: usize = 1536;  // OpenAI ada-002 compatible
-pub const IMAGE_EMBEDDING_DIM: usize = 512;  // CLIP compatible
-pub const CODE_EMBEDDING_DIM: usize = 768;   // CodeBERT compatible
+pub const TEXT_EMBEDDING_DIM: usize = 1536; // OpenAI ada-002 compatible
+pub const IMAGE_EMBEDDING_DIM: usize = 512; // CLIP compatible
+pub const CODE_EMBEDDING_DIM: usize = 768; // CodeBERT compatible
 
 /// Main embedder that handles all embedding generation
 pub struct Embedder {
     config: EmbedderConfig,
     client: Client,
     ollama: Option<OllamaClient>,
+    #[allow(dead_code)] // Reserved for future embedding cache
     cache: HashMap<String, Vec<f32>>,
 }
 
@@ -155,7 +156,8 @@ impl Embedder {
                 let mut embedding = vec![0.0f32; IMAGE_EMBEDDING_DIM];
 
                 // Resize to 16x16 for feature extraction
-                let small = image::imageops::resize(&rgb, 16, 16, image::imageops::FilterType::Triangle);
+                let small =
+                    image::imageops::resize(&rgb, 16, 16, image::imageops::FilterType::Triangle);
 
                 // Use pixel values as features
                 for (i, pixel) in small.pixels().enumerate() {
@@ -275,7 +277,10 @@ impl Embedder {
             return ollama.embed(texts).await;
         }
         // Fallback to individual hash embeddings
-        Ok(texts.iter().map(|t| self.hash_embed(t, TEXT_EMBEDDING_DIM)).collect())
+        Ok(texts
+            .iter()
+            .map(|t| self.hash_embed(t, TEXT_EMBEDDING_DIM))
+            .collect())
     }
 
     /// Embed text using OpenAI API
@@ -304,7 +309,8 @@ impl Embedder {
             input: truncated,
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.openai.com/v1/embeddings")
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -315,7 +321,10 @@ impl Embedder {
 
         if !response.status().is_success() {
             let status = response.status();
-            warn!("OpenAI embedding failed with status {}, falling back to local", status);
+            warn!(
+                "OpenAI embedding failed with status {}, falling back to local",
+                status
+            );
             return Ok(self.hash_embed(text, TEXT_EMBEDDING_DIM));
         }
 
@@ -324,7 +333,8 @@ impl Embedder {
             .await
             .map_err(|e| HippoError::Other(format!("Failed to parse embedding response: {}", e)))?;
 
-        embed_response.data
+        embed_response
+            .data
             .first()
             .map(|d| d.embedding.clone())
             .ok_or_else(|| HippoError::Other("No embedding in response".to_string()))
@@ -441,7 +451,8 @@ impl VectorIndex {
 
     /// Search for similar vectors
     pub fn search(&self, query: &[f32], top_k: usize) -> Vec<(String, f32)> {
-        let embeddings_vec: Vec<(String, Vec<f32>)> = self.embeddings
+        let embeddings_vec: Vec<(String, Vec<f32>)> = self
+            .embeddings
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
