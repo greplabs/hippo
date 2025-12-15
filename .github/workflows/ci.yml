@@ -194,3 +194,25 @@ jobs:
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare artifacts (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p artifacts
+          cp target/${{ matrix.target }}/release/hippo-tauri artifacts/hippo-${{ matrix.target }} || true
+          cp target/${{ matrix.target }}/release/hippo-cli artifacts/hippo-cli-${{ matrix.target }} || true
+
+      - name: Prepare artifacts (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir artifacts
+          copy target\${{ matrix.target }}\release\hippo-tauri.exe artifacts\hippo-${{ matrix.target }}.exe
+          copy target\${{ matrix.target }}\release\hippo-cli.exe artifacts\hippo-cli-${{ matrix.target }}.exe
+        shell: cmd
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hippo-${{ matrix.target }}
+          path: artifacts/*
+          retention-days: 30
