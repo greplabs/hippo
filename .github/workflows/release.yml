@@ -74,7 +74,7 @@ jobs:
         run: |
           mkdir -p release
           cp target/${{ matrix.target }}/release/hippo-tauri release/${{ matrix.asset_name }}
-          cp target/${{ matrix.target }}/release/hippo-cli release/hippo-cli-${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/hippo release/hippo-cli-${{ matrix.target }}
           chmod +x release/*
 
       - name: Prepare artifact (Windows)
@@ -82,7 +82,7 @@ jobs:
         run: |
           mkdir release
           copy target\${{ matrix.target }}\release\hippo-tauri.exe release\${{ matrix.asset_name }}
-          copy target\${{ matrix.target }}\release\hippo-cli.exe release\hippo-cli-${{ matrix.target }}.exe
+          copy target\${{ matrix.target }}\release\hippo.exe release\hippo-cli-${{ matrix.target }}.exe
         shell: cmd
 
       - name: Upload artifact
