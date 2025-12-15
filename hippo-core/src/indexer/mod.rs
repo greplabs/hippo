@@ -13,10 +13,15 @@ use crate::{
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::fs::File;
 use tokio::sync::mpsc;
 use walkdir::WalkDir;
 use tracing::{info, warn, debug, instrument};
 use rayon::prelude::*;
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::probe::Hint;
 
 pub mod extractors;
 pub mod code_parser;
@@ -358,16 +363,18 @@ impl Indexer {
             
             // Videos
             "mp4" | "mov" | "avi" | "mkv" | "webm" | "m4v" => {
+                let duration_ms = Self::extract_video_duration(path).unwrap_or(0);
                 MemoryKind::Video {
-                    duration_ms: 0, // TODO: Extract with ffprobe or similar
+                    duration_ms,
                     format: ext.clone(),
                 }
             }
             
             // Audio
             "mp3" | "wav" | "flac" | "m4a" | "ogg" | "aac" => {
+                let duration_ms = Self::extract_audio_duration(path).unwrap_or(0);
                 MemoryKind::Audio {
-                    duration_ms: 0,
+                    duration_ms,
                     format: ext.clone(),
                 }
             }
@@ -440,6 +447,65 @@ impl Indexer {
             "xml" => "xml",
             _ => "unknown",
         }.to_string()
+    }
+
+    /// Extract audio duration in milliseconds using symphonia
+    fn extract_audio_duration(path: &Path) -> Option<u64> {
+        let file = File::open(path).ok()?;
+        let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+        // Create a hint to help the format registry guess the format
+        let mut hint = Hint::new();
+        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            hint.with_extension(ext);
+        }
+
+        let format_opts = FormatOptions::default();
+        let metadata_opts = MetadataOptions::default();
+
+        // Probe the media source
+        let probed = symphonia::default::get_probe()
+            .format(&hint, mss, &format_opts, &metadata_opts)
+            .ok()?;
+
+        let format = probed.format;
+
+        // Get the default track
+        let track = format.default_track()?;
+
+        // Calculate duration from codec params
+        let time_base = track.codec_params.time_base?;
+        let n_frames = track.codec_params.n_frames?;
+
+        // Convert to milliseconds
+        let duration_secs = time_base.calc_time(n_frames);
+        let duration_ms = (duration_secs.seconds as f64 + duration_secs.frac) * 1000.0;
+
+        Some(duration_ms as u64)
+    }
+
+    /// Extract video duration using ffprobe (requires ffmpeg to be installed)
+    fn extract_video_duration(path: &Path) -> Option<u64> {
+        use std::process::Command;
+
+        let output = Command::new("ffprobe")
+            .args([
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+            ])
+            .arg(path)
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        let duration_str = String::from_utf8_lossy(&output.stdout);
+        let duration_secs: f64 = duration_str.trim().parse().ok()?;
+
+        Some((duration_secs * 1000.0) as u64)
     }
 }
 

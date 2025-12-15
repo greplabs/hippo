@@ -26,6 +26,7 @@ walkdir = { workspace = true }
 mime_guess = { workspace = true }
 image = { workspace = true }
 kamadak-exif = { workspace = true }
+symphonia = { workspace = true }
 
 # Code parsing
 tree-sitter = { workspace = true }
