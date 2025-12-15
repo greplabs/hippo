@@ -115,13 +115,11 @@ impl ThumbnailManager {
     /// Clear all thumbnails from the cache
     pub fn clear_cache(&self) -> Result<()> {
         if self.cache_dir.exists() {
-            for entry in fs::read_dir(&self.cache_dir)? {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.is_file() {
-                        if let Err(e) = fs::remove_file(&path) {
-                            warn!("Failed to delete thumbnail {:?}: {}", path, e);
-                        }
+            for entry in fs::read_dir(&self.cache_dir)?.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Err(e) = fs::remove_file(&path) {
+                        warn!("Failed to delete thumbnail {:?}: {}", path, e);
                     }
                 }
             }
@@ -135,13 +133,11 @@ impl ThumbnailManager {
         let mut total_size = 0;
 
         if self.cache_dir.exists() {
-            for entry in fs::read_dir(&self.cache_dir)? {
-                if let Ok(entry) = entry {
-                    if entry.path().is_file() {
-                        count += 1;
-                        if let Ok(meta) = entry.metadata() {
-                            total_size += meta.len();
-                        }
+            for entry in fs::read_dir(&self.cache_dir)?.flatten() {
+                if entry.path().is_file() {
+                    count += 1;
+                    if let Ok(meta) = entry.metadata() {
+                        total_size += meta.len();
                     }
                 }
             }

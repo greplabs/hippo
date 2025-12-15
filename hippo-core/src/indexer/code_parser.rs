@@ -71,10 +71,10 @@ impl CodeParser {
 
                 // Extract crate name for dependencies
                 if let Some(crate_name) = import.split("::").next() {
-                    if !["std", "core", "alloc", "self", "super", "crate"].contains(&crate_name) {
-                        if !info.dependencies.contains(&crate_name.to_string()) {
-                            info.dependencies.push(crate_name.to_string());
-                        }
+                    if !["std", "core", "alloc", "self", "super", "crate"].contains(&crate_name)
+                        && !info.dependencies.contains(&crate_name.to_string())
+                    {
+                        info.dependencies.push(crate_name.to_string());
                     }
                 }
             }
@@ -180,12 +180,7 @@ impl CodeParser {
                 info.imports.push(import.clone());
 
                 // Extract package name
-                if let Some(pkg) = import
-                    .split('.')
-                    .next()
-                    .map(|s| s.split(' ').next())
-                    .flatten()
-                {
+                if let Some(pkg) = import.split('.').next().and_then(|s| s.split(' ').next()) {
                     if !info.dependencies.contains(&pkg.to_string()) {
                         info.dependencies.push(pkg.to_string());
                     }
@@ -255,10 +250,11 @@ impl CodeParser {
                         .split('/')
                         .next()
                         .unwrap_or("");
-                    if !pkg.starts_with('.') && !pkg.is_empty() {
-                        if !info.dependencies.contains(&pkg.to_string()) {
-                            info.dependencies.push(pkg.to_string());
-                        }
+                    if !pkg.starts_with('.')
+                        && !pkg.is_empty()
+                        && !info.dependencies.contains(&pkg.to_string())
+                    {
+                        info.dependencies.push(pkg.to_string());
                     }
                 }
             }
@@ -334,7 +330,7 @@ impl CodeParser {
                 if !import.is_empty() {
                     info.imports.push(import.clone());
                     // Extract package name
-                    if let Some(pkg) = import.split('/').last() {
+                    if let Some(pkg) = import.split('/').next_back() {
                         if !info.dependencies.contains(&pkg.to_string()) {
                             info.dependencies.push(pkg.to_string());
                         }
@@ -427,7 +423,7 @@ fn extract_arrow_fn_name(line: &str) -> Option<String> {
     // "const foo = () =>" or "export const foo = async () =>"
     let start = line.find("const ")? + 6;
     let rest = &line[start..];
-    let end = rest.find(|c: char| c == ' ' || c == '=')?;
+    let end = rest.find([' ', '='])?;
     Some(rest[..end].to_string())
 }
 
@@ -478,8 +474,8 @@ fn extract_js_export_name(line: &str) -> Option<String> {
         return Some(name_part.split('=').next()?.trim().to_string());
     }
 
-    if rest.starts_with("function ") {
-        return extract_js_fn_name(&format!("function {}", &rest[9..]));
+    if let Some(stripped) = rest.strip_prefix("function ") {
+        return extract_js_fn_name(&format!("function {}", stripped));
     }
 
     if rest.starts_with("class ") {

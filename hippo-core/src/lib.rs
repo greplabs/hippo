@@ -403,9 +403,7 @@ impl Hippo {
         min_size: u64,
     ) -> Result<(Vec<DuplicateGroup>, DuplicateSummary)> {
         let memories = self.storage.get_all_memories().await?;
-        Ok(duplicates::find_duplicates_by_scanning(
-            &memories, min_size,
-        )?)
+        duplicates::find_duplicates_by_scanning(&memories, min_size)
     }
 
     /// Get all memories (for duplicate scanning)

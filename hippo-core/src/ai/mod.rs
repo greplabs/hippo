@@ -867,18 +867,13 @@ pub struct CodeSummary {
 // ==================== Unified AI Client ====================
 
 /// AI provider selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AiProvider {
     /// Use Anthropic's Claude API (requires API key)
     Claude,
     /// Use local Ollama instance (privacy-first, no API key needed)
+    #[default]
     Ollama,
-}
-
-impl Default for AiProvider {
-    fn default() -> Self {
-        AiProvider::Ollama // Default to local for privacy
-    }
 }
 
 /// Configuration for the unified AI client

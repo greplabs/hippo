@@ -76,7 +76,7 @@ pub fn compute_file_hash(path: &Path) -> Result<String> {
         hasher.update(&buffer[..n]);
 
         // Include file size in hash for large files
-        hasher.update(&metadata.len().to_le_bytes());
+        hasher.update(metadata.len().to_le_bytes());
     } else {
         // Hash entire file for smaller files
         let mut buffer = vec![0u8; CHUNK_SIZE];
@@ -107,7 +107,7 @@ pub fn compute_quick_hash(path: &Path) -> Result<String> {
     let mut hasher = Sha256::new();
 
     // Include file size
-    hasher.update(&metadata.len().to_le_bytes());
+    hasher.update(metadata.len().to_le_bytes());
 
     // Read first 4KB
     let mut reader = std::io::BufReader::new(file);
@@ -168,7 +168,7 @@ pub fn find_duplicates(
     summary.duplicate_groups = duplicate_groups.len();
 
     // Sort by wasted space (most wasted first)
-    duplicate_groups.sort_by(|a, b| b.wasted_bytes().cmp(&a.wasted_bytes()));
+    duplicate_groups.sort_by_key(|g| std::cmp::Reverse(g.wasted_bytes()));
 
     (duplicate_groups, summary)
 }
@@ -241,7 +241,7 @@ pub fn find_duplicates_by_scanning(
     summary.duplicate_groups = duplicate_groups.len();
 
     // Sort by wasted space (most wasted first)
-    duplicate_groups.sort_by(|a, b| b.wasted_bytes().cmp(&a.wasted_bytes()));
+    duplicate_groups.sort_by_key(|g| std::cmp::Reverse(g.wasted_bytes()));
 
     Ok((duplicate_groups, summary))
 }

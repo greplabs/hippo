@@ -367,7 +367,7 @@ impl KnowledgeGraph {
                     for import in &code_info.imports {
                         // Try to resolve import to a file in our graph
                         if let Some(target_id) =
-                            resolve_import(&import, &file_to_id, &node.path, &node.language)
+                            resolve_import(import, &file_to_id, &node.path, &node.language)
                         {
                             if target_id != node.id {
                                 edges.push(CodeGraphEdge {
