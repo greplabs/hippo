@@ -14,8 +14,8 @@ pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 /// Default embedding model
 pub const DEFAULT_EMBEDDING_MODEL: &str = "nomic-embed-text";
 
-/// Default generation model
-pub const DEFAULT_GENERATION_MODEL: &str = "llama3.2:3b";
+/// Default generation model (qwen2:0.5b is fast and lightweight - 352MB)
+pub const DEFAULT_GENERATION_MODEL: &str = "qwen2:0.5b";
 
 /// Embedding dimension for nomic-embed-text
 pub const NOMIC_EMBED_DIM: usize = 768;
