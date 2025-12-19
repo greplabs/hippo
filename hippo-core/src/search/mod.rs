@@ -185,7 +185,7 @@ impl Searcher {
         })
     }
 
-    /// Perform semantic search using embeddings
+    /// Perform semantic search using embeddings (Qdrant or SQLite fallback)
     pub async fn semantic_search(&self, query: &str, limit: usize) -> Result<SearchResults> {
         // Generate query embedding
         let query_embedding = match self.embedder.embed_query(query).await {
@@ -205,11 +205,11 @@ impl Searcher {
             }
         };
 
-        // Get all stored embeddings
-        let stored_embeddings = self.storage.get_all_embeddings().await?;
+        // Use Qdrant-backed search (with SQLite fallback)
+        let scored = self.storage.search_vectors(query_embedding, None, limit).await?;
 
-        if stored_embeddings.is_empty() {
-            // No embeddings yet, fall back to text search
+        if scored.is_empty() {
+            // No results, fall back to text search
             return self
                 .search(SearchQuery {
                     text: Some(query.to_string()),
@@ -218,16 +218,6 @@ impl Searcher {
                 })
                 .await;
         }
-
-        // Calculate similarities
-        let mut scored: Vec<(MemoryId, f32)> = stored_embeddings
-            .iter()
-            .map(|(id, emb)| (*id, Embedder::similarity(&query_embedding, emb)))
-            .collect();
-
-        // Sort by similarity (highest first)
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        scored.truncate(limit);
 
         // Fetch full memories for top results
         let mut results = Vec::new();
@@ -243,6 +233,80 @@ impl Searcher {
                 });
             }
         }
+
+        let total = results.len();
+        Ok(SearchResults {
+            memories: results,
+            total_count: total,
+            suggested_tags: vec![],
+            clusters: vec![],
+        })
+    }
+
+    /// Hybrid search combining semantic and keyword scoring
+    pub async fn hybrid_search(&self, query: &str, limit: usize) -> Result<SearchResults> {
+        const SEMANTIC_WEIGHT: f32 = 0.7;
+        const KEYWORD_WEIGHT: f32 = 0.3;
+
+        // Get semantic results
+        let semantic_results = self.semantic_search(query, limit * 2).await?;
+
+        // Get keyword results
+        let keyword_results = self
+            .search(SearchQuery {
+                text: Some(query.to_string()),
+                limit: limit * 2,
+                ..Default::default()
+            })
+            .await?;
+
+        // Combine and score
+        let mut combined: std::collections::HashMap<MemoryId, (Memory, f32, Vec<Highlight>)> =
+            std::collections::HashMap::new();
+
+        // Add semantic results with weighted score
+        for result in semantic_results.memories {
+            combined.insert(
+                result.memory.id,
+                (
+                    result.memory,
+                    result.score * SEMANTIC_WEIGHT,
+                    result.highlights,
+                ),
+            );
+        }
+
+        // Add/update keyword results with weighted score
+        for result in keyword_results.memories {
+            combined
+                .entry(result.memory.id)
+                .and_modify(|(_, score, highlights)| {
+                    *score += result.score * KEYWORD_WEIGHT;
+                    highlights.extend(result.highlights.clone());
+                })
+                .or_insert((
+                    result.memory,
+                    result.score * KEYWORD_WEIGHT,
+                    result.highlights,
+                ));
+        }
+
+        // Convert back to results and sort
+        let mut results: Vec<MemorySearchResult> = combined
+            .into_iter()
+            .map(|(_, (memory, score, highlights))| MemorySearchResult {
+                memory,
+                score,
+                highlights,
+            })
+            .collect();
+
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        results.truncate(limit);
 
         let total = results.len();
         Ok(SearchResults {

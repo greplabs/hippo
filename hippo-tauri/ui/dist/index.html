@@ -906,6 +906,8 @@
         <p class="section-title">Sources</p>
         <div id="sourcesList"></div>
         <button class="add-btn" id="addBtn">+ Add Folder</button>
+        <div style="margin-top:16px;" id="collectionsSection"></div>
+        <button class="sidebar-btn" id="discoverBtn" style="margin-top:8px;"><span class="icon icon-sm" style="color:#8b5cf6;">&#10024;</span> Discover Collections</button>
       </div>
       <div class="sidebar-footer">
         <p id="statsText" style="margin-bottom:8px;">Loading...</p>
@@ -1010,6 +1012,8 @@
           </div>
           <div id="aiActionResults" style="display:none;"></div>
         </div>
+        <div id="virtualPathsSection"></div>
+        <div id="similarSection"></div>
       </div>
     </aside>
   </div>
@@ -2037,6 +2041,13 @@
       var chatOpen = false;
       var symbolResults = [];
 
+      // Collections & Organization state
+      var collections = [];
+      var virtualPaths = [];
+      var similarMemories = [];
+      var qdrantAvailable = false;
+      var showCollections = false;
+
       // Apply dark mode on load
       if (darkMode) document.body.classList.add('dark');
 
@@ -2381,15 +2392,20 @@
             invoke('get_stats'),
             invoke('get_sources'),
             invoke('get_tags'),
-            invoke('search', { query: '', tags: [] })
+            invoke('search', { query: '', tags: [] }),
+            invoke('list_collections').catch(function() { return []; }),
+            invoke('get_qdrant_stats').catch(function() { return { available: false }; })
           ]).then(function(r) {
             document.getElementById('statsText').textContent = (r[0] ? r[0].total_memories : 0) + ' memories';
             sources = r[1] || [];
             allTags = r[2] || [];
             memories = (r[3].memories || []).map(function(x) { return x.memory; });
+            collections = r[4] || [];
+            qdrantAvailable = r[5] && r[5].available;
             renderSources();
             renderTagBar();
             renderFiles();
+            renderCollections();
           }).catch(function(e) {
             showToast('Load failed: ' + e, 'error');
           });
@@ -2456,6 +2472,127 @@
               renderTagBar();
               search(document.getElementById('searchInput').value);
             };
+          });
+        }
+
+        function renderCollections() {
+          var container = document.getElementById('collectionsSection');
+          if (!container) return;
+
+          if (collections.length === 0) {
+            container.innerHTML = '<div class="section-title">COLLECTIONS</div><p style="font-size:12px;color:#a8a29e;padding:8px 12px;">No collections yet</p>';
+            return;
+          }
+
+          var html = '<div class="section-title">COLLECTIONS</div>';
+          collections.forEach(function(c) {
+            var count = c.memory_ids ? c.memory_ids.length : 0;
+            html += '<div class="source-item collection-item" data-collection="' + c.id + '">';
+            html += '<span class="icon icon-sm" style="color:#8b5cf6;">' + icons.folder + '</span>';
+            html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(c.name) + '</span>';
+            html += '<span style="font-size:11px;color:#a8a29e;">' + count + '</span>';
+            html += '</div>';
+          });
+          container.innerHTML = html;
+
+          document.querySelectorAll('.collection-item').forEach(function(item) {
+            item.onclick = function() {
+              var colId = item.dataset.collection;
+              filterByCollection(colId);
+            };
+          });
+        }
+
+        function filterByCollection(collectionId) {
+          var col = collections.find(function(c) { return c.id === collectionId; });
+          if (!col || !col.memory_ids) return;
+
+          memories = memories.filter(function(m) {
+            return col.memory_ids.indexOf(m.id) !== -1;
+          });
+          renderFiles();
+          showToast('Filtered to "' + col.name + '"', 'success');
+        }
+
+        function loadVirtualPaths(memoryId) {
+          invoke('get_virtual_paths', { memoryId: memoryId }).then(function(paths) {
+            virtualPaths = paths || [];
+            renderVirtualPaths();
+          }).catch(function() {
+            virtualPaths = [];
+          });
+        }
+
+        function loadSimilarMemories(memoryId) {
+          invoke('find_similar_memories', { memoryId: memoryId, limit: 5 }).then(function(results) {
+            similarMemories = results || [];
+            renderSimilarMemories();
+          }).catch(function() {
+            similarMemories = [];
+          });
+        }
+
+        function renderVirtualPaths() {
+          var container = document.getElementById('virtualPathsSection');
+          if (!container) return;
+
+          if (virtualPaths.length === 0) {
+            container.innerHTML = '';
+            return;
+          }
+
+          var html = '<div class="detail-section"><h4>Virtual Paths</h4>';
+          virtualPaths.forEach(function(vp) {
+            html += '<div class="virtual-path" style="font-size:12px;padding:4px 0;color:#57534e;">';
+            html += '<span class="icon icon-sm" style="margin-right:4px;">' + icons.folder + '</span>';
+            html += esc(vp.path);
+            html += ' <span style="color:#a8a29e;">(' + Math.round(vp.confidence * 100) + '%)</span>';
+            html += '</div>';
+          });
+          html += '</div>';
+          container.innerHTML = html;
+        }
+
+        function renderSimilarMemories() {
+          var container = document.getElementById('similarSection');
+          if (!container) return;
+
+          if (similarMemories.length === 0) {
+            container.innerHTML = '';
+            return;
+          }
+
+          var html = '<div class="detail-section"><h4>Similar Files</h4>';
+          similarMemories.forEach(function(item) {
+            var mem = item.memory;
+            var score = Math.round((item.similarity || 0) * 100);
+            var name = mem.path.split('/').pop();
+            html += '<div class="similar-item" style="font-size:12px;padding:4px 0;cursor:pointer;" data-id="' + mem.id + '">';
+            html += '<span class="icon icon-sm" style="margin-right:4px;">' + getTypeIcon(getType(mem.kind)) + '</span>';
+            html += esc(name);
+            html += ' <span style="color:#a8a29e;">(' + score + '% match)</span>';
+            html += '</div>';
+          });
+          html += '</div>';
+          container.innerHTML = html;
+
+          document.querySelectorAll('.similar-item').forEach(function(item) {
+            item.onclick = function() {
+              var memId = item.dataset.id;
+              var mem = memories.find(function(m) { return m.id === memId; });
+              if (mem) selectMemory(mem);
+            };
+          });
+        }
+
+        function discoverCollections() {
+          showToast('Discovering collections...', 'info');
+          invoke('discover_collections').then(function(newCols) {
+            collections = collections.concat(newCols || []);
+            renderCollections();
+            showToast('Discovered ' + (newCols ? newCols.length : 0) + ' collections', 'success');
+          }).catch(function(e) {
+            showToast('Discovery failed: ' + e, 'error');
           });
         }
 
@@ -3890,6 +4027,10 @@
           } else {
             preview.innerHTML = getIcon(mem.kind, '2xl');
           }
+
+          // Load virtual paths and similar files
+          loadVirtualPaths(mem.id);
+          loadSimilarMemories(mem.id);
         }
 
         function toggleFavorite(id) {
@@ -3975,6 +4116,10 @@
               }
             });
           }
+        };
+
+        document.getElementById('discoverBtn').onclick = function() {
+          discoverCollections();
         };
 
         document.getElementById('resetBtn').onclick = function() {

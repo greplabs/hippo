@@ -2,14 +2,17 @@
 
 use crate::error::{HippoError, Result};
 use crate::models::*;
+use crate::qdrant::QdrantStorage;
 use crate::HippoConfig;
 use rusqlite::{params, Connection};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use tracing::{debug, info, warn};
 
 #[allow(dead_code)]
 pub struct Storage {
     db: Mutex<Connection>,
+    qdrant: Arc<QdrantStorage>,
     qdrant_url: String,
 }
 
@@ -21,10 +24,25 @@ impl Storage {
         // Initialize schema
         Self::init_schema(&conn)?;
 
+        // Initialize Qdrant
+        let qdrant = QdrantStorage::new(&config.qdrant_url).await?;
+        if qdrant.is_available().await {
+            qdrant.ensure_collections().await?;
+            info!("Qdrant vector storage initialized");
+        } else {
+            warn!("Qdrant not available, using SQLite fallback for embeddings");
+        }
+
         Ok(Self {
             db: Mutex::new(conn),
+            qdrant: Arc::new(qdrant),
             qdrant_url: config.qdrant_url.clone(),
         })
+    }
+
+    /// Get the Qdrant storage for direct access
+    pub fn qdrant(&self) -> &Arc<QdrantStorage> {
+        &self.qdrant
     }
 
     fn init_schema(conn: &Connection) -> Result<()> {
@@ -639,13 +657,119 @@ impl Storage {
 
     // === Vector Operations ===
 
+    /// Find similar memories using Qdrant vector search
     pub async fn find_similar(
         &self,
-        _memory_id: MemoryId,
-        _limit: usize,
+        memory_id: MemoryId,
+        limit: usize,
     ) -> Result<Vec<(MemoryId, f32)>> {
-        // TODO: Query Qdrant for similar vectors
-        Ok(vec![])
+        // Try Qdrant first
+        if self.qdrant.is_available().await {
+            // Get the memory to know its kind
+            if let Some(memory) = self.get_memory(memory_id).await? {
+                // Get embedding from SQLite
+                if let Some(embedding) = self.get_embedding(memory_id).await? {
+                    return self.qdrant.find_similar(memory_id, embedding, &memory.kind, limit).await;
+                }
+            }
+        }
+
+        // Fallback to SQLite-based similarity search
+        self.find_similar_sqlite(memory_id, limit).await
+    }
+
+    /// SQLite fallback for similarity search
+    async fn find_similar_sqlite(
+        &self,
+        memory_id: MemoryId,
+        limit: usize,
+    ) -> Result<Vec<(MemoryId, f32)>> {
+        // Get target embedding
+        let target = match self.get_embedding(memory_id).await? {
+            Some(e) => e,
+            None => return Ok(vec![]),
+        };
+
+        // Get all embeddings
+        let all = self.get_all_embeddings().await?;
+
+        // Calculate cosine similarity for each
+        let mut scored: Vec<(MemoryId, f32)> = all
+            .into_iter()
+            .filter(|(id, _)| *id != memory_id)
+            .map(|(id, emb)| {
+                let similarity = cosine_similarity(&target, &emb);
+                (id, similarity)
+            })
+            .collect();
+
+        // Sort by similarity descending
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+
+        Ok(scored)
+    }
+
+    /// Search vectors using Qdrant
+    pub async fn search_vectors(
+        &self,
+        query_embedding: Vec<f32>,
+        kind_filter: Option<&MemoryKind>,
+        limit: usize,
+    ) -> Result<Vec<(MemoryId, f32)>> {
+        // Try Qdrant first
+        if self.qdrant.is_available().await {
+            let kind_str = kind_filter.map(|k| match k {
+                MemoryKind::Image { .. } => "image",
+                MemoryKind::Code { .. } => "code",
+                _ => "text",
+            });
+            return self.qdrant.search(query_embedding.clone(), kind_str, limit).await;
+        }
+
+        // Fallback to SQLite-based search
+        self.search_vectors_sqlite(&query_embedding, limit).await
+    }
+
+    /// SQLite fallback for vector search
+    async fn search_vectors_sqlite(
+        &self,
+        query: &[f32],
+        limit: usize,
+    ) -> Result<Vec<(MemoryId, f32)>> {
+        let all = self.get_all_embeddings().await?;
+
+        let mut scored: Vec<(MemoryId, f32)> = all
+            .into_iter()
+            .map(|(id, emb)| {
+                let similarity = cosine_similarity(query, &emb);
+                (id, similarity)
+            })
+            .collect();
+
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+
+        Ok(scored)
+    }
+
+    /// Store embedding in both SQLite and Qdrant
+    pub async fn store_embedding_with_qdrant(
+        &self,
+        memory_id: MemoryId,
+        embedding: &[f32],
+        model: &str,
+        kind: &MemoryKind,
+    ) -> Result<()> {
+        // Store in SQLite
+        self.store_embedding(memory_id, embedding, model).await?;
+
+        // Store in Qdrant if available
+        if self.qdrant.is_available().await {
+            self.qdrant.upsert(memory_id, embedding.to_vec(), kind).await?;
+        }
+
+        Ok(())
     }
 
     // === Fast SQL Search ===
@@ -1085,4 +1209,26 @@ impl Storage {
             last_updated: chrono::Utc::now(),
         })
     }
+
+    /// Get Qdrant statistics
+    pub async fn qdrant_stats(&self) -> Result<crate::qdrant::QdrantStats> {
+        self.qdrant.stats().await
+    }
+}
+
+/// Calculate cosine similarity between two vectors
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+
+    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return 0.0;
+    }
+
+    dot / (norm_a * norm_b)
 }

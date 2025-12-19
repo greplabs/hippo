@@ -69,6 +69,8 @@ pub mod graph;
 pub mod indexer;
 pub mod models;
 pub mod ollama;
+pub mod organization;
+pub mod qdrant;
 pub mod search;
 pub mod sources;
 pub mod storage;
@@ -112,6 +114,15 @@ pub use ollama::{
     RecommendedModels,
 };
 
+// Re-export organization types
+pub use organization::{
+    CollectionType, FileMap, FilePointer, OrganizationReason, OrganizationStats, Organizer,
+    OrganizerConfig, VirtualCollection, VirtualPath,
+};
+
+// Re-export qdrant types
+pub use qdrant::QdrantStats;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -126,6 +137,7 @@ pub struct Hippo {
     graph: Arc<RwLock<graph::KnowledgeGraph>>,
     watcher: Option<Arc<watcher::FileWatcher>>,
     thumbnail_manager: Arc<thumbnails::ThumbnailManager>,
+    organizer: Arc<organization::Organizer>,
     config: HippoConfig,
 }
 
@@ -199,6 +211,12 @@ impl Hippo {
         // Initialize thumbnail manager
         let thumbnail_manager = Arc::new(thumbnails::ThumbnailManager::new()?);
 
+        // Initialize organizer
+        let organizer = Arc::new(organization::Organizer::new(
+            storage.clone(),
+            embedder.clone(),
+        ));
+
         Ok(Self {
             storage,
             indexer,
@@ -207,6 +225,7 @@ impl Hippo {
             graph,
             watcher,
             thumbnail_manager,
+            organizer,
             config,
         })
     }
@@ -446,6 +465,90 @@ impl Hippo {
     /// Get the thumbnail manager for direct access
     pub fn thumbnail_manager(&self) -> &Arc<thumbnails::ThumbnailManager> {
         &self.thumbnail_manager
+    }
+
+    // === Organization ===
+
+    /// Get virtual paths for a memory (logical organization without moving files)
+    pub async fn get_virtual_paths(&self, memory_id: MemoryId) -> Result<Vec<organization::VirtualPath>> {
+        self.organizer.get_virtual_paths(memory_id).await
+    }
+
+    /// List all virtual collections
+    pub async fn list_collections(&self) -> Result<Vec<organization::VirtualCollection>> {
+        self.organizer.list_collections().await
+    }
+
+    /// Get collections a memory belongs to
+    pub async fn get_collections_for_memory(&self, memory_id: MemoryId) -> Result<Vec<organization::VirtualCollection>> {
+        self.organizer.get_collections_for_memory(memory_id).await
+    }
+
+    /// Create a custom collection
+    pub async fn create_collection(
+        &self,
+        name: &str,
+        description: Option<String>,
+        memory_ids: Vec<MemoryId>,
+    ) -> Result<organization::VirtualCollection> {
+        self.organizer.create_collection(name, description, memory_ids).await
+    }
+
+    /// Add memories to a collection
+    pub async fn add_to_collection(&self, collection_id: uuid::Uuid, memory_ids: Vec<MemoryId>) -> Result<()> {
+        self.organizer.add_to_collection(collection_id, memory_ids).await
+    }
+
+    /// Remove a collection
+    pub async fn remove_collection(&self, collection_id: uuid::Uuid) -> Result<()> {
+        self.organizer.remove_collection(collection_id).await
+    }
+
+    /// Auto-discover topic collections from AI tags
+    pub async fn discover_collections(&self) -> Result<Vec<organization::VirtualCollection>> {
+        self.organizer.discover_topic_collections().await
+    }
+
+    /// Get similar file suggestions for grouping
+    pub async fn suggest_groupings(&self, memory_id: MemoryId) -> Result<Vec<organization::VirtualCollection>> {
+        self.organizer.suggest_groupings(memory_id).await
+    }
+
+    /// Get organization statistics
+    pub async fn organization_stats(&self) -> Result<organization::OrganizationStats> {
+        self.organizer.get_organization_stats().await
+    }
+
+    /// Organize a memory (generate virtual paths and add to file map)
+    pub async fn organize_memory(&self, memory: &Memory) -> Result<organization::FilePointer> {
+        self.organizer.add_memory(memory).await
+    }
+
+    /// Find memories by virtual path pattern
+    pub async fn find_by_virtual_path(&self, pattern: &str) -> Result<Vec<MemoryId>> {
+        self.organizer.find_by_virtual_path(pattern).await
+    }
+
+    // === Similarity Search ===
+
+    /// Find similar memories using vector search
+    pub async fn find_similar(&self, memory_id: MemoryId, limit: usize) -> Result<Vec<(MemoryId, f32)>> {
+        self.storage.find_similar(memory_id, limit).await
+    }
+
+    /// Perform hybrid search (semantic + keyword)
+    pub async fn hybrid_search(&self, query: &str, limit: usize) -> Result<SearchResults> {
+        self.searcher.hybrid_search(query, limit).await
+    }
+
+    /// Get Qdrant statistics
+    pub async fn qdrant_stats(&self) -> Result<qdrant::QdrantStats> {
+        self.storage.qdrant_stats().await
+    }
+
+    /// Get the organizer for direct access
+    pub fn organizer(&self) -> &Arc<organization::Organizer> {
+        &self.organizer
     }
 }
 
