@@ -675,11 +675,142 @@ fn capitalize_first(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     #[test]
     fn test_capitalize_first() {
         assert_eq!(capitalize_first("beach"), "Beach");
         assert_eq!(capitalize_first("SUNSET"), "SUNSET");
         assert_eq!(capitalize_first(""), "");
+        assert_eq!(capitalize_first("a"), "A");
+    }
+
+    #[test]
+    fn test_file_map_default() {
+        let map = FileMap::default();
+        assert_eq!(map.version, 1);
+        assert!(map.pointers.is_empty());
+        assert!(map.collections.is_empty());
+        assert!(map.path_index.is_empty());
+    }
+
+    #[test]
+    fn test_organizer_config_default() {
+        let config = OrganizerConfig::default();
+        assert_eq!(config.similarity_threshold, 0.75);
+        assert_eq!(config.temporal_window_hours, 24);
+        assert_eq!(config.location_radius_km, 50.0);
+        assert_eq!(config.min_collection_size, 3);
+        assert!(config.auto_organize);
+        assert_eq!(config.date_format, "%Y/%m");
+    }
+
+    #[test]
+    fn test_virtual_collection_serialization() {
+        let collection = VirtualCollection {
+            id: uuid::Uuid::new_v4(),
+            name: "Test Collection".to_string(),
+            description: Some("A test collection".to_string()),
+            collection_type: CollectionType::Custom,
+            memory_ids: vec![],
+            cover_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            auto_generated: false,
+            confidence: 1.0,
+            metadata: HashMap::new(),
+        };
+
+        let json = serde_json::to_string(&collection).unwrap();
+        let parsed: VirtualCollection = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "Test Collection");
+        assert_eq!(parsed.confidence, 1.0);
+    }
+
+    #[test]
+    fn test_collection_type_serialization() {
+        let temporal = CollectionType::Temporal {
+            start: Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            end: Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 59).unwrap(),
+        };
+        let json = serde_json::to_string(&temporal).unwrap();
+        assert!(json.contains("Temporal"));
+
+        let location = CollectionType::Location {
+            center_lat: 40.7128,
+            center_lon: -74.0060,
+            radius_km: 10.0,
+        };
+        let json = serde_json::to_string(&location).unwrap();
+        assert!(json.contains("Location"));
+
+        let topic = CollectionType::Topic {
+            keywords: vec!["beach".to_string(), "sunset".to_string()],
+        };
+        let json = serde_json::to_string(&topic).unwrap();
+        assert!(json.contains("Topic"));
+    }
+
+    #[test]
+    fn test_virtual_path_serialization() {
+        let vpath = VirtualPath {
+            path: PathBuf::from("By Date/2024/01"),
+            reason: OrganizationReason::DateBased {
+                date: Utc::now(),
+            },
+            confidence: 0.9,
+        };
+
+        let json = serde_json::to_string(&vpath).unwrap();
+        let parsed: VirtualPath = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.confidence, 0.9);
+    }
+
+    #[test]
+    fn test_file_pointer_serialization() {
+        let pointer = FilePointer {
+            memory_id: uuid::Uuid::new_v4(),
+            original_path: PathBuf::from("/Users/test/photo.jpg"),
+            virtual_paths: vec![],
+            collections: vec![],
+            suggested_location: Some(PathBuf::from("By Date/2024/01")),
+            organization_score: 0.5,
+        };
+
+        let json = serde_json::to_string(&pointer).unwrap();
+        let parsed: FilePointer = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.organization_score, 0.5);
+    }
+
+    #[test]
+    fn test_smart_rule() {
+        let rule = SmartRule {
+            field: "extension".to_string(),
+            operator: RuleOperator::Equals,
+            value: "jpg".to_string(),
+        };
+
+        let json = serde_json::to_string(&rule).unwrap();
+        let parsed: SmartRule = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.field, "extension");
+        assert_eq!(parsed.operator, RuleOperator::Equals);
+    }
+
+    #[test]
+    fn test_organization_stats_serialization() {
+        let stats = OrganizationStats {
+            total_files: 100,
+            total_collections: 5,
+            auto_generated_collections: 3,
+            custom_collections: 2,
+            files_in_collections: 80,
+            average_organization_score: 0.75,
+            virtual_paths_count: 200,
+        };
+
+        let json = serde_json::to_string(&stats).unwrap();
+        let parsed: OrganizationStats = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.total_files, 100);
+        assert_eq!(parsed.average_organization_score, 0.75);
     }
 }

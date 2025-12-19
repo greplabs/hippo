@@ -372,4 +372,68 @@ mod tests {
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     }
+
+    #[tokio::test]
+    async fn test_stats_when_unavailable() {
+        let storage = QdrantStorage::new("http://localhost:9999").await.unwrap();
+        let stats = storage.stats().await.unwrap();
+
+        assert!(!stats.available);
+        assert_eq!(stats.total_vectors, 0);
+        assert!(stats.collections.is_empty());
+    }
+
+    #[test]
+    fn test_get_collection_for_kind() {
+        assert_eq!(
+            QdrantStorage::get_collection_for_kind(&MemoryKind::Image {
+                width: 100,
+                height: 100,
+                format: "jpg".to_string()
+            }),
+            COLLECTION_IMAGES
+        );
+
+        assert_eq!(
+            QdrantStorage::get_collection_for_kind(&MemoryKind::Code {
+                language: "rust".to_string(),
+                lines: 100
+            }),
+            COLLECTION_CODE
+        );
+
+        assert_eq!(
+            QdrantStorage::get_collection_for_kind(&MemoryKind::Document {
+                format: crate::models::DocumentFormat::Pdf,
+                page_count: Some(10)
+            }),
+            COLLECTION_TEXT
+        );
+    }
+
+    #[test]
+    fn test_get_collection_from_str() {
+        assert_eq!(QdrantStorage::get_collection_from_str(Some("image")), COLLECTION_IMAGES);
+        assert_eq!(QdrantStorage::get_collection_from_str(Some("Image")), COLLECTION_IMAGES);
+        assert_eq!(QdrantStorage::get_collection_from_str(Some("code")), COLLECTION_CODE);
+        assert_eq!(QdrantStorage::get_collection_from_str(Some("Code")), COLLECTION_CODE);
+        assert_eq!(QdrantStorage::get_collection_from_str(Some("text")), COLLECTION_TEXT);
+        assert_eq!(QdrantStorage::get_collection_from_str(None), COLLECTION_TEXT);
+    }
+
+    #[tokio::test]
+    async fn test_delete_when_unavailable() {
+        let storage = QdrantStorage::new("http://localhost:9999").await.unwrap();
+        let result = storage.delete(
+            uuid::Uuid::new_v4(),
+            &MemoryKind::Image {
+                width: 100,
+                height: 100,
+                format: "jpg".to_string()
+            }
+        ).await;
+
+        // Should succeed silently when Qdrant is unavailable
+        assert!(result.is_ok());
+    }
 }
