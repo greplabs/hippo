@@ -1389,6 +1389,244 @@ async fn get_recommended_models() -> Result<serde_json::Value, String> {
     }))
 }
 
+// ==================== Organization Features ====================
+
+#[tauri::command]
+async fn list_collections(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Listing collections...");
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let collections = hippo
+        .list_collections()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    println!("[Hippo] Found {} collections", collections.len());
+    serde_json::to_value(collections).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_virtual_paths(
+    memory_id: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Getting virtual paths for: {}", memory_id);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
+    let paths = hippo
+        .get_virtual_paths(id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(paths).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_collections_for_memory(
+    memory_id: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Getting collections for memory: {}", memory_id);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
+    let collections = hippo
+        .get_collections_for_memory(id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(collections).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn create_collection(
+    name: String,
+    description: Option<String>,
+    memory_ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Creating collection: {}", name);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let ids: Vec<MemoryId> = memory_ids
+        .iter()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    let collection = hippo
+        .create_collection(&name, description, ids)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    println!("[Hippo] Collection created: {}", collection.id);
+    serde_json::to_value(collection).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn add_to_collection(
+    collection_id: String,
+    memory_ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    println!("[Hippo] Adding to collection: {}", collection_id);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let cid: uuid::Uuid = collection_id.parse().map_err(|_| "Invalid collection ID")?;
+    let ids: Vec<MemoryId> = memory_ids
+        .iter()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    hippo
+        .add_to_collection(cid, ids)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok("Added to collection".to_string())
+}
+
+#[tauri::command]
+async fn remove_collection(
+    collection_id: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    println!("[Hippo] Removing collection: {}", collection_id);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let cid: uuid::Uuid = collection_id.parse().map_err(|_| "Invalid collection ID")?;
+    hippo
+        .remove_collection(cid)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok("Collection removed".to_string())
+}
+
+#[tauri::command]
+async fn discover_collections(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Discovering collections...");
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let collections = hippo
+        .discover_collections()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    println!("[Hippo] Discovered {} collections", collections.len());
+    serde_json::to_value(collections).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_organization_stats_internal(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Getting organization stats...");
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let stats = hippo
+        .organization_stats()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(stats).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn suggest_groupings(
+    memory_id: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Suggesting groupings for: {}", memory_id);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
+    let suggestions = hippo
+        .suggest_groupings(id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(suggestions).map_err(|e| e.to_string())
+}
+
+// ==================== Similarity Search ====================
+
+#[tauri::command]
+async fn find_similar_memories(
+    memory_id: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Finding similar to: {}", memory_id);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
+    let limit = limit.unwrap_or(10);
+
+    let similar = hippo
+        .find_similar(id, limit)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Fetch full memories for the results
+    let mut results = Vec::new();
+    for (sim_id, score) in similar {
+        if let Ok(Some(memory)) = hippo.get_memory(sim_id).await {
+            results.push(serde_json::json!({
+                "memory": memory,
+                "similarity": score
+            }));
+        }
+    }
+
+    println!("[Hippo] Found {} similar memories", results.len());
+    Ok(serde_json::Value::Array(results))
+}
+
+#[tauri::command]
+async fn hybrid_search(
+    query: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Hybrid search: {}", query);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let limit = limit.unwrap_or(20);
+    let results = hippo
+        .hybrid_search(&query, limit)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    println!("[Hippo] Hybrid search returned {} results", results.memories.len());
+    serde_json::to_value(results).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_qdrant_stats(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Getting Qdrant stats...");
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let stats = hippo
+        .qdrant_stats()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(stats).map_err(|e| e.to_string())
+}
+
 // Helper function for cosine similarity (kept for future semantic search)
 #[allow(dead_code)]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
@@ -1472,6 +1710,20 @@ fn main() {
             ai_suggest_tags,
             ai_find_similar,
             ai_smart_rename,
+            // Organization Features
+            list_collections,
+            get_virtual_paths,
+            get_collections_for_memory,
+            create_collection,
+            add_to_collection,
+            remove_collection,
+            discover_collections,
+            get_organization_stats_internal,
+            suggest_groupings,
+            // Similarity Search
+            find_similar_memories,
+            hybrid_search,
+            get_qdrant_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

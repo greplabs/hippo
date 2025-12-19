@@ -174,9 +174,24 @@ impl Indexer {
         // Store it
         self.storage.upsert_memory(&memory).await?;
 
-        // Embed it
-        if let Err(e) = self.embedder.embed_memory(&memory).await {
-            debug!("Failed to embed memory {}: {}", memory.id, e);
+        // Generate and store embedding
+        match self.embedder.embed_memory(&memory).await {
+            Ok(embedding) => {
+                let model_name = match &memory.kind {
+                    MemoryKind::Image { .. } => "image_embedding",
+                    MemoryKind::Code { .. } => "code_embedding",
+                    _ => "text_embedding",
+                };
+                if let Err(e) = self.storage
+                    .store_embedding_with_qdrant(memory.id, &embedding, model_name, &memory.kind)
+                    .await
+                {
+                    debug!("Failed to store embedding for {}: {}", memory.id, e);
+                }
+            }
+            Err(e) => {
+                debug!("Failed to embed memory {}: {}", memory.id, e);
+            }
         }
 
         info!("Indexed single file: {:?}", path);
@@ -287,10 +302,26 @@ impl Indexer {
                 }
             }
 
-            // Generate embeddings (skip for now - just log)
+            // Generate and store embeddings
             for memory in &memories {
-                if let Err(e) = embedder.embed_memory(memory).await {
-                    debug!("Failed to embed memory {}: {}", memory.id, e);
+                match embedder.embed_memory(memory).await {
+                    Ok(embedding) => {
+                        // Store embedding in SQLite and Qdrant
+                        let model_name = match &memory.kind {
+                            MemoryKind::Image { .. } => "image_embedding",
+                            MemoryKind::Code { .. } => "code_embedding",
+                            _ => "text_embedding",
+                        };
+                        if let Err(e) = storage
+                            .store_embedding_with_qdrant(memory.id, &embedding, model_name, &memory.kind)
+                            .await
+                        {
+                            debug!("Failed to store embedding for {}: {}", memory.id, e);
+                        }
+                    }
+                    Err(e) => {
+                        debug!("Failed to embed memory {}: {}", memory.id, e);
+                    }
                 }
             }
 
