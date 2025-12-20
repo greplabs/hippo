@@ -669,7 +669,10 @@ impl Storage {
             if let Some(memory) = self.get_memory(memory_id).await? {
                 // Get embedding from SQLite
                 if let Some(embedding) = self.get_embedding(memory_id).await? {
-                    return self.qdrant.find_similar(memory_id, embedding, &memory.kind, limit).await;
+                    return self
+                        .qdrant
+                        .find_similar(memory_id, embedding, &memory.kind, limit)
+                        .await;
                 }
             }
         }
@@ -724,7 +727,10 @@ impl Storage {
                 MemoryKind::Code { .. } => "code",
                 _ => "text",
             });
-            return self.qdrant.search(query_embedding.clone(), kind_str, limit).await;
+            return self
+                .qdrant
+                .search(query_embedding.clone(), kind_str, limit)
+                .await;
         }
 
         // Fallback to SQLite-based search
@@ -766,7 +772,9 @@ impl Storage {
 
         // Store in Qdrant if available
         if self.qdrant.is_available().await {
-            self.qdrant.upsert(memory_id, embedding.to_vec(), kind).await?;
+            self.qdrant
+                .upsert(memory_id, embedding.to_vec(), kind)
+                .await?;
         }
 
         Ok(())

@@ -1397,10 +1397,7 @@ async fn list_collections(state: State<'_, AppState>) -> Result<serde_json::Valu
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    let collections = hippo
-        .list_collections()
-        .await
-        .map_err(|e| e.to_string())?;
+    let collections = hippo.list_collections().await.map_err(|e| e.to_string())?;
 
     println!("[Hippo] Found {} collections", collections.len());
     serde_json::to_value(collections).map_err(|e| e.to_string())
@@ -1453,10 +1450,7 @@ async fn create_collection(
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    let ids: Vec<MemoryId> = memory_ids
-        .iter()
-        .filter_map(|s| s.parse().ok())
-        .collect();
+    let ids: Vec<MemoryId> = memory_ids.iter().filter_map(|s| s.parse().ok()).collect();
 
     let collection = hippo
         .create_collection(&name, description, ids)
@@ -1478,10 +1472,7 @@ async fn add_to_collection(
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     let cid: uuid::Uuid = collection_id.parse().map_err(|_| "Invalid collection ID")?;
-    let ids: Vec<MemoryId> = memory_ids
-        .iter()
-        .filter_map(|s| s.parse().ok())
-        .collect();
+    let ids: Vec<MemoryId> = memory_ids.iter().filter_map(|s| s.parse().ok()).collect();
 
     hippo
         .add_to_collection(cid, ids)
@@ -1609,7 +1600,10 @@ async fn hybrid_search(
         .await
         .map_err(|e| e.to_string())?;
 
-    println!("[Hippo] Hybrid search returned {} results", results.memories.len());
+    println!(
+        "[Hippo] Hybrid search returned {} results",
+        results.memories.len()
+    );
     serde_json::to_value(results).map_err(|e| e.to_string())
 }
 
@@ -1619,10 +1613,7 @@ async fn get_qdrant_stats(state: State<'_, AppState>) -> Result<serde_json::Valu
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    let stats = hippo
-        .qdrant_stats()
-        .await
-        .map_err(|e| e.to_string())?;
+    let stats = hippo.qdrant_stats().await.map_err(|e| e.to_string())?;
 
     serde_json::to_value(stats).map_err(|e| e.to_string())
 }

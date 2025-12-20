@@ -470,7 +470,10 @@ impl Hippo {
     // === Organization ===
 
     /// Get virtual paths for a memory (logical organization without moving files)
-    pub async fn get_virtual_paths(&self, memory_id: MemoryId) -> Result<Vec<organization::VirtualPath>> {
+    pub async fn get_virtual_paths(
+        &self,
+        memory_id: MemoryId,
+    ) -> Result<Vec<organization::VirtualPath>> {
         self.organizer.get_virtual_paths(memory_id).await
     }
 
@@ -480,7 +483,10 @@ impl Hippo {
     }
 
     /// Get collections a memory belongs to
-    pub async fn get_collections_for_memory(&self, memory_id: MemoryId) -> Result<Vec<organization::VirtualCollection>> {
+    pub async fn get_collections_for_memory(
+        &self,
+        memory_id: MemoryId,
+    ) -> Result<Vec<organization::VirtualCollection>> {
         self.organizer.get_collections_for_memory(memory_id).await
     }
 
@@ -491,12 +497,20 @@ impl Hippo {
         description: Option<String>,
         memory_ids: Vec<MemoryId>,
     ) -> Result<organization::VirtualCollection> {
-        self.organizer.create_collection(name, description, memory_ids).await
+        self.organizer
+            .create_collection(name, description, memory_ids)
+            .await
     }
 
     /// Add memories to a collection
-    pub async fn add_to_collection(&self, collection_id: uuid::Uuid, memory_ids: Vec<MemoryId>) -> Result<()> {
-        self.organizer.add_to_collection(collection_id, memory_ids).await
+    pub async fn add_to_collection(
+        &self,
+        collection_id: uuid::Uuid,
+        memory_ids: Vec<MemoryId>,
+    ) -> Result<()> {
+        self.organizer
+            .add_to_collection(collection_id, memory_ids)
+            .await
     }
 
     /// Remove a collection
@@ -510,7 +524,10 @@ impl Hippo {
     }
 
     /// Get similar file suggestions for grouping
-    pub async fn suggest_groupings(&self, memory_id: MemoryId) -> Result<Vec<organization::VirtualCollection>> {
+    pub async fn suggest_groupings(
+        &self,
+        memory_id: MemoryId,
+    ) -> Result<Vec<organization::VirtualCollection>> {
         self.organizer.suggest_groupings(memory_id).await
     }
 
@@ -532,7 +549,11 @@ impl Hippo {
     // === Similarity Search ===
 
     /// Find similar memories using vector search
-    pub async fn find_similar(&self, memory_id: MemoryId, limit: usize) -> Result<Vec<(MemoryId, f32)>> {
+    pub async fn find_similar(
+        &self,
+        memory_id: MemoryId,
+        limit: usize,
+    ) -> Result<Vec<(MemoryId, f32)>> {
         self.storage.find_similar(memory_id, limit).await
     }
 

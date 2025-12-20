@@ -3,14 +3,13 @@
 //! Provides vector storage and similarity search using Qdrant.
 //! Falls back gracefully when Qdrant is unavailable.
 
+use crate::embeddings::{CODE_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, TEXT_EMBEDDING_DIM};
 use crate::error::{HippoError, Result};
 use crate::models::*;
-use crate::embeddings::{IMAGE_EMBEDDING_DIM, TEXT_EMBEDDING_DIM, CODE_EMBEDDING_DIM};
 use qdrant_client::qdrant::{
-    CreateCollectionBuilder, Distance, PointStruct, SearchPointsBuilder,
-    UpsertPointsBuilder, VectorParamsBuilder, DeletePointsBuilder,
-    PointId, Value as QdrantValue,
-    vectors_config::Config, VectorsConfig,
+    vectors_config::Config, CreateCollectionBuilder, DeletePointsBuilder, Distance, PointId,
+    PointStruct, SearchPointsBuilder, UpsertPointsBuilder, Value as QdrantValue,
+    VectorParamsBuilder, VectorsConfig,
 };
 use qdrant_client::Qdrant;
 use std::collections::HashMap;
@@ -58,13 +57,19 @@ impl QdrantStorage {
                         *self.available.write().await = true;
                     }
                     Err(e) => {
-                        warn!("Qdrant health check failed: {}. Vector search will be limited.", e);
+                        warn!(
+                            "Qdrant health check failed: {}. Vector search will be limited.",
+                            e
+                        );
                         *self.available.write().await = false;
                     }
                 }
             }
             Err(e) => {
-                warn!("Failed to create Qdrant client: {}. Vector search will be limited.", e);
+                warn!(
+                    "Failed to create Qdrant client: {}. Vector search will be limited.",
+                    e
+                );
                 *self.available.write().await = false;
             }
         }
@@ -93,17 +98,19 @@ impl QdrantStorage {
             if !self.collection_exists(name).await? {
                 info!("Creating Qdrant collection: {} (dim={})", name, dim);
 
-                let create_collection = CreateCollectionBuilder::new(name)
-                    .vectors_config(VectorsConfig {
+                let create_collection =
+                    CreateCollectionBuilder::new(name).vectors_config(VectorsConfig {
                         config: Some(Config::Params(
-                            VectorParamsBuilder::new(dim as u64, Distance::Cosine).build()
-                        ))
+                            VectorParamsBuilder::new(dim as u64, Distance::Cosine).build(),
+                        )),
                     });
 
                 client
                     .create_collection(create_collection)
                     .await
-                    .map_err(|e| HippoError::Other(format!("Failed to create collection {}: {}", name, e)))?;
+                    .map_err(|e| {
+                        HippoError::Other(format!("Failed to create collection {}: {}", name, e))
+                    })?;
             }
         }
 
@@ -196,9 +203,10 @@ impl QdrantStorage {
         let point = PointStruct::new(
             memory_id.to_string(),
             embedding,
-            HashMap::from([
-                ("memory_id".to_string(), QdrantValue::from(memory_id.to_string())),
-            ]),
+            HashMap::from([(
+                "memory_id".to_string(),
+                QdrantValue::from(memory_id.to_string()),
+            )]),
         );
 
         client
@@ -239,8 +247,8 @@ impl QdrantStorage {
             query_vec.resize(expected_dim, 0.0);
         }
 
-        let search_request = SearchPointsBuilder::new(collection, query_vec, limit as u64)
-            .with_payload(true);
+        let search_request =
+            SearchPointsBuilder::new(collection, query_vec, limit as u64).with_payload(true);
 
         let results = client
             .search_points(search_request)
@@ -306,7 +314,7 @@ impl QdrantStorage {
             .delete_points(
                 DeletePointsBuilder::new(collection)
                     .points(points_selector)
-                    .wait(true)
+                    .wait(true),
             )
             .await
             .map_err(|e| HippoError::Other(format!("Failed to delete vector: {}", e)))?;
@@ -368,7 +376,9 @@ mod tests {
         assert!(!storage.is_available().await);
 
         // Operations should not fail
-        let result = storage.search(vec![0.0; TEXT_EMBEDDING_DIM], None, 10).await;
+        let result = storage
+            .search(vec![0.0; TEXT_EMBEDDING_DIM], None, 10)
+            .await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     }
@@ -413,25 +423,45 @@ mod tests {
 
     #[test]
     fn test_get_collection_from_str() {
-        assert_eq!(QdrantStorage::get_collection_from_str(Some("image")), COLLECTION_IMAGES);
-        assert_eq!(QdrantStorage::get_collection_from_str(Some("Image")), COLLECTION_IMAGES);
-        assert_eq!(QdrantStorage::get_collection_from_str(Some("code")), COLLECTION_CODE);
-        assert_eq!(QdrantStorage::get_collection_from_str(Some("Code")), COLLECTION_CODE);
-        assert_eq!(QdrantStorage::get_collection_from_str(Some("text")), COLLECTION_TEXT);
-        assert_eq!(QdrantStorage::get_collection_from_str(None), COLLECTION_TEXT);
+        assert_eq!(
+            QdrantStorage::get_collection_from_str(Some("image")),
+            COLLECTION_IMAGES
+        );
+        assert_eq!(
+            QdrantStorage::get_collection_from_str(Some("Image")),
+            COLLECTION_IMAGES
+        );
+        assert_eq!(
+            QdrantStorage::get_collection_from_str(Some("code")),
+            COLLECTION_CODE
+        );
+        assert_eq!(
+            QdrantStorage::get_collection_from_str(Some("Code")),
+            COLLECTION_CODE
+        );
+        assert_eq!(
+            QdrantStorage::get_collection_from_str(Some("text")),
+            COLLECTION_TEXT
+        );
+        assert_eq!(
+            QdrantStorage::get_collection_from_str(None),
+            COLLECTION_TEXT
+        );
     }
 
     #[tokio::test]
     async fn test_delete_when_unavailable() {
         let storage = QdrantStorage::new("http://localhost:9999").await.unwrap();
-        let result = storage.delete(
-            uuid::Uuid::new_v4(),
-            &MemoryKind::Image {
-                width: 100,
-                height: 100,
-                format: "jpg".to_string()
-            }
-        ).await;
+        let result = storage
+            .delete(
+                uuid::Uuid::new_v4(),
+                &MemoryKind::Image {
+                    width: 100,
+                    height: 100,
+                    format: "jpg".to_string(),
+                },
+            )
+            .await;
 
         // Should succeed silently when Qdrant is unavailable
         assert!(result.is_ok());

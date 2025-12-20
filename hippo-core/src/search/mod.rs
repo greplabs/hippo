@@ -206,7 +206,10 @@ impl Searcher {
         };
 
         // Use Qdrant-backed search (with SQLite fallback)
-        let scored = self.storage.search_vectors(query_embedding, None, limit).await?;
+        let scored = self
+            .storage
+            .search_vectors(query_embedding, None, limit)
+            .await?;
 
         if scored.is_empty() {
             // No results, fall back to text search

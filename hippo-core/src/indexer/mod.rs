@@ -182,7 +182,8 @@ impl Indexer {
                     MemoryKind::Code { .. } => "code_embedding",
                     _ => "text_embedding",
                 };
-                if let Err(e) = self.storage
+                if let Err(e) = self
+                    .storage
                     .store_embedding_with_qdrant(memory.id, &embedding, model_name, &memory.kind)
                     .await
                 {
@@ -313,7 +314,12 @@ impl Indexer {
                             _ => "text_embedding",
                         };
                         if let Err(e) = storage
-                            .store_embedding_with_qdrant(memory.id, &embedding, model_name, &memory.kind)
+                            .store_embedding_with_qdrant(
+                                memory.id,
+                                &embedding,
+                                model_name,
+                                &memory.kind,
+                            )
                             .await
                         {
                             debug!("Failed to store embedding for {}: {}", memory.id, e);

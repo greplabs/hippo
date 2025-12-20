@@ -11,15 +11,15 @@
 //! Files remain in their original locations; Hippo maintains pointers and metadata
 //! for organization purposes.
 
+use crate::embeddings::Embedder;
 use crate::error::Result;
 use crate::models::*;
 use crate::storage::Storage;
-use crate::embeddings::Embedder;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 
 /// A virtual collection that groups related files
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,9 +40,16 @@ pub struct VirtualCollection {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CollectionType {
     /// Time-based grouping (e.g., "Photos from July 2024")
-    Temporal { start: DateTime<Utc>, end: DateTime<Utc> },
+    Temporal {
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    },
     /// Location-based grouping (e.g., "New York Trip")
-    Location { center_lat: f64, center_lon: f64, radius_km: f64 },
+    Location {
+        center_lat: f64,
+        center_lon: f64,
+        radius_km: f64,
+    },
     /// Content similarity grouping (e.g., "Beach Photos")
     Topic { keywords: Vec<String> },
     /// Project-based grouping for code/documents
@@ -191,9 +198,15 @@ impl Organizer {
         };
 
         // Generate virtual paths based on different criteria
-        pointer.virtual_paths.extend(self.generate_date_paths(memory));
-        pointer.virtual_paths.extend(self.generate_location_paths(memory));
-        pointer.virtual_paths.extend(self.generate_type_paths(memory));
+        pointer
+            .virtual_paths
+            .extend(self.generate_date_paths(memory));
+        pointer
+            .virtual_paths
+            .extend(self.generate_location_paths(memory));
+        pointer
+            .virtual_paths
+            .extend(self.generate_type_paths(memory));
 
         // Calculate suggested location
         pointer.suggested_location = self.suggest_location(memory, &pointer.virtual_paths);
@@ -207,10 +220,7 @@ impl Organizer {
         // Update path index
         for vpath in &pointer.virtual_paths {
             let path_str = vpath.path.to_string_lossy().to_string();
-            map.path_index
-                .entry(path_str)
-                .or_default()
-                .push(memory.id);
+            map.path_index.entry(path_str).or_default().push(memory.id);
         }
 
         Ok(pointer)
@@ -313,11 +323,7 @@ impl Organizer {
     }
 
     /// Suggest an ideal location for the file
-    fn suggest_location(
-        &self,
-        _memory: &Memory,
-        virtual_paths: &[VirtualPath],
-    ) -> Option<PathBuf> {
+    fn suggest_location(&self, _memory: &Memory, virtual_paths: &[VirtualPath]) -> Option<PathBuf> {
         // Find the highest confidence virtual path
         virtual_paths
             .iter()
@@ -342,10 +348,18 @@ impl Organizer {
         let in_collections = !pointer.collections.is_empty();
 
         let mut score = 0.0f32;
-        if has_date { score += 0.25; }
-        if has_location { score += 0.25; }
-        if has_type { score += 0.25; }
-        if in_collections { score += 0.25; }
+        if has_date {
+            score += 0.25;
+        }
+        if has_location {
+            score += 0.25;
+        }
+        if has_type {
+            score += 0.25;
+        }
+        if in_collections {
+            score += 0.25;
+        }
 
         score
     }
@@ -432,7 +446,7 @@ impl Organizer {
         let map = self.file_map.read().await;
         let mut tag_groups: HashMap<String, Vec<MemoryId>> = HashMap::new();
 
-        for (id, _pointer) in &map.pointers {
+        for id in map.pointers.keys() {
             if let Some(memory) = self.storage.get_memory(*id).await? {
                 for tag in &memory.metadata.ai_tags {
                     tag_groups.entry(tag.clone()).or_default().push(*id);
@@ -630,7 +644,11 @@ impl Organizer {
             .count();
 
         let avg_organization_score = if total_files > 0 {
-            map.pointers.values().map(|p| p.organization_score).sum::<f32>() / total_files as f32
+            map.pointers
+                .values()
+                .map(|p| p.organization_score)
+                .sum::<f32>()
+                / total_files as f32
         } else {
             0.0
         };
@@ -755,9 +773,7 @@ mod tests {
     fn test_virtual_path_serialization() {
         let vpath = VirtualPath {
             path: PathBuf::from("By Date/2024/01"),
-            reason: OrganizationReason::DateBased {
-                date: Utc::now(),
-            },
+            reason: OrganizationReason::DateBased { date: Utc::now() },
             confidence: 0.9,
         };
 
