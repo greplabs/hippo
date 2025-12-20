@@ -22,3 +22,5 @@
 # Database (local dev)
 *.db
 *.db-journal
+storage/
+.qdrant-initialized

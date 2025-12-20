@@ -11,7 +11,7 @@
 //! Files remain in their original locations; Hippo maintains pointers and metadata
 //! for organization purposes.
 
-use crate::error::{HippoError, Result};
+use crate::error::Result;
 use crate::models::*;
 use crate::storage::Storage;
 use crate::embeddings::Embedder;
@@ -20,7 +20,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::{info, debug, warn};
 
 /// A virtual collection that groups related files
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,6 +129,7 @@ impl Default for FileMap {
 /// The auto-organization engine
 pub struct Organizer {
     storage: Arc<Storage>,
+    #[allow(dead_code)]
     embedder: Arc<Embedder>,
     file_map: tokio::sync::RwLock<FileMap>,
     config: OrganizerConfig,
@@ -432,7 +432,7 @@ impl Organizer {
         let map = self.file_map.read().await;
         let mut tag_groups: HashMap<String, Vec<MemoryId>> = HashMap::new();
 
-        for (id, pointer) in &map.pointers {
+        for (id, _pointer) in &map.pointers {
             if let Some(memory) = self.storage.get_memory(*id).await? {
                 for tag in &memory.metadata.ai_tags {
                     tag_groups.entry(tag.clone()).or_default().push(*id);

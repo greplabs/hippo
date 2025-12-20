@@ -9,14 +9,14 @@ use crate::embeddings::{IMAGE_EMBEDDING_DIM, TEXT_EMBEDDING_DIM, CODE_EMBEDDING_
 use qdrant_client::qdrant::{
     CreateCollectionBuilder, Distance, PointStruct, SearchPointsBuilder,
     UpsertPointsBuilder, VectorParamsBuilder, DeletePointsBuilder,
-    PointId, Filter, Condition, FieldCondition, Match, Value as QdrantValue,
+    PointId, Value as QdrantValue,
     vectors_config::Config, VectorsConfig,
 };
 use qdrant_client::Qdrant;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn, error};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Collection names for different embedding types
@@ -148,7 +148,7 @@ impl QdrantStorage {
         embedding: Vec<f32>,
         kind: &MemoryKind,
     ) -> Result<()> {
-        let client = match &self.client {
+        let _client = match &self.client {
             Some(c) => c,
             None => {
                 debug!("Qdrant not available, skipping upsert");
@@ -275,7 +275,7 @@ impl QdrantStorage {
         kind: &MemoryKind,
         limit: usize,
     ) -> Result<Vec<(MemoryId, f32)>> {
-        let collection = Self::get_collection_for_kind(kind);
+        let _collection = Self::get_collection_for_kind(kind);
         let kind_str = match kind {
             MemoryKind::Image { .. } => Some("image"),
             MemoryKind::Code { .. } => Some("code"),

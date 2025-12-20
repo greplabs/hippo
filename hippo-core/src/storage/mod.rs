@@ -7,7 +7,7 @@ use crate::HippoConfig;
 use rusqlite::{params, Connection};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 #[allow(dead_code)]
 pub struct Storage {
