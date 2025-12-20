@@ -66,7 +66,7 @@ pub fn semantic_score(query_embedding: &[f32], doc_embedding: &[f32]) -> f32 {
     let similarity = dot_product / (query_magnitude.sqrt() * doc_magnitude.sqrt());
 
     // Clamp to [-1.0, 1.0] to handle floating point errors
-    similarity.max(-1.0).min(1.0)
+    similarity.clamp(-1.0, 1.0)
 }
 
 /// Calculate fuzzy match score using Levenshtein distance
@@ -127,6 +127,7 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     }
 
     // Initialize first row
+    #[allow(clippy::needless_range_loop)]
     for j in 0..=len2 {
         matrix[0][j] = j;
     }

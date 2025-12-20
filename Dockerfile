@@ -2,7 +2,8 @@
 # Note: GUI (Tauri) app cannot run in Docker without X11/Wayland
 
 # Build stage
-FROM rust:1.85-slim-bookworm AS builder
+# Note: Using Rust 1.82 to avoid zune-jpeg SIMD unsafe block issues in newer versions
+FROM rust:1.82-slim-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
