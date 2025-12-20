@@ -5,9 +5,9 @@
 
 #![allow(missing_docs)]
 
-use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use wasm_bindgen::prelude::*;
 
 // Set up panic hook for better error messages in the browser console
 #[wasm_bindgen(start)]
@@ -88,11 +88,15 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     // Fill in the rest of the matrix
     for i in 1..=len1 {
         for j in 1..=len2 {
-            let cost = if s1_chars[i - 1] == s2_chars[j - 1] { 0 } else { 1 };
+            let cost = if s1_chars[i - 1] == s2_chars[j - 1] {
+                0
+            } else {
+                1
+            };
 
-            matrix[i][j] = (matrix[i - 1][j] + 1)           // deletion
-                .min(matrix[i][j - 1] + 1)                   // insertion
-                .min(matrix[i - 1][j - 1] + cost);           // substitution
+            matrix[i][j] = (matrix[i - 1][j] + 1) // deletion
+                .min(matrix[i][j - 1] + 1) // insertion
+                .min(matrix[i - 1][j - 1] + cost); // substitution
         }
     }
 
@@ -257,7 +261,11 @@ fn search_memories(memories: &[WasmMemory], query: &str) -> Vec<WasmSearchResult
     }
 
     // Sort by score descending
-    results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    results.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     results
 }

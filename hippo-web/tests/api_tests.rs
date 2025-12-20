@@ -148,10 +148,8 @@ async fn test_add_and_remove_source() {
         .expect("Failed to remove source");
 
     assert_eq!(remove_response.status(), 200);
-    let remove_body: serde_json::Value = remove_response
-        .json()
-        .await
-        .expect("Failed to parse JSON");
+    let remove_body: serde_json::Value =
+        remove_response.json().await.expect("Failed to parse JSON");
     assert_eq!(remove_body["success"], true);
 }
 

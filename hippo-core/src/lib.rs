@@ -4,6 +4,8 @@
 //!
 //! Hippo is an intelligent file memory system that indexes, understands,
 //! and connects all your files across local storage and cloud providers.
+
+#![allow(missing_docs)]
 //!
 //! ## Architecture
 //!
@@ -135,10 +137,12 @@ use tokio::sync::RwLock;
 #[allow(dead_code)]
 pub struct Hippo {
     storage: Arc<storage::Storage>,
+    /// The file indexer for scanning and processing files
     pub indexer: Arc<indexer::Indexer>,
     embedder: Arc<embeddings::Embedder>,
     searcher: Arc<search::Searcher>,
     graph: Arc<RwLock<graph::KnowledgeGraph>>,
+    /// The file watcher for real-time updates
     pub watcher: Option<Arc<RwLock<watcher::FileWatcher>>>,
     thumbnail_manager: Arc<thumbnails::ThumbnailManager>,
     organizer: Arc<organization::Organizer>,

@@ -7,7 +7,7 @@ use wasm_bindgen_test::*;
 wasm_bindgen_test_configure!(run_in_browser);
 
 // Import functions from lib
-use hippo_wasm::{fuzzy_match, semantic_score, search_local, filter_by_type, sort_memories};
+use hippo_wasm::{filter_by_type, fuzzy_match, search_local, semantic_score, sort_memories};
 
 #[wasm_bindgen_test]
 fn test_fuzzy_match_exact() {

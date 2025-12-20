@@ -6,24 +6,40 @@ use hippo_core::search::{fuzzy_find_best_match, fuzzy_match};
 fn test_fuzzy_match_exact_match() {
     // Exact match should return 1.0
     let score = fuzzy_match("hello", "hello");
-    assert!((score - 1.0).abs() < 1e-6, "Expected 1.0 for exact match, got {}", score);
+    assert!(
+        (score - 1.0).abs() < 1e-6,
+        "Expected 1.0 for exact match, got {}",
+        score
+    );
 }
 
 #[test]
 fn test_fuzzy_match_case_insensitive() {
     // Case-insensitive exact match should return 1.0
     let score = fuzzy_match("Hello", "hello");
-    assert!((score - 1.0).abs() < 1e-6, "Expected 1.0 for case-insensitive match, got {}", score);
+    assert!(
+        (score - 1.0).abs() < 1e-6,
+        "Expected 1.0 for case-insensitive match, got {}",
+        score
+    );
 
     let score2 = fuzzy_match("HELLO", "hello");
-    assert!((score2 - 1.0).abs() < 1e-6, "Expected 1.0 for uppercase match, got {}", score2);
+    assert!(
+        (score2 - 1.0).abs() < 1e-6,
+        "Expected 1.0 for uppercase match, got {}",
+        score2
+    );
 }
 
 #[test]
 fn test_fuzzy_match_contains() {
     // Contains should return high score (0.8+)
     let score = fuzzy_match("test", "this is a test file");
-    assert!(score >= 0.8, "Expected >= 0.8 for contains match, got {}", score);
+    assert!(
+        score >= 0.8,
+        "Expected >= 0.8 for contains match, got {}",
+        score
+    );
 }
 
 #[test]
@@ -33,31 +49,51 @@ fn test_fuzzy_match_typo_single_char() {
     assert!(score > 0.7, "Expected > 0.7 for single typo, got {}", score);
 
     let score2 = fuzzy_match("test", "tset");
-    assert!(score2 > 0.5, "Expected > 0.5 for transposition, got {}", score2);
+    assert!(
+        score2 > 0.5,
+        "Expected > 0.5 for transposition, got {}",
+        score2
+    );
 }
 
 #[test]
 fn test_fuzzy_match_typo_two_chars() {
     // Two character typo should return moderate score
     let score = fuzzy_match("hello", "hllo");
-    assert!(score > 0.5 && score < 1.0, "Expected moderate score for two-char diff, got {}", score);
+    assert!(
+        score > 0.5 && score < 1.0,
+        "Expected moderate score for two-char diff, got {}",
+        score
+    );
 }
 
 #[test]
 fn test_fuzzy_match_completely_different() {
     // Completely different strings should return low score
     let score = fuzzy_match("hello", "world");
-    assert!(score < 0.5, "Expected < 0.5 for different strings, got {}", score);
+    assert!(
+        score < 0.5,
+        "Expected < 0.5 for different strings, got {}",
+        score
+    );
 
     let score2 = fuzzy_match("abc", "xyz");
-    assert!(score2 < 0.3, "Expected < 0.3 for completely different, got {}", score2);
+    assert!(
+        score2 < 0.3,
+        "Expected < 0.3 for completely different, got {}",
+        score2
+    );
 }
 
 #[test]
 fn test_fuzzy_match_empty_strings() {
     // Both empty should return 1.0
     let score = fuzzy_match("", "");
-    assert!((score - 1.0).abs() < 1e-6, "Expected 1.0 for both empty, got {}", score);
+    assert!(
+        (score - 1.0).abs() < 1e-6,
+        "Expected 1.0 for both empty, got {}",
+        score
+    );
 
     // One empty should return 0.0
     let score2 = fuzzy_match("", "hello");
@@ -71,48 +107,80 @@ fn test_fuzzy_match_empty_strings() {
 fn test_fuzzy_match_prefix_match() {
     // Prefix match should have decent score
     let score = fuzzy_match("test", "testing");
-    assert!(score > 0.5, "Expected > 0.5 for prefix match, got {}", score);
+    assert!(
+        score > 0.5,
+        "Expected > 0.5 for prefix match, got {}",
+        score
+    );
 }
 
 #[test]
 fn test_fuzzy_match_suffix_match() {
     // Suffix match should have decent score
     let score = fuzzy_match("ing", "testing");
-    assert!(score >= 0.8, "Expected >= 0.8 for suffix contained, got {}", score);
+    assert!(
+        score >= 0.8,
+        "Expected >= 0.8 for suffix contained, got {}",
+        score
+    );
 }
 
 #[test]
 fn test_fuzzy_match_unicode() {
     // Unicode strings should work
     let score = fuzzy_match("café", "café");
-    assert!((score - 1.0).abs() < 1e-6, "Expected 1.0 for unicode exact match, got {}", score);
+    assert!(
+        (score - 1.0).abs() < 1e-6,
+        "Expected 1.0 for unicode exact match, got {}",
+        score
+    );
 
     let score2 = fuzzy_match("日本語", "日本語");
-    assert!((score2 - 1.0).abs() < 1e-6, "Expected 1.0 for Japanese match, got {}", score2);
+    assert!(
+        (score2 - 1.0).abs() < 1e-6,
+        "Expected 1.0 for Japanese match, got {}",
+        score2
+    );
 }
 
 #[test]
 fn test_fuzzy_match_numbers() {
     // Numbers should work
     let score = fuzzy_match("123", "123");
-    assert!((score - 1.0).abs() < 1e-6, "Expected 1.0 for number match, got {}", score);
+    assert!(
+        (score - 1.0).abs() < 1e-6,
+        "Expected 1.0 for number match, got {}",
+        score
+    );
 
     let score2 = fuzzy_match("123", "1234");
-    assert!(score2 > 0.7, "Expected > 0.7 for close number, got {}", score2);
+    assert!(
+        score2 > 0.7,
+        "Expected > 0.7 for close number, got {}",
+        score2
+    );
 }
 
 #[test]
 fn test_fuzzy_match_special_chars() {
     // Special characters should work
     let score = fuzzy_match("test@example.com", "test@example.com");
-    assert!((score - 1.0).abs() < 1e-6, "Expected 1.0 for email match, got {}", score);
+    assert!(
+        (score - 1.0).abs() < 1e-6,
+        "Expected 1.0 for email match, got {}",
+        score
+    );
 }
 
 #[test]
 fn test_fuzzy_match_whitespace() {
     // Whitespace handling
     let score = fuzzy_match("hello world", "hello world");
-    assert!((score - 1.0).abs() < 1e-6, "Expected 1.0 for exact with space, got {}", score);
+    assert!(
+        (score - 1.0).abs() < 1e-6,
+        "Expected 1.0 for exact with space, got {}",
+        score
+    );
 }
 
 #[test]
@@ -122,14 +190,21 @@ fn test_fuzzy_match_long_strings() {
     let s2 = "the quick brown fox jumps over the lazy cat";
 
     let score = fuzzy_match(s1, s2);
-    assert!(score > 0.9, "Expected > 0.9 for minor difference in long string, got {}", score);
+    assert!(
+        score > 0.9,
+        "Expected > 0.9 for minor difference in long string, got {}",
+        score
+    );
 }
 
 #[test]
 fn test_fuzzy_match_single_char() {
     // Single character strings
     let score = fuzzy_match("a", "a");
-    assert!((score - 1.0).abs() < 1e-6, "Expected 1.0 for single char match");
+    assert!(
+        (score - 1.0).abs() < 1e-6,
+        "Expected 1.0 for single char match"
+    );
 
     let score2 = fuzzy_match("a", "b");
     assert_eq!(score2, 0.0, "Expected 0.0 for different single chars");
@@ -149,21 +224,33 @@ fn test_fuzzy_match_symmetry() {
 fn test_fuzzy_match_insertion() {
     // Insertion edit
     let score = fuzzy_match("helo", "hello");
-    assert!(score > 0.7, "Expected > 0.7 for one insertion, got {}", score);
+    assert!(
+        score > 0.7,
+        "Expected > 0.7 for one insertion, got {}",
+        score
+    );
 }
 
 #[test]
 fn test_fuzzy_match_deletion() {
     // Deletion edit
     let score = fuzzy_match("hello", "helo");
-    assert!(score > 0.7, "Expected > 0.7 for one deletion, got {}", score);
+    assert!(
+        score > 0.7,
+        "Expected > 0.7 for one deletion, got {}",
+        score
+    );
 }
 
 #[test]
 fn test_fuzzy_match_substitution() {
     // Substitution edit
     let score = fuzzy_match("hello", "hallo");
-    assert!(score > 0.7, "Expected > 0.7 for one substitution, got {}", score);
+    assert!(
+        score > 0.7,
+        "Expected > 0.7 for one substitution, got {}",
+        score
+    );
 }
 
 // Tests for fuzzy_find_best_match
@@ -185,7 +272,11 @@ fn test_fuzzy_find_best_match_typo() {
 #[test]
 fn test_fuzzy_find_best_match_no_match() {
     let (score, _) = fuzzy_find_best_match("xyz", "abc def");
-    assert!(score < 0.5, "Expected low score for no match, got {}", score);
+    assert!(
+        score < 0.5,
+        "Expected low score for no match, got {}",
+        score
+    );
 }
 
 #[test]
@@ -218,15 +309,18 @@ fn test_fuzzy_match_score_ordering() {
 
     assert!(exact > one_off, "Exact should score higher than one-off");
     assert!(one_off >= two_off, "One-off should score >= two-off");
-    assert!(two_off > different, "Two-off should score higher than different");
+    assert!(
+        two_off > different,
+        "Two-off should score higher than different"
+    );
 }
 
 #[test]
 fn test_fuzzy_match_common_typos() {
     // Common typing mistakes
-    assert!(fuzzy_match("receive", "recieve") > 0.8);  // ie/ei swap
-    assert!(fuzzy_match("separate", "seperate") > 0.8);  // common misspelling
-    assert!(fuzzy_match("definitely", "definately") > 0.7);  // common misspelling
+    assert!(fuzzy_match("receive", "recieve") > 0.8); // ie/ei swap
+    assert!(fuzzy_match("separate", "seperate") > 0.8); // common misspelling
+    assert!(fuzzy_match("definitely", "definately") > 0.7); // common misspelling
 }
 
 #[test]
@@ -236,5 +330,9 @@ fn test_fuzzy_match_path_components() {
     assert!((score - 1.0).abs() < 1e-6);
 
     let score2 = fuzzy_match("search", "searcher");
-    assert!(score2 > 0.7, "Expected > 0.7 for prefix match, got {}", score2);
+    assert!(
+        score2 > 0.7,
+        "Expected > 0.7 for prefix match, got {}",
+        score2
+    );
 }

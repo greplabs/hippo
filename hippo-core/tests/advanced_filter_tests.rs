@@ -2,7 +2,7 @@
 
 use chrono::{Duration, Utc};
 use hippo_core::search::{AdvancedFilter, ExtensionFilter, FilterBuilder, MatchMode};
-use hippo_core::{Memory, MemoryKind, MemoryMetadata, Source, Tag, DocumentFormat};
+use hippo_core::{DocumentFormat, Memory, MemoryKind, MemoryMetadata, Source, Tag};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -143,7 +143,9 @@ fn test_filter_builder_date_range_between() {
     let now = Utc::now();
     let start = now - Duration::days(15);
     let end = now - Duration::days(5);
-    let filter = FilterBuilder::new().date_range(Some(start), Some(end)).build();
+    let filter = FilterBuilder::new()
+        .date_range(Some(start), Some(end))
+        .build();
 
     let memories = vec![
         create_test_memory("very_old", 1000, Some("txt"), 20),
@@ -261,11 +263,7 @@ fn test_content_contains_case_insensitive() {
 #[test]
 fn test_metadata_match_exact() {
     let filter = FilterBuilder::new()
-        .metadata_match(
-            "title".to_string(),
-            "test".to_string(),
-            MatchMode::Exact,
-        )
+        .metadata_match("title".to_string(), "test".to_string(), MatchMode::Exact)
         .build();
 
     let memories = vec![
@@ -281,11 +279,7 @@ fn test_metadata_match_exact() {
 #[test]
 fn test_metadata_match_contains() {
     let filter = FilterBuilder::new()
-        .metadata_match(
-            "title".to_string(),
-            "test".to_string(),
-            MatchMode::Contains,
-        )
+        .metadata_match("title".to_string(), "test".to_string(), MatchMode::Contains)
         .build();
 
     let memories = vec![
@@ -321,11 +315,7 @@ fn test_metadata_match_starts_with() {
 #[test]
 fn test_metadata_match_ends_with() {
     let filter = FilterBuilder::new()
-        .metadata_match(
-            "title".to_string(),
-            "file".to_string(),
-            MatchMode::EndsWith,
-        )
+        .metadata_match("title".to_string(), "file".to_string(), MatchMode::EndsWith)
         .build();
 
     let memories = vec![
@@ -375,7 +365,9 @@ fn test_duplicates_only() {
     assert_eq!(filtered.len(), 4);
 
     // Verify file5 (unique hash) is not included
-    assert!(!filtered.iter().any(|m| m.metadata.title.as_ref().unwrap() == "file5"));
+    assert!(!filtered
+        .iter()
+        .any(|m| m.metadata.title.as_ref().unwrap() == "file5"));
 }
 
 #[test]
@@ -422,7 +414,10 @@ fn test_combined_filters() {
 
     let filtered = filter.apply_filters(memories);
     assert_eq!(filtered.len(), 1);
-    assert_eq!(filtered[0].metadata.title.as_ref().unwrap(), "important file");
+    assert_eq!(
+        filtered[0].metadata.title.as_ref().unwrap(),
+        "important file"
+    );
 }
 
 #[test]
@@ -475,11 +470,7 @@ fn test_no_matching_results() {
 #[test]
 fn test_multiple_metadata_matches() {
     let filter = FilterBuilder::new()
-        .metadata_match(
-            "title".to_string(),
-            "test".to_string(),
-            MatchMode::Contains,
-        )
+        .metadata_match("title".to_string(), "test".to_string(), MatchMode::Contains)
         .metadata_match(
             "description".to_string(),
             "important".to_string(),
@@ -497,7 +488,10 @@ fn test_multiple_metadata_matches() {
     // Only file1 matches both conditions
     assert_eq!(filtered.len(), 1);
     assert_eq!(filtered[0].metadata.title.as_ref().unwrap(), "test file");
-    assert_eq!(filtered[0].metadata.description.as_ref().unwrap(), "important document");
+    assert_eq!(
+        filtered[0].metadata.description.as_ref().unwrap(),
+        "important document"
+    );
 }
 
 #[test]

@@ -65,7 +65,11 @@ impl FilterBuilder {
 
     /// Set minimum file size in bytes
     pub fn min_size(mut self, size: u64) -> Self {
-        let max = self.filter.file_size_range.map(|(_, m)| m).unwrap_or(u64::MAX);
+        let max = self
+            .filter
+            .file_size_range
+            .map(|(_, m)| m)
+            .unwrap_or(u64::MAX);
         self.filter.file_size_range = Some((size, max));
         self
     }
@@ -254,10 +258,7 @@ impl AdvancedFilter {
                     "mime_type" => m.metadata.mime_type.as_deref(),
                     _ => {
                         // Check custom fields
-                        m.metadata
-                            .custom
-                            .get(field)
-                            .and_then(|v| v.as_str())
+                        m.metadata.custom.get(field).and_then(|v| v.as_str())
                     }
                 };
 

@@ -68,7 +68,10 @@ async fn main() -> anyhow::Result<()> {
         config.data_dir = PathBuf::from(data_dir);
     }
 
-    info!("Initializing Hippo with data directory: {:?}", config.data_dir);
+    info!(
+        "Initializing Hippo with data directory: {:?}",
+        config.data_dir
+    );
 
     // Initialize Hippo instance
     let hippo = Arc::new(Hippo::with_config(config).await?);
@@ -236,17 +239,13 @@ async fn get_thumbnail(
 
     // Try to get thumbnail based on memory kind
     let thumbnail_path = match &memory.kind {
-        hippo_core::MemoryKind::Image { .. } => {
-            state.hippo.get_thumbnail(&memory.path).ok()
-        }
-        hippo_core::MemoryKind::Video { .. } => {
-            state.hippo.get_video_thumbnail(&memory.path).ok()
-        }
+        hippo_core::MemoryKind::Image { .. } => state.hippo.get_thumbnail(&memory.path).ok(),
+        hippo_core::MemoryKind::Video { .. } => state.hippo.get_video_thumbnail(&memory.path).ok(),
         _ => None,
     };
 
-    let thumbnail_path = thumbnail_path
-        .ok_or_else(|| ApiError::NotFound("Thumbnail not available".to_string()))?;
+    let thumbnail_path =
+        thumbnail_path.ok_or_else(|| ApiError::NotFound("Thumbnail not available".to_string()))?;
 
     // Read thumbnail file
     let data = tokio::fs::read(&thumbnail_path)

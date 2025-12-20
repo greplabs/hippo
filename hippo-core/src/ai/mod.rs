@@ -5,6 +5,8 @@
 //! - Anthropic's Claude API (cloud)
 //! - Ollama (local, privacy-first)
 
+#![allow(missing_docs)]
+
 pub mod analysis;
 
 // Re-export analysis types

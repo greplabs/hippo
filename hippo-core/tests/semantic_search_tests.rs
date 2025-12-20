@@ -9,7 +9,11 @@ fn test_semantic_score_identical_vectors() {
     let vec2 = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!((similarity - 1.0).abs() < 1e-6, "Expected similarity ~1.0, got {}", similarity);
+    assert!(
+        (similarity - 1.0).abs() < 1e-6,
+        "Expected similarity ~1.0, got {}",
+        similarity
+    );
 }
 
 #[test]
@@ -19,7 +23,11 @@ fn test_semantic_score_orthogonal_vectors() {
     let vec2 = vec![0.0, 1.0, 0.0];
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!(similarity.abs() < 1e-6, "Expected similarity ~0.0, got {}", similarity);
+    assert!(
+        similarity.abs() < 1e-6,
+        "Expected similarity ~0.0, got {}",
+        similarity
+    );
 }
 
 #[test]
@@ -29,7 +37,11 @@ fn test_semantic_score_opposite_vectors() {
     let vec2 = vec![-1.0, 0.0, 0.0];
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!((similarity + 1.0).abs() < 1e-6, "Expected similarity ~-1.0, got {}", similarity);
+    assert!(
+        (similarity + 1.0).abs() < 1e-6,
+        "Expected similarity ~-1.0, got {}",
+        similarity
+    );
 }
 
 #[test]
@@ -39,7 +51,11 @@ fn test_semantic_score_scaled_vectors() {
     let vec2 = vec![2.0, 4.0, 6.0]; // 2x scaled
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!((similarity - 1.0).abs() < 1e-6, "Expected similarity ~1.0, got {}", similarity);
+    assert!(
+        (similarity - 1.0).abs() < 1e-6,
+        "Expected similarity ~1.0, got {}",
+        similarity
+    );
 }
 
 #[test]
@@ -79,7 +95,11 @@ fn test_semantic_score_single_element() {
     let vec2 = vec![5.0];
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!((similarity - 1.0).abs() < 1e-6, "Expected similarity ~1.0, got {}", similarity);
+    assert!(
+        (similarity - 1.0).abs() < 1e-6,
+        "Expected similarity ~1.0, got {}",
+        similarity
+    );
 }
 
 #[test]
@@ -99,7 +119,10 @@ fn test_semantic_score_both_zero_magnitude() {
     let vec2 = vec![0.0, 0.0, 0.0];
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert_eq!(similarity, 0.0, "Expected 0.0 for both zero magnitude vectors");
+    assert_eq!(
+        similarity, 0.0,
+        "Expected 0.0 for both zero magnitude vectors"
+    );
 }
 
 #[test]
@@ -110,7 +133,10 @@ fn test_semantic_score_high_dimensional() {
     let vec2: Vec<f32> = (0..dim).map(|i| (i as f32).sin()).collect();
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!((similarity - 1.0).abs() < 1e-5, "Expected similarity ~1.0 for identical high-dim vectors");
+    assert!(
+        (similarity - 1.0).abs() < 1e-5,
+        "Expected similarity ~1.0 for identical high-dim vectors"
+    );
 }
 
 #[test]
@@ -121,7 +147,11 @@ fn test_semantic_score_partial_overlap() {
 
     let similarity = semantic_score(&vec1, &vec2);
     // Similarity should be positive but less than 1.0
-    assert!(similarity > 0.0 && similarity < 1.0, "Expected 0.0 < similarity < 1.0, got {}", similarity);
+    assert!(
+        similarity > 0.0 && similarity < 1.0,
+        "Expected 0.0 < similarity < 1.0, got {}",
+        similarity
+    );
 }
 
 #[test]
@@ -131,7 +161,11 @@ fn test_semantic_score_negative_values() {
     let vec2 = vec![-1.0, -2.0, -3.0];
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!((similarity - 1.0).abs() < 1e-6, "Expected similarity ~1.0, got {}", similarity);
+    assert!(
+        (similarity - 1.0).abs() < 1e-6,
+        "Expected similarity ~1.0, got {}",
+        similarity
+    );
 }
 
 #[test]
@@ -141,17 +175,32 @@ fn test_semantic_score_mixed_signs() {
     let vec2 = vec![-1.0, 1.0, -1.0, 1.0];
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!((similarity + 1.0).abs() < 1e-6, "Expected similarity ~-1.0, got {}", similarity);
+    assert!(
+        (similarity + 1.0).abs() < 1e-6,
+        "Expected similarity ~-1.0, got {}",
+        similarity
+    );
 }
 
 #[test]
 fn test_semantic_score_normalized_vectors() {
     // Pre-normalized vectors (unit vectors)
-    let vec1 = vec![1.0 / 3.0_f32.sqrt(), 1.0 / 3.0_f32.sqrt(), 1.0 / 3.0_f32.sqrt()];
-    let vec2 = vec![1.0 / 3.0_f32.sqrt(), 1.0 / 3.0_f32.sqrt(), 1.0 / 3.0_f32.sqrt()];
+    let vec1 = vec![
+        1.0 / 3.0_f32.sqrt(),
+        1.0 / 3.0_f32.sqrt(),
+        1.0 / 3.0_f32.sqrt(),
+    ];
+    let vec2 = vec![
+        1.0 / 3.0_f32.sqrt(),
+        1.0 / 3.0_f32.sqrt(),
+        1.0 / 3.0_f32.sqrt(),
+    ];
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!((similarity - 1.0).abs() < 1e-5, "Expected similarity ~1.0 for normalized vectors");
+    assert!(
+        (similarity - 1.0).abs() < 1e-5,
+        "Expected similarity ~1.0 for normalized vectors"
+    );
 }
 
 #[test]
@@ -161,7 +210,10 @@ fn test_semantic_score_very_small_values() {
     let vec2 = vec![1e-10, 2e-10, 3e-10];
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!((similarity - 1.0).abs() < 1e-5, "Expected similarity ~1.0 for small identical vectors");
+    assert!(
+        (similarity - 1.0).abs() < 1e-5,
+        "Expected similarity ~1.0 for small identical vectors"
+    );
 }
 
 #[test]
@@ -171,7 +223,10 @@ fn test_semantic_score_large_values() {
     let vec2 = vec![1e6, 2e6, 3e6];
 
     let similarity = semantic_score(&vec1, &vec2);
-    assert!((similarity - 1.0).abs() < 1e-5, "Expected similarity ~1.0 for large identical vectors");
+    assert!(
+        (similarity - 1.0).abs() < 1e-5,
+        "Expected similarity ~1.0 for large identical vectors"
+    );
 }
 
 #[test]
@@ -183,7 +238,10 @@ fn test_semantic_score_symmetry() {
     let similarity1 = semantic_score(&vec1, &vec2);
     let similarity2 = semantic_score(&vec2, &vec1);
 
-    assert!((similarity1 - similarity2).abs() < 1e-6, "Cosine similarity should be symmetric");
+    assert!(
+        (similarity1 - similarity2).abs() < 1e-6,
+        "Cosine similarity should be symmetric"
+    );
 }
 
 // Tests for HybridSearchConfig
@@ -192,8 +250,14 @@ fn test_semantic_score_symmetry() {
 fn test_hybrid_config_default_weights() {
     let config = HybridSearchConfig::default();
 
-    assert_eq!(config.semantic_weight, 0.7, "Default semantic weight should be 0.7");
-    assert_eq!(config.keyword_weight, 0.3, "Default keyword weight should be 0.3");
+    assert_eq!(
+        config.semantic_weight, 0.7,
+        "Default semantic weight should be 0.7"
+    );
+    assert_eq!(
+        config.keyword_weight, 0.3,
+        "Default keyword weight should be 0.3"
+    );
 }
 
 #[test]
@@ -240,8 +304,14 @@ fn test_hybrid_scoring_calculation() {
     let combined_score = (semantic_score * semantic_weight) + (keyword_score * keyword_weight);
     let expected = (0.8_f64 * 0.7) + (0.6_f64 * 0.3);
 
-    assert!((combined_score - expected).abs() < 1e-6, "Hybrid score calculation incorrect");
-    assert!((combined_score - 0.74_f64).abs() < 1e-6, "Expected combined score ~0.74");
+    assert!(
+        (combined_score - expected).abs() < 1e-6,
+        "Hybrid score calculation incorrect"
+    );
+    assert!(
+        (combined_score - 0.74_f64).abs() < 1e-6,
+        "Expected combined score ~0.74"
+    );
 }
 
 #[test]
@@ -257,7 +327,10 @@ fn test_hybrid_scoring_equal_weights() {
     let expected = (0.8_f64 * 0.5) + (0.6_f64 * 0.5);
 
     assert!((combined_score - expected).abs() < 1e-6);
-    assert!((combined_score - 0.7_f64).abs() < 1e-6, "Expected combined score ~0.7");
+    assert!(
+        (combined_score - 0.7_f64).abs() < 1e-6,
+        "Expected combined score ~0.7"
+    );
 }
 
 #[test]
@@ -271,7 +344,10 @@ fn test_hybrid_scoring_only_semantic() {
 
     let combined_score = (semantic_score * semantic_weight) + (keyword_score * keyword_weight);
 
-    assert!((combined_score - 0.8_f64).abs() < 1e-6, "With semantic_weight=1.0, should equal semantic score");
+    assert!(
+        (combined_score - 0.8_f64).abs() < 1e-6,
+        "With semantic_weight=1.0, should equal semantic score"
+    );
 }
 
 #[test]
@@ -285,5 +361,8 @@ fn test_hybrid_scoring_only_keyword() {
 
     let combined_score = (semantic_score * semantic_weight) + (keyword_score * keyword_weight);
 
-    assert!((combined_score - 0.6_f64).abs() < 1e-6, "With keyword_weight=1.0, should equal keyword score");
+    assert!(
+        (combined_score - 0.6_f64).abs() < 1e-6,
+        "With keyword_weight=1.0, should equal keyword score"
+    );
 }
