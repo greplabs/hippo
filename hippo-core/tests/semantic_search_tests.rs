@@ -234,56 +234,56 @@ fn test_hybrid_scoring_calculation() {
     let semantic_weight = 0.7;
     let keyword_weight = 0.3;
 
-    let semantic_score = 0.8;
-    let keyword_score = 0.6;
+    let semantic_score: f64 = 0.8;
+    let keyword_score: f64 = 0.6;
 
     let combined_score = (semantic_score * semantic_weight) + (keyword_score * keyword_weight);
-    let expected = (0.8 * 0.7) + (0.6 * 0.3);
+    let expected = (0.8_f64 * 0.7) + (0.6_f64 * 0.3);
 
     assert!((combined_score - expected).abs() < 1e-6, "Hybrid score calculation incorrect");
-    assert!((combined_score - 0.74).abs() < 1e-6, "Expected combined score ~0.74");
+    assert!((combined_score - 0.74_f64).abs() < 1e-6, "Expected combined score ~0.74");
 }
 
 #[test]
 fn test_hybrid_scoring_equal_weights() {
     // Test with equal weights (50/50)
-    let semantic_weight = 0.5;
-    let keyword_weight = 0.5;
+    let semantic_weight: f64 = 0.5;
+    let keyword_weight: f64 = 0.5;
 
-    let semantic_score = 0.8;
-    let keyword_score = 0.6;
+    let semantic_score: f64 = 0.8;
+    let keyword_score: f64 = 0.6;
 
     let combined_score = (semantic_score * semantic_weight) + (keyword_score * keyword_weight);
-    let expected = (0.8 * 0.5) + (0.6 * 0.5);
+    let expected = (0.8_f64 * 0.5) + (0.6_f64 * 0.5);
 
     assert!((combined_score - expected).abs() < 1e-6);
-    assert!((combined_score - 0.7).abs() < 1e-6, "Expected combined score ~0.7");
+    assert!((combined_score - 0.7_f64).abs() < 1e-6, "Expected combined score ~0.7");
 }
 
 #[test]
 fn test_hybrid_scoring_only_semantic() {
     // Test with only semantic weight
-    let semantic_weight = 1.0;
-    let keyword_weight = 0.0;
+    let semantic_weight: f64 = 1.0;
+    let keyword_weight: f64 = 0.0;
 
-    let semantic_score = 0.8;
-    let keyword_score = 0.6;
+    let semantic_score: f64 = 0.8;
+    let keyword_score: f64 = 0.6;
 
     let combined_score = (semantic_score * semantic_weight) + (keyword_score * keyword_weight);
 
-    assert!((combined_score - 0.8).abs() < 1e-6, "With semantic_weight=1.0, should equal semantic score");
+    assert!((combined_score - 0.8_f64).abs() < 1e-6, "With semantic_weight=1.0, should equal semantic score");
 }
 
 #[test]
 fn test_hybrid_scoring_only_keyword() {
     // Test with only keyword weight
-    let semantic_weight = 0.0;
-    let keyword_weight = 1.0;
+    let semantic_weight: f64 = 0.0;
+    let keyword_weight: f64 = 1.0;
 
-    let semantic_score = 0.8;
-    let keyword_score = 0.6;
+    let semantic_score: f64 = 0.8;
+    let keyword_score: f64 = 0.6;
 
     let combined_score = (semantic_score * semantic_weight) + (keyword_score * keyword_weight);
 
-    assert!((combined_score - 0.6).abs() < 1e-6, "With keyword_weight=1.0, should equal keyword score");
+    assert!((combined_score - 0.6_f64).abs() < 1e-6, "With keyword_weight=1.0, should equal keyword score");
 }

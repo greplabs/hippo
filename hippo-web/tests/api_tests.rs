@@ -2,6 +2,7 @@
 //!
 //! These tests start a real server instance and test the API endpoints.
 
+use reqwest::Method;
 use serde_json::json;
 use std::path::PathBuf;
 
@@ -210,7 +211,7 @@ async fn test_nonexistent_memory() {
 async fn test_cors_headers() {
     let client = reqwest::Client::new();
     let response = client
-        .options(&api_url("/health"))
+        .request(Method::OPTIONS, &api_url("/health"))
         .header("Origin", "http://localhost:3000")
         .header("Access-Control-Request-Method", "GET")
         .send()
