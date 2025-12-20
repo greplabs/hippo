@@ -81,6 +81,7 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     }
 
     // Initialize first row
+    #[allow(clippy::needless_range_loop)]
     for j in 0..=len2 {
         matrix[0][j] = j;
     }
@@ -136,7 +137,7 @@ pub fn semantic_score(query_embedding: &[f32], doc_embedding: &[f32]) -> f32 {
     let similarity = dot_product / (query_magnitude.sqrt() * doc_magnitude.sqrt());
 
     // Clamp to [-1.0, 1.0] to handle floating point errors
-    similarity.max(-1.0).min(1.0)
+    similarity.clamp(-1.0, 1.0)
 }
 
 /// Simplified Memory struct for WASM (only fields needed for search)
@@ -219,7 +220,7 @@ fn search_memories(memories: &[WasmMemory], query: &str) -> Vec<WasmSearchResult
         }
 
         // Filename match
-        let filename = memory.path.split('/').last().unwrap_or(&memory.path);
+        let filename = memory.path.split('/').next_back().unwrap_or(&memory.path);
         let filename_score = fuzzy_match(&query_lower, &filename.to_lowercase());
         if filename_score > 0.3 {
             score += filename_score * 8.0;
@@ -294,8 +295,8 @@ pub fn sort_memories(memories_json: &str, field: &str, ascending: bool) -> Resul
     match field {
         "name" => {
             memories.sort_by(|a, b| {
-                let a_name = a.path.split('/').last().unwrap_or(&a.path);
-                let b_name = b.path.split('/').last().unwrap_or(&b.path);
+                let a_name = a.path.split('/').next_back().unwrap_or(&a.path);
+                let b_name = b.path.split('/').next_back().unwrap_or(&b.path);
                 if ascending {
                     a_name.cmp(b_name)
                 } else {
