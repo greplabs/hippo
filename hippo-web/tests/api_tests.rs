@@ -17,7 +17,7 @@ fn api_url(endpoint: &str) -> String {
 async fn test_health_check() {
     let client = reqwest::Client::new();
     let response = client
-        .get(&api_url("/health"))
+        .get(api_url("/health"))
         .send()
         .await
         .expect("Failed to send request");
@@ -34,7 +34,7 @@ async fn test_health_check() {
 async fn test_get_stats() {
     let client = reqwest::Client::new();
     let response = client
-        .get(&api_url("/stats"))
+        .get(api_url("/stats"))
         .send()
         .await
         .expect("Failed to send request");
@@ -52,7 +52,7 @@ async fn test_get_stats() {
 async fn test_search_no_params() {
     let client = reqwest::Client::new();
     let response = client
-        .get(&api_url("/search"))
+        .get(api_url("/search"))
         .send()
         .await
         .expect("Failed to send request");
@@ -70,7 +70,7 @@ async fn test_search_no_params() {
 async fn test_search_with_query() {
     let client = reqwest::Client::new();
     let response = client
-        .get(&api_url("/search?q=test&limit=10"))
+        .get(api_url("/search?q=test&limit=10"))
         .send()
         .await
         .expect("Failed to send request");
@@ -88,7 +88,7 @@ async fn test_search_with_query() {
 async fn test_search_with_tags() {
     let client = reqwest::Client::new();
     let response = client
-        .get(&api_url("/search?tags=important,-private&limit=20"))
+        .get(api_url("/search?tags=important,-private&limit=20"))
         .send()
         .await
         .expect("Failed to send request");
@@ -104,7 +104,7 @@ async fn test_search_with_tags() {
 async fn test_list_sources() {
     let client = reqwest::Client::new();
     let response = client
-        .get(&api_url("/sources"))
+        .get(api_url("/sources"))
         .send()
         .await
         .expect("Failed to send request");
@@ -126,7 +126,7 @@ async fn test_add_and_remove_source() {
 
     // Add source
     let add_response = client
-        .post(&api_url("/sources"))
+        .post(api_url("/sources"))
         .json(&json!({
             "sourceType": "Local",
             "path": test_path
@@ -141,7 +141,7 @@ async fn test_add_and_remove_source() {
 
     // Remove source
     let remove_response = client
-        .delete(&api_url(&format!("/sources/{}", test_path)))
+        .delete(api_url(&format!("/sources/{}", test_path)))
         .send()
         .await
         .expect("Failed to remove source");
@@ -157,7 +157,7 @@ async fn test_add_and_remove_source() {
 async fn test_list_tags() {
     let client = reqwest::Client::new();
     let response = client
-        .get(&api_url("/tags"))
+        .get(api_url("/tags"))
         .send()
         .await
         .expect("Failed to send request");
@@ -181,7 +181,7 @@ async fn test_list_tags() {
 async fn test_invalid_memory_id() {
     let client = reqwest::Client::new();
     let response = client
-        .get(&api_url("/memories/invalid-uuid"))
+        .get(api_url("/memories/invalid-uuid"))
         .send()
         .await
         .expect("Failed to send request");
@@ -195,7 +195,7 @@ async fn test_nonexistent_memory() {
     let client = reqwest::Client::new();
     // Use a valid UUID format that doesn't exist
     let response = client
-        .get(&api_url("/memories/00000000-0000-0000-0000-000000000000"))
+        .get(api_url("/memories/00000000-0000-0000-0000-000000000000"))
         .send()
         .await
         .expect("Failed to send request");
@@ -208,7 +208,7 @@ async fn test_nonexistent_memory() {
 async fn test_cors_headers() {
     let client = reqwest::Client::new();
     let response = client
-        .request(Method::OPTIONS, &api_url("/health"))
+        .request(Method::OPTIONS, api_url("/health"))
         .header("Origin", "http://localhost:3000")
         .header("Access-Control-Request-Method", "GET")
         .send()
@@ -224,7 +224,7 @@ async fn test_cors_headers() {
 async fn test_invalid_sort_order() {
     let client = reqwest::Client::new();
     let response = client
-        .get(&api_url("/search?sort=InvalidSort"))
+        .get(api_url("/search?sort=InvalidSort"))
         .send()
         .await
         .expect("Failed to send request");
