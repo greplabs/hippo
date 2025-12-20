@@ -1,9 +1,8 @@
 //! Tests for advanced filter capabilities
 
 use chrono::{Duration, Utc};
-use hippo_core::search::{AdvancedFilter, ExtensionFilter, FilterBuilder, MatchMode};
+use hippo_core::search::{FilterBuilder, MatchMode};
 use hippo_core::{DocumentFormat, Memory, MemoryKind, MemoryMetadata, Source, Tag};
-use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -478,7 +477,7 @@ fn test_multiple_metadata_matches() {
         )
         .build();
 
-    let mut memories = vec![
+    let memories = vec![
         create_memory_with_content("file1", "test file", "important document"),
         create_memory_with_content("file2", "test file", "regular document"),
         create_memory_with_content("file3", "random", "important data"),

@@ -4,8 +4,9 @@
 # Build stage
 FROM rust:1.85-slim-bookworm AS builder
 
-# Allow unsafe code in dependencies (required for zune-jpeg SIMD)
-ENV RUSTFLAGS="-A unsafe_op_in_unsafe_fn"
+# Cap lints to warnings for dependencies (required for zune-jpeg SIMD intrinsics)
+ENV CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_OPT_LEVEL="2"
+ENV RUSTFLAGS="--cap-lints warn"
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
