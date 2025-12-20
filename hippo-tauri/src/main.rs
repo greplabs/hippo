@@ -1379,16 +1379,15 @@ async fn ai_smart_rename(
 
 #[tauri::command]
 async fn get_recommended_models() -> Result<serde_json::Value, String> {
+    use hippo_core::ollama::RecommendedModels;
     Ok(serde_json::json!({
-        "embedding": {
-            "light": hippo_core::RecommendedModels::EMBEDDING_LIGHT,
-            "standard": hippo_core::RecommendedModels::EMBEDDING_STANDARD
-        },
+        "embedding": RecommendedModels::EMBEDDINGS,
         "generation": {
-            "light": hippo_core::RecommendedModels::GENERATION_LIGHT,
-            "standard": hippo_core::RecommendedModels::GENERATION_STANDARD
+            "fast": RecommendedModels::FAST,
+            "balanced": RecommendedModels::BALANCED,
+            "quality": RecommendedModels::QUALITY
         },
-        "code": hippo_core::RecommendedModels::CODE_MODELS
+        "vision": RecommendedModels::VISION
     }))
 }
 

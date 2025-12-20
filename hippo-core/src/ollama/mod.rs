@@ -1,6 +1,7 @@
 //! Ollama integration for local AI capabilities
 //!
 //! Supports local embeddings, text generation, and RAG pipelines.
+//! Includes support for high-quality models like Gemma2, Llama3.2, and Qwen2.5.
 
 use crate::error::{HippoError, Result};
 use reqwest::Client;
@@ -14,8 +15,68 @@ pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 /// Default embedding model
 pub const DEFAULT_EMBEDDING_MODEL: &str = "nomic-embed-text";
 
-/// Default generation model (qwen2:0.5b is fast and lightweight - 352MB)
-pub const DEFAULT_GENERATION_MODEL: &str = "qwen2:0.5b";
+/// Default generation model - Gemma2 2B is fast, smart, and lightweight (~1.6GB)
+pub const DEFAULT_GENERATION_MODEL: &str = "gemma2:2b";
+
+/// Recommended models for different use cases
+pub struct RecommendedModels;
+
+impl RecommendedModels {
+    /// Fast and lightweight models (~1-2GB) - good for quick responses
+    pub const FAST: &'static [&'static str] = &[
+        "gemma2:2b",    // Google's Gemma2 2B - excellent quality/speed ratio
+        "qwen2.5:1.5b", // Alibaba's Qwen 2.5 - very fast
+        "llama3.2:1b",  // Meta's Llama 3.2 1B - smallest Llama
+        "phi3:mini",    // Microsoft's Phi-3 mini
+    ];
+
+    /// Balanced models (~4-8GB) - good quality with reasonable speed
+    pub const BALANCED: &'static [&'static str] = &[
+        "gemma2:9b",   // Google's Gemma2 9B - high quality
+        "llama3.2:3b", // Meta's Llama 3.2 3B
+        "qwen2.5:7b",  // Alibaba's Qwen 2.5 7B
+        "mistral:7b",  // Mistral 7B - great all-rounder
+    ];
+
+    /// High quality models (~12-20GB) - best results, slower
+    pub const QUALITY: &'static [&'static str] = &[
+        "llama3.1:8b",         // Meta's Llama 3.1 8B
+        "gemma2:27b",          // Google's Gemma2 27B
+        "qwen2.5:14b",         // Alibaba's Qwen 2.5 14B
+        "deepseek-coder:6.7b", // DeepSeek for code
+    ];
+
+    /// Best embedding models
+    pub const EMBEDDINGS: &'static [&'static str] = &[
+        "nomic-embed-text",  // Good general purpose
+        "mxbai-embed-large", // Higher quality embeddings
+        "all-minilm",        // Fast, smaller embeddings
+    ];
+
+    /// Vision models for image understanding
+    pub const VISION: &'static [&'static str] = &[
+        "llava:7b",  // LLaVA for image understanding
+        "llava:13b", // Larger LLaVA
+        "bakllava",  // BakLLaVA variant
+    ];
+
+    /// Get the best available model from a category
+    pub async fn get_best_available(client: &OllamaClient, category: &[&str]) -> Option<String> {
+        if let Ok(models) = client.list_models().await {
+            let model_names: Vec<String> = models.iter().map(|m| m.name.clone()).collect();
+            for preferred in category {
+                // Check exact match or prefix match (for versioned models)
+                if model_names
+                    .iter()
+                    .any(|m| m == *preferred || m.starts_with(&format!("{}:", preferred)))
+                {
+                    return Some(preferred.to_string());
+                }
+            }
+        }
+        None
+    }
+}
 
 /// Embedding dimension for nomic-embed-text
 pub const NOMIC_EMBED_DIM: usize = 768;
@@ -650,46 +711,6 @@ impl Default for OllamaClient {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Recommended models for different tasks
-pub struct RecommendedModels;
-
-impl RecommendedModels {
-    /// Lightweight embedding models
-    pub const EMBEDDING_LIGHT: &'static [&'static str] = &[
-        "nomic-embed-text", // 274MB, 768 dim
-        "all-minilm",       // 45MB, 384 dim
-    ];
-
-    /// Standard embedding models
-    pub const EMBEDDING_STANDARD: &'static [&'static str] = &[
-        "mxbai-embed-large",      // 670MB, 1024 dim
-        "snowflake-arctic-embed", // 669MB, 1024 dim
-    ];
-
-    /// Lightweight generation models (1-3B params)
-    pub const GENERATION_LIGHT: &'static [&'static str] = &[
-        "llama3.2:1b", // 1.3GB
-        "llama3.2:3b", // 2GB
-        "phi3:mini",   // 2.3GB
-        "qwen2.5:3b",  // 1.9GB
-    ];
-
-    /// Standard generation models (7-8B params)
-    pub const GENERATION_STANDARD: &'static [&'static str] = &[
-        "llama3.1:8b", // 4.7GB
-        "mistral:7b",  // 4.1GB
-        "gemma2:9b",   // 5.5GB
-    ];
-
-    /// Code-specific models
-    pub const CODE_MODELS: &'static [&'static str] = &[
-        "codellama:7b",        // 3.8GB
-        "deepseek-coder:6.7b", // 3.8GB
-        "codegemma:7b",        // 5GB
-        "qwen2.5-coder:7b",    // 4.7GB
-    ];
 }
 
 #[cfg(test)]
