@@ -1,0 +1,70 @@
+version: '3.8'
+
+# Development overrides for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  hippo-web:
+    # Override build for development
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      target: builder  # Stop at builder stage for development
+    command: cargo watch -x 'run --package hippo-web'
+    environment:
+      # Development environment variables
+      RUST_LOG: debug,tower_http=debug,axum=trace
+      RUST_BACKTRACE: 1
+      HIPPO_DEV_MODE: "true"
+    volumes:
+      # Mount source code for hot reload
+      - ./hippo-core:/app/hippo-core:rw
+      - ./hippo-web:/app/hippo-web:rw
+      - ./Cargo.toml:/app/Cargo.toml:rw
+      - ./Cargo.lock:/app/Cargo.lock:rw
+
+      # Cache cargo registry and build artifacts
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - target:/app/target
+
+      # Database and data
+      - ./dev-data:/data:rw
+
+      # Development files to index
+      - ./storage:/mnt/index/storage:ro
+      - ./snapshots:/mnt/index/snapshots:ro
+    ports:
+      # Expose additional debug ports if needed
+      - "3000:3000"
+      - "9090:9090"  # Metrics endpoint (if implemented)
+    deploy:
+      # Remove resource limits for development
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+    depends_on:
+      - qdrant
+
+  qdrant:
+    # Development configuration for Qdrant
+    environment:
+      QDRANT__LOG_LEVEL: DEBUG
+      # Enable Qdrant Web UI
+      QDRANT__SERVICE__ENABLE_STATIC_CONTENT: "true"
+    ports:
+      - "6333:6333"  # HTTP API + Web UI
+      - "6334:6334"  # gRPC API
+    volumes:
+      # Use local directory for easier inspection
+      - ./dev-qdrant-data:/qdrant/storage:rw
+
+volumes:
+  # Development volumes
+  cargo-registry:
+    name: hippo-dev-cargo-registry
+  cargo-git:
+    name: hippo-dev-cargo-git
+  target:
+    name: hippo-dev-target

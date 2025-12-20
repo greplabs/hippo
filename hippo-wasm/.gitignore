@@ -1,0 +1,12 @@
+# WASM build outputs
+/pkg
+/target
+*.wasm
+*.js
+
+# Node modules (if using npm for testing)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db

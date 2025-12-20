@@ -11,9 +11,19 @@ target/
 dist/
 build/
 
-# Tauri specific (not needed for CLI Docker build)
+# Tauri specific (not needed for CLI/Web Docker build)
 hippo-tauri/target/
 hippo-tauri/ui/node_modules/
+hippo-tauri/
+
+# Development data
+dev-data/
+dev-qdrant-data/
+storage/
+snapshots/
+
+# Docker artifacts
+docker-compose.dev.yml
 
 # IDE
 .vscode/

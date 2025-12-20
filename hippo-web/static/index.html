@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+
+  <title>Hippo - The Memory That Never Forgets</title>
+  <meta name="description" content="Local-first, cross-platform file organizer with powerful search and metadata extraction">
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Theme Colors -->
+  <meta name="theme-color" content="#6366f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#4338ca" media="(prefers-color-scheme: dark)">
+  <meta name="background-color" content="#f8f8f7">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="/icons/favicon.ico">
+  <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+
+  <!-- Apple Touch Icons -->
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+
+  <!-- Apple Mobile Web App -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Hippo">
+
+  <!-- Microsoft Tiles -->
+  <meta name="msapplication-TileColor" content="#6366f1">
+  <meta name="msapplication-TileImage" content="/icons/icon-192.png">
+  <meta name="msapplication-config" content="/browserconfig.xml">
+
+  <!-- Mobile Web App Capable -->
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- Format Detection (disable auto-detection of phone numbers, etc.) -->
+  <meta name="format-detection" content="telephone=no">
+
+  <!-- Open Graph / Social Media -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Hippo - The Memory That Never Forgets">
+  <meta property="og:description" content="Local-first, cross-platform file organizer with powerful search">
+  <meta property="og:image" content="/icons/icon-512.png">
+  <meta property="og:url" content="https://yourdomain.com">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Hippo - The Memory That Never Forgets">
+  <meta name="twitter:description" content="Local-first, cross-platform file organizer">
+  <meta name="twitter:image" content="/icons/icon-512.png">
+
+  <!-- Preconnect to improve performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+      background: #f8f8f7;
+      color: #1f2937;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body.dark {
+      background: #0f0e0d;
+      color: #f3f4f6;
+    }
+
+    /* Offline Banner */
+    .offline-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: #ef4444;
+      color: white;
+      padding: 12px 20px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 9999;
+      transform: translateY(-100%);
+      transition: transform 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .offline-banner.show {
+      transform: translateY(0);
+    }
+
+    .offline-banner.online {
+      background: #10b981;
+    }
+
+    /* Install Prompt */
+    .install-prompt {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(120%);
+      background: white;
+      border-radius: 12px;
+      padding: 16px 24px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      max-width: 400px;
+      z-index: 9998;
+      transition: transform 0.3s ease;
+    }
+
+    .install-prompt.show {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    body.dark .install-prompt {
+      background: #1f2937;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .install-prompt-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .install-prompt-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .install-prompt-content {
+      flex: 1;
+    }
+
+    .install-prompt-title {
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .install-prompt-text {
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    body.dark .install-prompt-text {
+      color: #9ca3af;
+    }
+
+    .install-prompt-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .install-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .install-btn-primary {
+      background: #6366f1;
+      color: white;
+    }
+
+    .install-btn-primary:hover {
+      background: #4f46e5;
+    }
+
+    .install-btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    body.dark .install-btn-secondary {
+      background: #374151;
+      color: #f3f4f6;
+    }
+
+    .install-btn-secondary:hover {
+      background: #e5e7eb;
+    }
+
+    body.dark .install-btn-secondary:hover {
+      background: #4b5563;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      flex: 1;
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      padding: 40px 20px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    body.dark header {
+      border-color: #374151;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #6366f1;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 1.1rem;
+      color: #6b7280;
+    }
+
+    body.dark .subtitle {
+      color: #9ca3af;
+    }
+
+    /* Main Content */
+    main {
+      padding: 40px 0;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      margin-top: 32px;
+    }
+
+    .feature-card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    body.dark .feature-card {
+      background: #1f2937;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    .feature-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      background: #eef2ff;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      font-size: 24px;
+    }
+
+    body.dark .feature-icon {
+      background: #312e81;
+    }
+
+    .feature-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .feature-description {
+      color: #6b7280;
+      font-size: 0.95rem;
+    }
+
+    body.dark .feature-description {
+      color: #9ca3af;
+    }
+
+    /* CTA Button */
+    .cta-section {
+      text-align: center;
+      margin-top: 48px;
+    }
+
+    .cta-button {
+      display: inline-block;
+      padding: 14px 32px;
+      background: #6366f1;
+      color: white;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .cta-button:hover {
+      background: #4f46e5;
+      transform: translateY(-2px);
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 24px;
+      border-top: 1px solid #e5e7eb;
+      color: #6b7280;
+      font-size: 0.9rem;
+    }
+
+    body.dark footer {
+      border-color: #374151;
+      color: #9ca3af;
+    }
+
+    /* Update Available Banner */
+    .update-banner {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #6366f1;
+      color: white;
+      padding: 16px 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 9997;
+      transform: translateX(120%);
+      transition: transform 0.3s ease;
+    }
+
+    .update-banner.show {
+      transform: translateX(0);
+    }
+
+    .update-text {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .update-button {
+      padding: 6px 16px;
+      background: white;
+      color: #6366f1;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .update-button:hover {
+      background: #f3f4f6;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2rem;
+      }
+
+      .subtitle {
+        font-size: 1rem;
+      }
+
+      .feature-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .install-prompt {
+        max-width: calc(100% - 40px);
+        flex-direction: column;
+        text-align: center;
+      }
+    }
+
+    /* Loading Animation */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 40px auto;
+    }
+  </style>
+</head>
+<body>
+  <!-- Offline/Online Banner -->
+  <div id="offline-banner" class="offline-banner">
+    <span id="offline-text">You're offline. Some features may be limited.</span>
+  </div>
+
+  <!-- Install Prompt -->
+  <div id="install-prompt" class="install-prompt">
+    <div class="install-prompt-icon">
+      <img src="/icons/icon-192.png" alt="Hippo icon">
+    </div>
+    <div class="install-prompt-content">
+      <div class="install-prompt-title">Install Hippo</div>
+      <div class="install-prompt-text">Add to home screen for quick access</div>
+    </div>
+    <div class="install-prompt-actions">
+      <button id="install-accept" class="install-btn install-btn-primary">Install</button>
+      <button id="install-dismiss" class="install-btn install-btn-secondary">Later</button>
+    </div>
+  </div>
+
+  <!-- Update Available Banner -->
+  <div id="update-banner" class="update-banner">
+    <div class="update-text">A new version is available!</div>
+    <button id="update-button" class="update-button">Update</button>
+  </div>
+
+  <!-- Main Content -->
+  <header>
+    <h1>Hippo</h1>
+    <p class="subtitle">The Memory That Never Forgets</p>
+  </header>
+
+  <main class="container">
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📁</div>
+        <h3 class="feature-title">Local-First</h3>
+        <p class="feature-description">
+          All your files stay on your device. No cloud uploads, no privacy concerns.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <h3 class="feature-title">Powerful Search</h3>
+        <p class="feature-description">
+          Find files instantly with smart filtering, tags, and metadata search.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🏷️</div>
+        <h3 class="feature-title">Smart Tagging</h3>
+        <p class="feature-description">
+          Organize files with tags and let AI suggest relevant labels automatically.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3 class="feature-title">Rich Metadata</h3>
+        <p class="feature-description">
+          Extract EXIF from images, parse code files, analyze documents automatically.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3 class="feature-title">Lightning Fast</h3>
+        <p class="feature-description">
+          Built with Rust for maximum performance and minimal resource usage.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <h3 class="feature-title">Works Offline</h3>
+        <p class="feature-description">
+          PWA technology enables full functionality even without internet connection.
+        </p>
+      </div>
+    </div>
+
+    <div class="cta-section">
+      <a href="#" class="cta-button" id="get-started">Get Started</a>
+    </div>
+  </main>
+
+  <footer>
+    <p>&copy; 2024 Hippo. Open source project.</p>
+    <p>Built with Rust + Tauri</p>
+  </footer>
+
+  <!-- PWA JavaScript -->
+  <script>
+    // Service Worker Registration
+    let swRegistration = null;
+    let deferredPrompt = null;
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker
+          .register('/sw.js')
+          .then((registration) => {
+            console.log('SW registered:', registration);
+            swRegistration = registration;
+
+            // Check for updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  showUpdateBanner();
+                }
+              });
+            });
+          })
+          .catch((error) => {
+            console.error('SW registration failed:', error);
+          });
+
+        // Check for updates every hour
+        setInterval(() => {
+          if (swRegistration) {
+            swRegistration.update();
+          }
+        }, 60 * 60 * 1000);
+      });
+    }
+
+    // Offline/Online Detection
+    const offlineBanner = document.getElementById('offline-banner');
+    const offlineText = document.getElementById('offline-text');
+
+    function updateOnlineStatus() {
+      if (!navigator.onLine) {
+        offlineText.textContent = "You're offline. Some features may be limited.";
+        offlineBanner.classList.remove('online');
+        offlineBanner.classList.add('show');
+      } else {
+        if (offlineBanner.classList.contains('show')) {
+          offlineText.textContent = "You're back online!";
+          offlineBanner.classList.add('online');
+
+          // Hide after 3 seconds
+          setTimeout(() => {
+            offlineBanner.classList.remove('show');
+          }, 3000);
+        }
+      }
+    }
+
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    // Install Prompt
+    const installPrompt = document.getElementById('install-prompt');
+    const installAccept = document.getElementById('install-accept');
+    const installDismiss = document.getElementById('install-dismiss');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+
+      // Show install prompt after 5 seconds (if not dismissed)
+      const dismissed = localStorage.getItem('pwa-install-dismissed');
+      if (!dismissed) {
+        setTimeout(() => {
+          installPrompt.classList.add('show');
+        }, 5000);
+      }
+    });
+
+    installAccept.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+
+      console.log(`User response to install prompt: ${outcome}`);
+      deferredPrompt = null;
+      installPrompt.classList.remove('show');
+    });
+
+    installDismiss.addEventListener('click', () => {
+      installPrompt.classList.remove('show');
+      localStorage.setItem('pwa-install-dismissed', 'true');
+
+      // Allow showing again after 7 days
+      setTimeout(() => {
+        localStorage.removeItem('pwa-install-dismissed');
+      }, 7 * 24 * 60 * 60 * 1000);
+    });
+
+    // Detect if app is installed
+    window.addEventListener('appinstalled', () => {
+      console.log('PWA was installed');
+      installPrompt.classList.remove('show');
+
+      // Track installation (analytics stub)
+      if (window.analytics) {
+        window.analytics.track('PWA Installed');
+      }
+    });
+
+    // Update Banner
+    const updateBanner = document.getElementById('update-banner');
+    const updateButton = document.getElementById('update-button');
+
+    function showUpdateBanner() {
+      updateBanner.classList.add('show');
+    }
+
+    updateButton.addEventListener('click', () => {
+      if (swRegistration && swRegistration.waiting) {
+        swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+      window.location.reload();
+    });
+
+    // Handle service worker updates
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        console.log('Service worker updated, reloading page');
+        window.location.reload();
+      });
+    }
+
+    // Handle URL parameters (for shortcuts and share target)
+    const urlParams = new URLSearchParams(window.location.search);
+    const action = urlParams.get('action');
+
+    if (action === 'search') {
+      console.log('Opening search from shortcut');
+      // Implement search functionality
+    } else if (action === 'add-source') {
+      console.log('Opening add source from shortcut');
+      // Implement add source functionality
+    }
+
+    // Handle Share Target API
+    if (window.location.pathname === '/share') {
+      console.log('Handling shared content');
+      // Implement share handling
+    }
+
+    // Handle File Handler API
+    if (window.location.pathname === '/open') {
+      console.log('Handling opened file');
+      // Implement file opening
+    }
+
+    // Dark mode support
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+    function updateTheme(e) {
+      if (e.matches) {
+        document.body.classList.add('dark');
+      } else {
+        document.body.classList.remove('dark');
+      }
+    }
+
+    prefersDark.addEventListener('change', updateTheme);
+    updateTheme(prefersDark);
+
+    // Get Started button
+    document.getElementById('get-started').addEventListener('click', (e) => {
+      e.preventDefault();
+
+      // Check if Tauri API is available
+      if (window.__TAURI__) {
+        console.log('Running in Tauri');
+        // Initialize Tauri app
+      } else {
+        console.log('Running as web app');
+        // Show web app interface or download page
+        alert('Hippo is a desktop application. Please download the app or use the PWA version.');
+      }
+    });
+
+    // Performance monitoring
+    if ('performance' in window) {
+      window.addEventListener('load', () => {
+        const perfData = performance.getEntriesByType('navigation')[0];
+        console.log('Page load time:', perfData.loadEventEnd - perfData.fetchStart, 'ms');
+      });
+    }
+
+    // Network Information API
+    if ('connection' in navigator) {
+      const connection = navigator.connection;
+      console.log('Connection type:', connection.effectiveType);
+      console.log('Downlink:', connection.downlink, 'Mbps');
+
+      connection.addEventListener('change', () => {
+        console.log('Connection changed:', connection.effectiveType);
+      });
+    }
+  </script>
+</body>
+</html>

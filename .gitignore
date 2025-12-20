@@ -25,3 +25,7 @@
 storage/
 .qdrant-initialized
 hippo-tauri/binaries/
+
+# Docker development
+dev-data/
+dev-qdrant-data/

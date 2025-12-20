@@ -11,10 +11,8 @@ use crate::error::Result;
 use crate::models::*;
 use crate::storage::Storage;
 use crate::HippoConfig;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use regex::Regex;
-use std::collections::HashSet;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::warn;
 

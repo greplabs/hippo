@@ -1,0 +1,49 @@
+[package]
+name = "hippo-wasm"
+version.workspace = true
+edition = "2021"
+description = "WebAssembly bindings for Hippo search engine"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# WASM bindings
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["console"] }
+
+# Error handling for WASM
+console_error_panic_hook = "0.1"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-wasm-bindgen = "0.6"
+
+# Core types and utilities
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+# Logging for WASM
+tracing = { workspace = true }
+tracing-wasm = "0.2"
+
+# We only need the models and search logic, not storage/indexing
+# These dependencies are WASM-compatible
+regex = "1"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[profile.release]
+# Optimize for small code size
+opt-level = "z"     # Optimize for size
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Better optimization
+panic = "abort"     # Smaller binary
+strip = true        # Remove debug symbols
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz", "--enable-mutable-globals"]

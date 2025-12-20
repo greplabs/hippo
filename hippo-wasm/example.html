@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hippo WASM Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        .demo-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .demo-section h2 {
+            margin-top: 0;
+            color: #555;
+        }
+
+        input, button {
+            padding: 10px;
+            margin: 5px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 3px solid #007bff;
+            font-family: 'Courier New', monospace;
+        }
+
+        .memory-card {
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+
+        .score {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Hippo WASM Demo</h1>
+    <p>Client-side search powered by WebAssembly</p>
+
+    <div class="demo-section">
+        <h2>1. Fuzzy Matching</h2>
+        <p>Test fuzzy string matching with Levenshtein distance</p>
+        <input type="text" id="fuzzy-query" placeholder="Enter query" value="hello">
+        <input type="text" id="fuzzy-text" placeholder="Enter text to match" value="helo">
+        <button onclick="testFuzzyMatch()">Test Fuzzy Match</button>
+        <div id="fuzzy-result"></div>
+    </div>
+
+    <div class="demo-section">
+        <h2>2. Semantic Similarity</h2>
+        <p>Calculate cosine similarity between embedding vectors</p>
+        <input type="text" id="vec1" placeholder="Vector 1 (comma-separated)" value="1.0, 2.0, 3.0">
+        <input type="text" id="vec2" placeholder="Vector 2 (comma-separated)" value="1.0, 2.1, 2.9">
+        <button onclick="testSemanticScore()">Test Similarity</button>
+        <div id="semantic-result"></div>
+    </div>
+
+    <div class="demo-section">
+        <h2>3. Local Search</h2>
+        <p>Search through sample memories with fuzzy matching and scoring</p>
+        <input type="text" id="search-query" placeholder="Search..." value="beach">
+        <button onclick="testSearch()">Search</button>
+        <div id="search-result"></div>
+    </div>
+
+    <div class="demo-section">
+        <h2>4. Filtering & Sorting</h2>
+        <p>Client-side filtering and sorting</p>
+        <select id="filter-type">
+            <option value="">All Types</option>
+            <option value="image">Images</option>
+            <option value="video">Videos</option>
+            <option value="document">Documents</option>
+        </select>
+        <select id="sort-field">
+            <option value="name">Name</option>
+            <option value="size">Size</option>
+            <option value="date">Date</option>
+        </select>
+        <select id="sort-order">
+            <option value="true">Ascending</option>
+            <option value="false">Descending</option>
+        </select>
+        <button onclick="testFilterSort()">Apply</button>
+        <div id="filter-result"></div>
+    </div>
+
+    <script type="module">
+        import init, {
+            fuzzy_match,
+            semantic_score,
+            search_local,
+            filter_by_type,
+            sort_memories,
+            get_stats,
+            version
+        } from './pkg/hippo_wasm.js';
+
+        // Sample memories for testing
+        const sampleMemories = [
+            {
+                id: "1",
+                path: "/photos/beach_vacation.jpg",
+                title: "Beach Vacation 2025",
+                tags: ["beach", "summer", "vacation"],
+                file_size: 2048000,
+                modified_at: "2025-01-15T10:00:00Z",
+                kind: "image"
+            },
+            {
+                id: "2",
+                path: "/docs/annual_report.pdf",
+                title: "Annual Report",
+                tags: ["work", "report"],
+                file_size: 512000,
+                modified_at: "2025-01-14T09:00:00Z",
+                kind: "document"
+            },
+            {
+                id: "3",
+                path: "/videos/beach_sunset.mp4",
+                title: "Beach Sunset",
+                tags: ["beach", "sunset", "video"],
+                file_size: 10240000,
+                modified_at: "2025-01-13T18:30:00Z",
+                kind: "video"
+            },
+            {
+                id: "4",
+                path: "/photos/mountain_hike.jpg",
+                title: "Mountain Hiking",
+                tags: ["mountain", "hiking", "nature"],
+                file_size: 3072000,
+                modified_at: "2025-01-12T14:20:00Z",
+                kind: "image"
+            }
+        ];
+
+        // Initialize WASM module
+        let wasmReady = false;
+
+        async function initWasm() {
+            try {
+                await init();
+                wasmReady = true;
+                console.log('Hippo WASM version:', version());
+                document.body.style.borderTop = '4px solid #28a745';
+            } catch (err) {
+                console.error('Failed to initialize WASM:', err);
+                document.body.insertAdjacentHTML('afterbegin',
+                    '<div class="error">Failed to load WASM module. Make sure to build it first with ./build-wasm.sh</div>'
+                );
+            }
+        }
+
+        // Test fuzzy matching
+        window.testFuzzyMatch = function() {
+            if (!wasmReady) return showError('fuzzy-result', 'WASM not initialized');
+
+            const query = document.getElementById('fuzzy-query').value;
+            const text = document.getElementById('fuzzy-text').value;
+
+            const score = fuzzy_match(query, text);
+
+            document.getElementById('fuzzy-result').innerHTML = `
+                <div class="result">
+                    Score: <span class="score">${(score * 100).toFixed(1)}%</span>
+                    <br>
+                    Query: "${query}"
+                    <br>
+                    Text: "${text}"
+                    <br>
+                    ${score > 0.8 ? '✓ Strong match' : score > 0.5 ? '~ Partial match' : '✗ Weak match'}
+                </div>
+            `;
+        };
+
+        // Test semantic scoring
+        window.testSemanticScore = function() {
+            if (!wasmReady) return showError('semantic-result', 'WASM not initialized');
+
+            const vec1 = document.getElementById('vec1').value.split(',').map(x => parseFloat(x.trim()));
+            const vec2 = document.getElementById('vec2').value.split(',').map(x => parseFloat(x.trim()));
+
+            const score = semantic_score(new Float32Array(vec1), new Float32Array(vec2));
+
+            document.getElementById('semantic-result').innerHTML = `
+                <div class="result">
+                    Cosine Similarity: <span class="score">${score.toFixed(4)}</span>
+                    <br>
+                    Vector 1: [${vec1.join(', ')}]
+                    <br>
+                    Vector 2: [${vec2.join(', ')}]
+                    <br>
+                    ${score > 0.9 ? '✓ Very similar' : score > 0.7 ? '~ Somewhat similar' : '✗ Different'}
+                </div>
+            `;
+        };
+
+        // Test search
+        window.testSearch = function() {
+            if (!wasmReady) return showError('search-result', 'WASM not initialized');
+
+            const query = document.getElementById('search-query').value;
+            const memoriesJson = JSON.stringify(sampleMemories);
+
+            const resultsJson = search_local(memoriesJson, query);
+            const results = JSON.parse(resultsJson);
+
+            let html = `<p>Found ${results.length} results for "${query}"</p>`;
+
+            results.forEach(result => {
+                const highlights = result.highlights.map(h =>
+                    `<span class="highlight">${h.field}: ${h.snippet}</span>`
+                ).join(' ');
+
+                html += `
+                    <div class="memory-card">
+                        <strong>${result.memory.title || result.memory.path}</strong>
+                        <br>
+                        Score: <span class="score">${result.score.toFixed(2)}</span>
+                        <br>
+                        Type: ${result.memory.kind}
+                        <br>
+                        Tags: ${result.memory.tags.join(', ')}
+                        ${highlights ? '<br>Matches: ' + highlights : ''}
+                    </div>
+                `;
+            });
+
+            document.getElementById('search-result').innerHTML = html;
+        };
+
+        // Test filtering and sorting
+        window.testFilterSort = function() {
+            if (!wasmReady) return showError('filter-result', 'WASM not initialized');
+
+            let memories = sampleMemories;
+            let memoriesJson = JSON.stringify(memories);
+
+            // Apply filter
+            const filterType = document.getElementById('filter-type').value;
+            if (filterType) {
+                memoriesJson = filter_by_type(memoriesJson, filterType);
+            }
+
+            // Apply sort
+            const sortField = document.getElementById('sort-field').value;
+            const sortOrder = document.getElementById('sort-order').value === 'true';
+            memoriesJson = sort_memories(memoriesJson, sortField, sortOrder);
+
+            const filtered = JSON.parse(memoriesJson);
+
+            let html = `<p>Showing ${filtered.length} items</p>`;
+            filtered.forEach(memory => {
+                html += `
+                    <div class="memory-card">
+                        <strong>${memory.title || memory.path}</strong>
+                        <br>
+                        Type: ${memory.kind}
+                        <br>
+                        Size: ${formatBytes(memory.file_size)}
+                        <br>
+                        Modified: ${new Date(memory.modified_at).toLocaleDateString()}
+                    </div>
+                `;
+            });
+
+            document.getElementById('filter-result').innerHTML = html;
+        };
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function showError(elementId, message) {
+            document.getElementById(elementId).innerHTML =
+                `<div class="error">${message}</div>`;
+        }
+
+        // Initialize on page load
+        initWasm();
+    </script>
+</body>
+</html>

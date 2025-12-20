@@ -1,0 +1,20 @@
+# Build artifacts
+/target/
+Cargo.lock
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test data
+/test_data/

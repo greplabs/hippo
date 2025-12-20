@@ -1,0 +1,13 @@
+# Cargo configuration for WebAssembly target
+
+[target.wasm32-unknown-unknown]
+rustflags = [
+    # Optimize for size
+    "-C", "link-arg=-s",
+    # Enable wasm-opt optimizations
+    "-C", "opt-level=z",
+]
+
+[build]
+# Default target for WASM builds (uncomment if you want WASM as default)
+# target = "wasm32-unknown-unknown"

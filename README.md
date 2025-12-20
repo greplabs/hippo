@@ -80,8 +80,9 @@ Hippo is a **privacy-first file organizer** that runs entirely on your machine. 
 
 - [Rust](https://rustup.rs/) 1.70+
 - [Ollama](https://ollama.ai/) (for AI features)
+- [Docker](https://www.docker.com/) & Docker Compose (for web deployment)
 
-### Quick Start
+### Quick Start (Desktop App)
 
 ```bash
 # Clone the repository
@@ -94,6 +95,100 @@ ollama pull nomic-embed-text  # Embeddings (274MB)
 
 # Build and run
 cargo run --bin hippo-tauri
+```
+
+### Docker Deployment (Web Server)
+
+Deploy Hippo as a web service with Docker Compose:
+
+```bash
+# Clone the repository
+git clone https://github.com/greplabs/hippo.git
+cd hippo
+
+# Configure environment variables
+cp .env.example .env
+# Edit .env to customize your setup (ports, paths, etc.)
+
+# Start services (Hippo Web + Qdrant)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f hippo-web
+
+# Stop services
+docker-compose down
+```
+
+The web interface will be available at `http://localhost:3000`.
+
+#### Docker Configuration
+
+**Customize indexed paths**: Edit `.env` and add your directories:
+
+```bash
+# .env
+HIPPO_INDEX_PATH_1=/path/to/your/documents
+HIPPO_INDEX_PATH_2=/path/to/your/photos
+HIPPO_INDEX_PATH_3=/path/to/your/videos
+```
+
+Then update `docker-compose.yml` to mount these paths:
+
+```yaml
+volumes:
+  - /path/to/your/documents:/mnt/index/documents:ro
+  - /path/to/your/photos:/mnt/index/photos:ro
+  - /path/to/your/videos:/mnt/index/videos:ro
+```
+
+**Access Qdrant Web UI**: Navigate to `http://localhost:6333/dashboard`
+
+**Connect to Ollama on host**: Ollama running on your host machine is accessible via `http://host.docker.internal:11434`
+
+#### Development with Docker
+
+For development with hot reload:
+
+```bash
+# Start with development overrides
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+# This mounts your source code and rebuilds on changes
+# Using cargo-watch for automatic recompilation
+```
+
+#### Docker Services
+
+The Docker Compose stack includes:
+
+- **hippo-web**: Web server with REST API (port 3000)
+- **qdrant**: Vector database for semantic search (ports 6333, 6334)
+
+#### Health Checks
+
+Check service health:
+
+```bash
+# Hippo Web health endpoint
+curl http://localhost:3000/health
+
+# Qdrant health
+curl http://localhost:6333/
+```
+
+#### Resource Management
+
+Default resource limits (configurable in `.env`):
+
+- **Hippo Web**: 2 CPU cores, 2GB RAM
+- **Qdrant**: 1 CPU core, 1GB RAM
+
+Adjust in `.env`:
+
+```bash
+HIPPO_CPU_LIMIT=4.0
+HIPPO_MEM_LIMIT=4G
 ```
 
 ### CLI Usage
@@ -271,6 +366,13 @@ git push origin feature/amazing-feature
 - [ ] Mobile companion app
 - [ ] Browser extension
 - [ ] Sync between devices (E2E encrypted)
+
+## Documentation
+
+- [Docker Deployment Guide](DOCKER.md) - Comprehensive Docker documentation
+- [Docker Quick Start](QUICKSTART-DOCKER.md) - Get started in 5 minutes
+- [Contributing Guidelines](CONTRIBUTING.md) - How to contribute
+- [Architecture Overview](CLAUDE.md) - Detailed project structure
 
 ## License
 

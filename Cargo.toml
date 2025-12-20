@@ -4,6 +4,8 @@ members = [
     "hippo-core",      # Core library: indexing, embeddings, search
     "hippo-tauri",     # Desktop app with Tauri
     "hippo-cli",       # CLI for shell usage
+    "hippo-wasm",      # WebAssembly bindings for browser
+    "hippo-web",       # REST API server
 ]
 
 [workspace.package]

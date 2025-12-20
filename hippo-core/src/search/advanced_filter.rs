@@ -248,17 +248,16 @@ impl AdvancedFilter {
             let mode = &metadata_match.match_mode;
 
             filtered.retain(|m| {
-                let field_value = match field.as_str() {
-                    "title" => m.metadata.title.as_ref(),
-                    "description" => m.metadata.description.as_ref(),
-                    "mime_type" => m.metadata.mime_type.as_ref(),
+                let field_value: Option<&str> = match field.as_str() {
+                    "title" => m.metadata.title.as_deref(),
+                    "description" => m.metadata.description.as_deref(),
+                    "mime_type" => m.metadata.mime_type.as_deref(),
                     _ => {
                         // Check custom fields
                         m.metadata
                             .custom
                             .get(field)
                             .and_then(|v| v.as_str())
-                            .as_ref()
                     }
                 };
 
