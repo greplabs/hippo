@@ -265,7 +265,11 @@ fn test_fuzzy_find_best_match_exact() {
 #[test]
 fn test_fuzzy_find_best_match_typo() {
     let (score, matched) = fuzzy_find_best_match("tset", "test file");
-    assert!(score >= 0.5, "Expected >= 0.5 for typo match, got {}", score);
+    assert!(
+        score >= 0.5,
+        "Expected >= 0.5 for typo match, got {}",
+        score
+    );
     assert!(matched.is_some());
 }
 
@@ -320,13 +324,25 @@ fn test_fuzzy_match_common_typos() {
     // Common typing mistakes - should have decent similarity
     // The Levenshtein-based fuzzy match returns lower scores for longer strings
     let score1 = fuzzy_match("receive", "recieve");
-    assert!(score1 > 0.5, "Expected receive/recieve > 0.5, got {}", score1);
+    assert!(
+        score1 > 0.5,
+        "Expected receive/recieve > 0.5, got {}",
+        score1
+    );
 
     let score2 = fuzzy_match("separate", "seperate");
-    assert!(score2 > 0.5, "Expected separate/seperate > 0.5, got {}", score2);
+    assert!(
+        score2 > 0.5,
+        "Expected separate/seperate > 0.5, got {}",
+        score2
+    );
 
     let score3 = fuzzy_match("definitely", "definately");
-    assert!(score3 > 0.5, "Expected definitely/definately > 0.5, got {}", score3);
+    assert!(
+        score3 > 0.5,
+        "Expected definitely/definately > 0.5, got {}",
+        score3
+    );
 }
 
 #[test]
