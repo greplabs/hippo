@@ -44,6 +44,9 @@ pub enum HippoError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 
+    #[error("Watcher error: {0}")]
+    Watcher(String),
+
     #[error("{0}")]
     Other(String),
 }

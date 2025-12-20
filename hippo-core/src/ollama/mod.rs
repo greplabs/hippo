@@ -5,10 +5,20 @@
 
 use base64::Engine;
 use crate::error::{HippoError, Result};
+use futures_util::stream::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::pin::Pin;
 use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
+
+/// Stream chunk from Ollama
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamChunk {
+    pub text: String,
+    pub done: bool,
+}
 
 /// Default Ollama API endpoint
 pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
@@ -511,6 +521,189 @@ impl OllamaClient {
             .map_err(|e| HippoError::Other(format!("Failed to parse chat response: {}", e)))?;
 
         Ok(chat_resp.message.content)
+    }
+
+    /// Stream chat responses (yields chunks as they arrive)
+    pub async fn stream_chat<F>(
+        &self,
+        messages: &[ChatMessage],
+        cancellation_token: CancellationToken,
+        mut on_chunk: F,
+    ) -> Result<String>
+    where
+        F: FnMut(String) + Send,
+    {
+        let url = format!("{}/api/chat", self.base_url);
+
+        let request = ChatRequest {
+            model: self.generation_model.clone(),
+            messages: messages.to_vec(),
+            stream: true, // Enable streaming
+            options: GenerateOptions {
+                temperature: Some(0.7),
+                num_predict: Some(2048),
+                top_p: Some(0.9),
+            },
+        };
+
+        debug!("Starting streaming chat with model: {}", self.generation_model);
+
+        let resp = self
+            .client
+            .post(&url)
+            .json(&request)
+            .timeout(Duration::from_secs(300)) // 5 minute timeout for streaming
+            .send()
+            .await
+            .map_err(|e| HippoError::Other(format!("Chat request failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let error = resp.text().await.unwrap_or_default();
+            return Err(HippoError::Other(format!("Chat failed: {}", error)));
+        }
+
+        let mut stream = resp.bytes_stream();
+        let mut full_response = String::new();
+        let mut buffer = String::new();
+
+        while let Some(chunk_result) = stream.next().await {
+            // Check for cancellation
+            if cancellation_token.is_cancelled() {
+                debug!("Stream cancelled by user");
+                return Err(HippoError::Other("Stream cancelled".to_string()));
+            }
+
+            let chunk = chunk_result
+                .map_err(|e| HippoError::Other(format!("Stream error: {}", e)))?;
+
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+            // Process complete JSON lines
+            while let Some(newline_pos) = buffer.find('\n') {
+                let line = buffer[..newline_pos].trim().to_string();
+                buffer = buffer[newline_pos + 1..].to_string();
+
+                if line.is_empty() {
+                    continue;
+                }
+
+                // Parse the streaming response
+                match serde_json::from_str::<ChatResponse>(&line) {
+                    Ok(chat_resp) => {
+                        let content = &chat_resp.message.content;
+                        if !content.is_empty() {
+                            full_response.push_str(content);
+                            on_chunk(content.clone());
+                        }
+
+                        if chat_resp.done {
+                            debug!("Stream completed successfully");
+                            return Ok(full_response);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse streaming chunk: {} - Line: {}", e, line);
+                    }
+                }
+            }
+        }
+
+        Ok(full_response)
+    }
+
+    /// Stream text generation (yields chunks as they arrive)
+    pub async fn stream_generate<F>(
+        &self,
+        prompt: &str,
+        system: Option<&str>,
+        cancellation_token: CancellationToken,
+        mut on_chunk: F,
+    ) -> Result<String>
+    where
+        F: FnMut(String) + Send,
+    {
+        let url = format!("{}/api/generate", self.base_url);
+
+        let request = GenerateRequest {
+            model: self.generation_model.clone(),
+            prompt: prompt.to_string(),
+            stream: true, // Enable streaming
+            system: system.map(String::from),
+            context: None,
+            options: GenerateOptions {
+                temperature: Some(0.7),
+                num_predict: Some(1024),
+                top_p: Some(0.9),
+            },
+        };
+
+        debug!("Starting streaming generation with model: {}", self.generation_model);
+
+        let resp = self
+            .client
+            .post(&url)
+            .json(&request)
+            .timeout(Duration::from_secs(300)) // 5 minute timeout for streaming
+            .send()
+            .await
+            .map_err(|e| HippoError::Other(format!("Generate request failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let error = resp.text().await.unwrap_or_default();
+            return Err(HippoError::Other(format!(
+                "Generation failed ({}): {}. Make sure '{}' model is installed.",
+                status, error, self.generation_model
+            )));
+        }
+
+        let mut stream = resp.bytes_stream();
+        let mut full_response = String::new();
+        let mut buffer = String::new();
+
+        while let Some(chunk_result) = stream.next().await {
+            // Check for cancellation
+            if cancellation_token.is_cancelled() {
+                debug!("Stream cancelled by user");
+                return Err(HippoError::Other("Stream cancelled".to_string()));
+            }
+
+            let chunk = chunk_result
+                .map_err(|e| HippoError::Other(format!("Stream error: {}", e)))?;
+
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+            // Process complete JSON lines
+            while let Some(newline_pos) = buffer.find('\n') {
+                let line = buffer[..newline_pos].trim().to_string();
+                buffer = buffer[newline_pos + 1..].to_string();
+
+                if line.is_empty() {
+                    continue;
+                }
+
+                // Parse the streaming response
+                match serde_json::from_str::<GenerateResponse>(&line) {
+                    Ok(gen_resp) => {
+                        let content = &gen_resp.response;
+                        if !content.is_empty() {
+                            full_response.push_str(content);
+                            on_chunk(content.clone());
+                        }
+
+                        if gen_resp.done {
+                            debug!("Stream completed successfully");
+                            return Ok(full_response);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse streaming chunk: {} - Line: {}", e, line);
+                    }
+                }
+            }
+        }
+
+        Ok(full_response)
     }
 
     /// Analyze a document and extract structured information

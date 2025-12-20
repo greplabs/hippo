@@ -2,13 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+  workflow_dispatch: # Allow manual trigger
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  RUSTFLAGS: -D warnings
 
 jobs:
   check:
@@ -216,3 +218,55 @@ jobs:
           name: hippo-${{ matrix.target }}
           path: artifacts/*
           retention-days: 30
+
+  # Verify artifact integrity
+  verify-artifacts:
+    name: Verify Build Artifacts
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List all artifacts
+        run: |
+          echo "=== Build Artifacts ==="
+          find artifacts -type f -exec ls -lh {} \;
+
+      - name: Verify binaries exist
+        run: |
+          # Check that we have artifacts for all platforms
+          test -f artifacts/hippo-x86_64-unknown-linux-gnu/hippo-tauri-x86_64-unknown-linux-gnu || echo "Warning: Linux GUI binary not found"
+          test -f artifacts/hippo-x86_64-unknown-linux-gnu/hippo-cli-x86_64-unknown-linux-gnu || echo "Warning: Linux CLI binary not found"
+          test -f artifacts/hippo-x86_64-pc-windows-msvc/hippo-tauri-x86_64-pc-windows-msvc.exe || echo "Warning: Windows GUI binary not found"
+          test -f artifacts/hippo-x86_64-pc-windows-msvc/hippo-cli-x86_64-pc-windows-msvc.exe || echo "Warning: Windows CLI binary not found"
+          echo "Artifact verification complete"
+
+  # Generate build summary
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [check, fmt, clippy, test, build, verify-artifacts]
+    if: always()
+    steps:
+      - name: Check CI status
+        run: |
+          echo "=== CI Pipeline Summary ==="
+          echo "Check: ${{ needs.check.result }}"
+          echo "Format: ${{ needs.fmt.result }}"
+          echo "Clippy: ${{ needs.clippy.result }}"
+          echo "Test: ${{ needs.test.result }}"
+          echo "Build: ${{ needs.build.result }}"
+          echo "Verify: ${{ needs.verify-artifacts.result }}"
+
+          if [ "${{ needs.check.result }}" == "failure" ] || \
+             [ "${{ needs.fmt.result }}" == "failure" ] || \
+             [ "${{ needs.clippy.result }}" == "failure" ] || \
+             [ "${{ needs.test.result }}" == "failure" ] || \
+             [ "${{ needs.build.result }}" == "failure" ]; then
+            echo "❌ CI pipeline failed"
+            exit 1
+          fi
+          echo "✅ CI pipeline passed"

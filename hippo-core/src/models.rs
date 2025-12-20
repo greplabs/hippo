@@ -442,3 +442,25 @@ pub struct StorageStats {
     pub tag_count: usize,
     pub cluster_count: usize,
 }
+
+/// Export structure containing all index data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexExport {
+    pub version: String,
+    pub export_date: DateTime<Utc>,
+    pub memories: Vec<Memory>,
+    pub sources: Vec<SourceConfig>,
+    pub tags: Vec<(String, u64)>,
+    pub clusters: Vec<Cluster>,
+}
+
+/// Import statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportStats {
+    pub memories_imported: usize,
+    pub tags_imported: usize,
+    pub sources_imported: usize,
+    pub clusters_imported: usize,
+    pub duplicates_skipped: usize,
+    pub errors: Vec<String>,
+}

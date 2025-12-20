@@ -51,6 +51,8 @@ rayon = { workspace = true }
 reqwest = { workspace = true }
 base64 = "0.22"
 regex = "1"
+tokio-util = { version = "0.7", features = ["codec"] }
+futures-util = "0.3"
 
 # Hashing
 sha2 = { workspace = true }

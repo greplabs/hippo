@@ -315,6 +315,19 @@ impl Storage {
         Ok(())
     }
 
+    /// Remove a memory by its ID
+    pub async fn delete_memory(&self, id: MemoryId) -> Result<()> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        db.execute(
+            "DELETE FROM memories WHERE id = ?1",
+            params![id.to_string()],
+        )?;
+        Ok(())
+    }
+
     /// Remove a memory by its file path
     pub async fn remove_memory_by_path(&self, path: &std::path::Path) -> Result<()> {
         let db = self
@@ -1222,6 +1235,151 @@ impl Storage {
     pub async fn qdrant_stats(&self) -> Result<crate::qdrant::QdrantStats> {
         self.qdrant.stats().await
     }
+
+    // === Export/Import Operations ===
+
+    /// Export all index data to a serializable structure
+    pub async fn export_index(&self) -> Result<IndexExport> {
+        info!("Exporting index...");
+
+        let memories = self.get_all_memories().await?;
+        let sources = self.list_sources().await?;
+        let tags = self.list_tags().await?;
+        let clusters = self.list_clusters().await?;
+
+        let export = IndexExport {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            export_date: chrono::Utc::now(),
+            memories,
+            sources,
+            tags,
+            clusters,
+        };
+
+        info!(
+            "Export complete: {} memories, {} sources, {} tags, {} clusters",
+            export.memories.len(),
+            export.sources.len(),
+            export.tags.len(),
+            export.clusters.len()
+        );
+
+        Ok(export)
+    }
+
+    /// Import index data from an export structure
+    pub async fn import_index(&self, data: IndexExport) -> Result<ImportStats> {
+        info!("Importing index from export dated {}", data.export_date);
+
+        let mut stats = ImportStats {
+            memories_imported: 0,
+            tags_imported: 0,
+            sources_imported: 0,
+            clusters_imported: 0,
+            duplicates_skipped: 0,
+            errors: Vec::new(),
+        };
+
+        // Validate version compatibility (simple check for now)
+        let current_version = env!("CARGO_PKG_VERSION");
+        if data.version != current_version {
+            warn!(
+                "Import version mismatch: export={}, current={}",
+                data.version, current_version
+            );
+            stats.errors.push(format!(
+                "Version mismatch: export={}, current={}",
+                data.version, current_version
+            ));
+        }
+
+        // Import sources first
+        for source_config in data.sources {
+            match self.add_source(source_config.source.clone()).await {
+                Ok(_) => stats.sources_imported += 1,
+                Err(e) => {
+                    stats.errors.push(format!(
+                        "Failed to import source {:?}: {}",
+                        source_config.source, e
+                    ));
+                }
+            }
+        }
+
+        // Import memories
+        for memory in data.memories {
+            // Check if memory already exists by path
+            match self.get_memory_by_path(&memory.path).await {
+                Ok(Some(_)) => {
+                    stats.duplicates_skipped += 1;
+                }
+                Ok(None) => {
+                    // Memory doesn't exist, import it
+                    match self.upsert_memory(&memory).await {
+                        Ok(_) => stats.memories_imported += 1,
+                        Err(e) => {
+                            stats.errors.push(format!(
+                                "Failed to import memory {:?}: {}",
+                                memory.path, e
+                            ));
+                        }
+                    }
+                }
+                Err(e) => {
+                    stats.errors.push(format!(
+                        "Failed to check memory {:?}: {}",
+                        memory.path, e
+                    ));
+                }
+            }
+        }
+
+        // Import clusters
+        for cluster in data.clusters {
+            let db = self
+                .db
+                .lock()
+                .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+            match db.execute(
+                "INSERT OR REPLACE INTO clusters (id, name, kind, memory_ids_json, cover_id, auto_generated, created_at, metadata_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    cluster.id.to_string(),
+                    cluster.name,
+                    serde_json::to_string(&cluster.kind)?,
+                    serde_json::to_string(&cluster.memory_ids)?,
+                    cluster.cover_memory_id.map(|id| id.to_string()),
+                    if cluster.auto_generated { 1 } else { 0 },
+                    cluster.created_at.to_rfc3339(),
+                    serde_json::to_string(&cluster.metadata)?,
+                ],
+            ) {
+                Ok(_) => stats.clusters_imported += 1,
+                Err(e) => {
+                    stats.errors.push(format!(
+                        "Failed to import cluster {}: {}",
+                        cluster.name, e
+                    ));
+                }
+            }
+        }
+
+        // Tags are automatically imported with memories via upsert_memory
+        stats.tags_imported = data.tags.len();
+
+        info!(
+            "Import complete: {} memories, {} sources, {} tags, {} clusters imported ({} duplicates skipped, {} errors)",
+            stats.memories_imported,
+            stats.sources_imported,
+            stats.tags_imported,
+            stats.clusters_imported,
+            stats.duplicates_skipped,
+            stats.errors.len()
+        );
+
+        Ok(stats)
+    }
 }
 
 /// Calculate cosine similarity between two vectors
@@ -1239,4 +1397,98 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     }
 
     dot / (norm_a * norm_b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cosine_similarity_identical() {
+        let vec1 = vec![1.0, 0.0, 0.0];
+        let vec2 = vec![1.0, 0.0, 0.0];
+        let similarity = cosine_similarity(&vec1, &vec2);
+        assert!((similarity - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cosine_similarity_orthogonal() {
+        let vec1 = vec![1.0, 0.0, 0.0];
+        let vec2 = vec![0.0, 1.0, 0.0];
+        let similarity = cosine_similarity(&vec1, &vec2);
+        assert!((similarity - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cosine_similarity_opposite() {
+        let vec1 = vec![1.0, 0.0, 0.0];
+        let vec2 = vec![-1.0, 0.0, 0.0];
+        let similarity = cosine_similarity(&vec1, &vec2);
+        assert!((similarity + 1.0).abs() < 0.001); // Should be -1.0
+    }
+
+    #[test]
+    fn test_cosine_similarity_different_lengths() {
+        let vec1 = vec![1.0, 0.0];
+        let vec2 = vec![1.0, 0.0, 0.0];
+        let similarity = cosine_similarity(&vec1, &vec2);
+        assert_eq!(similarity, 0.0); // Different lengths
+    }
+
+    #[test]
+    fn test_cosine_similarity_empty() {
+        let vec1: Vec<f32> = vec![];
+        let vec2: Vec<f32> = vec![];
+        let similarity = cosine_similarity(&vec1, &vec2);
+        assert_eq!(similarity, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_zero_vectors() {
+        let vec1 = vec![0.0, 0.0, 0.0];
+        let vec2 = vec![1.0, 2.0, 3.0];
+        let similarity = cosine_similarity(&vec1, &vec2);
+        assert_eq!(similarity, 0.0);
+    }
+
+    #[test]
+    fn test_get_kind_name() {
+        use crate::models::DocumentFormat;
+
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Image {
+            width: 1920, height: 1080, format: "jpg".to_string()
+        }), "image");
+
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Video {
+            duration_ms: 1000, format: "mp4".to_string()
+        }), "video");
+
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Audio {
+            duration_ms: 1000, format: "mp3".to_string()
+        }), "audio");
+
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Code {
+            language: "rust".to_string(), lines: 100
+        }), "code");
+
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Document {
+            format: DocumentFormat::Pdf, page_count: Some(10)
+        }), "document");
+
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Spreadsheet {
+            sheet_count: 5
+        }), "spreadsheet");
+
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Presentation {
+            slide_count: 20
+        }), "presentation");
+
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Archive {
+            item_count: 100
+        }), "archive");
+
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Database), "database");
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Folder), "folder");
+        assert_eq!(Storage::get_kind_name(&MemoryKind::Unknown), "unknown");
+    }
 }

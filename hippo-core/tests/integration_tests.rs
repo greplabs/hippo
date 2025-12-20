@@ -399,6 +399,10 @@ mod search_tests {
 #[cfg(test)]
 mod duplicates_tests {
     use super::*;
+    use hippo_core::duplicates::*;
+    use std::collections::HashMap;
+    use std::io::Write;
+    use tempfile::TempDir;
 
     #[test]
     fn test_duplicate_group_structure() {
@@ -417,6 +421,189 @@ mod duplicates_tests {
         assert_eq!(group.size, 1024 * 1024);
         assert!(!group.hash.is_empty());
     }
+
+    #[test]
+    fn test_duplicate_count() {
+        let group = DuplicateGroup {
+            hash: "test_hash".to_string(),
+            size: 1000,
+            memory_ids: vec![
+                uuid::Uuid::new_v4(),
+                uuid::Uuid::new_v4(),
+                uuid::Uuid::new_v4(),
+            ],
+            paths: vec![PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")],
+        };
+
+        assert_eq!(group.duplicate_count(), 2); // 3 files - 1 original = 2 duplicates
+    }
+
+    #[test]
+    fn test_wasted_bytes() {
+        let group = DuplicateGroup {
+            hash: "test_hash".to_string(),
+            size: 5000,
+            memory_ids: vec![uuid::Uuid::new_v4(), uuid::Uuid::new_v4()],
+            paths: vec![PathBuf::from("a"), PathBuf::from("b")],
+        };
+
+        assert_eq!(group.wasted_bytes(), 5000); // 1 duplicate * 5000 bytes
+    }
+
+    #[test]
+    fn test_compute_file_hash() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("test.txt");
+        std::fs::write(&file_path, b"Hello, World!").unwrap();
+
+        let hash = compute_file_hash(&file_path).unwrap();
+        assert!(!hash.is_empty());
+        assert_eq!(hash.len(), 64); // SHA-256 = 64 hex chars
+    }
+
+    #[test]
+    fn test_identical_files_same_hash() {
+        let dir = TempDir::new().unwrap();
+        let file1 = dir.path().join("file1.txt");
+        let file2 = dir.path().join("file2.txt");
+
+        let content = b"Identical content";
+        std::fs::write(&file1, content).unwrap();
+        std::fs::write(&file2, content).unwrap();
+
+        let hash1 = compute_file_hash(&file1).unwrap();
+        let hash2 = compute_file_hash(&file2).unwrap();
+
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_different_files_different_hash() {
+        let dir = TempDir::new().unwrap();
+        let file1 = dir.path().join("file1.txt");
+        let file2 = dir.path().join("file2.txt");
+
+        std::fs::write(&file1, b"Content A").unwrap();
+        std::fs::write(&file2, b"Content B").unwrap();
+
+        let hash1 = compute_file_hash(&file1).unwrap();
+        let hash2 = compute_file_hash(&file2).unwrap();
+
+        assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_quick_hash() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("test.txt");
+        std::fs::write(&file_path, b"Test content for quick hash").unwrap();
+
+        let hash = compute_quick_hash(&file_path).unwrap();
+        assert!(!hash.is_empty());
+        assert_eq!(hash.len(), 64);
+    }
+
+    #[test]
+    fn test_find_duplicates_with_mock_data() {
+        let hash1 = "hash123".to_string();
+        let hash2 = "hash456".to_string();
+
+        let memories = vec![
+            create_mock_memory(1000, Some(hash1.clone())),
+            create_mock_memory(1000, Some(hash1.clone())),
+            create_mock_memory(2000, Some(hash2.clone())),
+            create_mock_memory(2000, Some(hash2.clone())),
+            create_mock_memory(2000, Some(hash2.clone())),
+        ];
+
+        let (groups, summary) = find_duplicates(&memories, 100);
+
+        assert_eq!(summary.files_scanned, 5);
+        assert_eq!(summary.duplicate_groups, 2);
+        assert_eq!(summary.total_duplicates, 3); // 1 dup from hash1, 2 dups from hash2
+    }
+
+    #[test]
+    fn test_find_duplicates_respects_min_size() {
+        let hash = "hash123".to_string();
+        let memories = vec![
+            create_mock_memory(50, Some(hash.clone())),
+            create_mock_memory(50, Some(hash.clone())),
+        ];
+
+        let (groups, _) = find_duplicates(&memories, 100); // min_size = 100
+        assert_eq!(groups.len(), 0); // Files too small to be considered
+    }
+
+    #[test]
+    fn test_similar_by_embedding_basic() {
+        let id1 = uuid::Uuid::new_v4();
+        let id2 = uuid::Uuid::new_v4();
+        let id3 = uuid::Uuid::new_v4();
+
+        let memories = vec![
+            create_mock_memory_with_id(id1, 1000, None),
+            create_mock_memory_with_id(id2, 1000, None),
+            create_mock_memory_with_id(id3, 1000, None),
+        ];
+
+        let mut embeddings = HashMap::new();
+        // Similar embeddings for id1 and id2
+        embeddings.insert(id1, vec![1.0, 0.0, 0.0]);
+        embeddings.insert(id2, vec![0.9, 0.1, 0.0]);
+        // Different embedding for id3
+        embeddings.insert(id3, vec![0.0, 0.0, 1.0]);
+
+        let (groups, summary) = find_similar_by_embedding(&memories, &embeddings, 0.8, 2);
+
+        assert_eq!(summary.files_analyzed, 3);
+        assert!(groups.len() > 0);
+    }
+
+    #[test]
+    fn test_format_bytes() {
+        assert_eq!(format_bytes(500), "500 B");
+        assert_eq!(format_bytes(1024), "1.0 KB");
+        assert_eq!(format_bytes(1024 * 1024), "1.0 MB");
+        assert_eq!(format_bytes(1024 * 1024 * 1024), "1.0 GB");
+        assert_eq!(format_bytes(1536), "1.5 KB");
+    }
+
+    // Helper functions
+    fn create_mock_memory(size: u64, hash: Option<String>) -> Memory {
+        create_mock_memory_with_id(uuid::Uuid::new_v4(), size, hash)
+    }
+
+    fn create_mock_memory_with_id(
+        id: uuid::Uuid,
+        size: u64,
+        hash: Option<String>,
+    ) -> Memory {
+        Memory {
+            id,
+            path: PathBuf::from(format!("/test/{}.txt", id)),
+            source: Source::Local {
+                root_path: PathBuf::from("/test"),
+            },
+            kind: MemoryKind::Document {
+                format: DocumentFormat::Pdf,
+                page_count: None,
+            },
+            metadata: MemoryMetadata {
+                title: Some("Test".to_string()),
+                file_size: size,
+                hash,
+                ..Default::default()
+            },
+            tags: vec![],
+            embedding_id: None,
+            connections: vec![],
+            is_favorite: false,
+            created_at: chrono::Utc::now(),
+            modified_at: chrono::Utc::now(),
+            indexed_at: chrono::Utc::now(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -430,5 +617,612 @@ mod config_tests {
         assert!(!config.data_dir.as_os_str().is_empty());
         assert!(!config.qdrant_url.is_empty());
         assert!(config.indexing_parallelism > 0);
+    }
+}
+
+#[cfg(test)]
+mod natural_language_search_tests {
+    use super::*;
+    use hippo_core::search::Searcher;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+
+    async fn create_test_searcher() -> (Searcher, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let config = HippoConfig {
+            data_dir: temp_dir.path().to_path_buf(),
+            qdrant_url: "http://localhost:9999".to_string(),
+            ..Default::default()
+        };
+
+        let storage = Arc::new(hippo_core::storage::Storage::new(&config).await.unwrap());
+        let embedder = Arc::new(hippo_core::embeddings::Embedder::new(&config).await.unwrap());
+        let searcher = Searcher::new(storage, embedder, &config).await.unwrap();
+
+        (searcher, temp_dir)
+    }
+
+    #[tokio::test]
+    async fn test_parse_natural_query_image_type() {
+        let (searcher, _temp) = create_test_searcher().await;
+
+        let parsed = searcher.parse_natural_query("show me images from yesterday").unwrap();
+
+        assert!(parsed.original.contains("images"));
+        assert!(!parsed.file_types.is_empty());
+        assert!(matches!(parsed.file_types[0], MemoryKind::Image { .. }));
+        assert!(parsed.date_range.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_parse_natural_query_video_type() {
+        let (searcher, _temp) = create_test_searcher().await;
+
+        let parsed = searcher.parse_natural_query("find videos").unwrap();
+
+        assert!(!parsed.file_types.is_empty());
+        assert!(matches!(parsed.file_types[0], MemoryKind::Video { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_parse_natural_query_code_type() {
+        let (searcher, _temp) = create_test_searcher().await;
+
+        let parsed = searcher.parse_natural_query("search for code files").unwrap();
+
+        assert!(!parsed.file_types.is_empty());
+        assert!(matches!(parsed.file_types[0], MemoryKind::Code { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_parse_natural_query_date_range_today() {
+        let (searcher, _temp) = create_test_searcher().await;
+
+        let parsed = searcher.parse_natural_query("files from today").unwrap();
+
+        assert!(parsed.date_range.is_some());
+        let date_range = parsed.date_range.unwrap();
+        assert!(date_range.start.is_some());
+        assert!(date_range.end.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_parse_natural_query_date_range_last_week() {
+        let (searcher, _temp) = create_test_searcher().await;
+
+        let parsed = searcher.parse_natural_query("show last week documents").unwrap();
+
+        assert!(parsed.date_range.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_parse_natural_query_combined_filters() {
+        let (searcher, _temp) = create_test_searcher().await;
+
+        let parsed = searcher
+            .parse_natural_query("photos from last month vacation")
+            .unwrap();
+
+        assert!(!parsed.file_types.is_empty());
+        assert!(parsed.date_range.is_some());
+        assert!(parsed.keywords.is_some());
+        assert!(parsed.keywords.unwrap().contains("vacation"));
+    }
+
+    #[tokio::test]
+    async fn test_parse_natural_query_extracts_keywords() {
+        let (searcher, _temp) = create_test_searcher().await;
+
+        let parsed = searcher
+            .parse_natural_query("find my vacation photos from Hawaii")
+            .unwrap();
+
+        let keywords = parsed.keywords.unwrap();
+        assert!(keywords.contains("vacation") || keywords.contains("Hawaii"));
+    }
+
+    #[tokio::test]
+    async fn test_parse_natural_query_multiple_types() {
+        let (searcher, _temp) = create_test_searcher().await;
+
+        let parsed = searcher
+            .parse_natural_query("images and videos")
+            .unwrap();
+
+        // Should detect the first type mentioned
+        assert!(!parsed.file_types.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod favorites_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    async fn create_test_storage() -> (hippo_core::storage::Storage, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let config = HippoConfig {
+            data_dir: temp_dir.path().to_path_buf(),
+            qdrant_url: "http://localhost:9999".to_string(),
+            ..Default::default()
+        };
+        let storage = hippo_core::storage::Storage::new(&config).await.unwrap();
+        (storage, temp_dir)
+    }
+
+    #[tokio::test]
+    async fn test_toggle_favorite_sets_true() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let memory = create_test_memory();
+        storage.upsert_memory(&memory).await.unwrap();
+
+        let is_favorite = storage.toggle_favorite(memory.id).await.unwrap();
+        assert!(is_favorite);
+    }
+
+    #[tokio::test]
+    async fn test_toggle_favorite_sets_false() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let memory = create_test_memory();
+        storage.upsert_memory(&memory).await.unwrap();
+
+        // Toggle on
+        storage.toggle_favorite(memory.id).await.unwrap();
+        // Toggle off
+        let is_favorite = storage.toggle_favorite(memory.id).await.unwrap();
+        assert!(!is_favorite);
+    }
+
+    #[tokio::test]
+    async fn test_get_favorite_memory() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let mut memory = create_test_memory();
+        memory.is_favorite = true;
+        storage.upsert_memory(&memory).await.unwrap();
+
+        let retrieved = storage.get_memory(memory.id).await.unwrap().unwrap();
+        assert!(retrieved.is_favorite);
+    }
+
+    fn create_test_memory() -> Memory {
+        Memory {
+            id: uuid::Uuid::new_v4(),
+            path: PathBuf::from("/test/file.txt"),
+            source: Source::Local {
+                root_path: PathBuf::from("/test"),
+            },
+            kind: MemoryKind::Document {
+                format: DocumentFormat::Pdf,
+                page_count: None,
+            },
+            metadata: MemoryMetadata {
+                file_size: 1000,
+                ..Default::default()
+            },
+            tags: vec![],
+            embedding_id: None,
+            connections: vec![],
+            is_favorite: false,
+            created_at: chrono::Utc::now(),
+            modified_at: chrono::Utc::now(),
+            indexed_at: chrono::Utc::now(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod storage_operations_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    async fn create_test_storage() -> (hippo_core::storage::Storage, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let config = HippoConfig {
+            data_dir: temp_dir.path().to_path_buf(),
+            qdrant_url: "http://localhost:9999".to_string(),
+            ..Default::default()
+        };
+        let storage = hippo_core::storage::Storage::new(&config).await.unwrap();
+        (storage, temp_dir)
+    }
+
+    #[tokio::test]
+    async fn test_upsert_and_get_memory() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let memory = create_test_memory("test.txt", 1000);
+        storage.upsert_memory(&memory).await.unwrap();
+
+        let retrieved = storage.get_memory(memory.id).await.unwrap();
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.id, memory.id);
+        assert_eq!(retrieved.path, memory.path);
+    }
+
+    #[tokio::test]
+    async fn test_add_tag_to_memory() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let memory = create_test_memory("test.txt", 1000);
+        storage.upsert_memory(&memory).await.unwrap();
+
+        let tag = Tag::user("important");
+        storage.add_tag(memory.id, tag.clone()).await.unwrap();
+
+        let retrieved = storage.get_memory(memory.id).await.unwrap().unwrap();
+        assert_eq!(retrieved.tags.len(), 1);
+        assert_eq!(retrieved.tags[0].name, "important");
+    }
+
+    #[tokio::test]
+    async fn test_remove_tag_from_memory() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let mut memory = create_test_memory("test.txt", 1000);
+        memory.tags = vec![Tag::user("tag1"), Tag::user("tag2")];
+        storage.upsert_memory(&memory).await.unwrap();
+
+        storage.remove_tag(memory.id, "tag1").await.unwrap();
+
+        let retrieved = storage.get_memory(memory.id).await.unwrap().unwrap();
+        assert_eq!(retrieved.tags.len(), 1);
+        assert_eq!(retrieved.tags[0].name, "tag2");
+    }
+
+    #[tokio::test]
+    async fn test_list_tags() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let mut memory1 = create_test_memory("file1.txt", 1000);
+        memory1.tags = vec![Tag::user("rust"), Tag::user("code")];
+        storage.upsert_memory(&memory1).await.unwrap();
+
+        let mut memory2 = create_test_memory("file2.txt", 2000);
+        memory2.tags = vec![Tag::user("rust"), Tag::user("project")];
+        storage.upsert_memory(&memory2).await.unwrap();
+
+        let tags = storage.list_tags().await.unwrap();
+        assert!(!tags.is_empty());
+
+        // Find "rust" tag - should have count of 2
+        let rust_tag = tags.iter().find(|(name, _)| name == "rust");
+        assert!(rust_tag.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_search_with_tags() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let mut memory1 = create_test_memory("file1.txt", 1000);
+        memory1.tags = vec![Tag::user("rust")];
+        storage.upsert_memory(&memory1).await.unwrap();
+
+        let mut memory2 = create_test_memory("file2.txt", 2000);
+        memory2.tags = vec![Tag::user("python")];
+        storage.upsert_memory(&memory2).await.unwrap();
+
+        let results = storage
+            .search_with_tags(None, &["rust".to_string()], None, 10, 0)
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, memory1.id);
+    }
+
+    #[tokio::test]
+    async fn test_search_with_text() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let memory1 = create_test_memory("vacation_photo.jpg", 1000);
+        storage.upsert_memory(&memory1).await.unwrap();
+
+        let memory2 = create_test_memory("work_document.pdf", 2000);
+        storage.upsert_memory(&memory2).await.unwrap();
+
+        let results = storage
+            .search_with_tags(Some("vacation"), &[], None, 10, 0)
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, memory1.id);
+    }
+
+    #[tokio::test]
+    async fn test_search_with_kind_filter() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let mut memory1 = create_test_memory("image.jpg", 1000);
+        memory1.kind = MemoryKind::Image {
+            width: 1920,
+            height: 1080,
+            format: "jpg".to_string(),
+        };
+        storage.upsert_memory(&memory1).await.unwrap();
+
+        let memory2 = create_test_memory("document.pdf", 2000);
+        storage.upsert_memory(&memory2).await.unwrap();
+
+        let results = storage
+            .search_with_tags(None, &[], Some("image"), 10, 0)
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, memory1.id);
+    }
+
+    #[tokio::test]
+    async fn test_count_search_results() {
+        let (storage, _temp) = create_test_storage().await;
+
+        for i in 0..5 {
+            let memory = create_test_memory(&format!("file{}.txt", i), 1000);
+            storage.upsert_memory(&memory).await.unwrap();
+        }
+
+        let count = storage
+            .count_search_results(None, &[], None)
+            .await
+            .unwrap();
+
+        assert_eq!(count, 5);
+    }
+
+    #[tokio::test]
+    async fn test_add_and_list_sources() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let source = Source::Local {
+            root_path: PathBuf::from("/test/documents"),
+        };
+        storage.add_source(source.clone()).await.unwrap();
+
+        let sources = storage.list_sources().await.unwrap();
+        assert!(!sources.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_remove_source() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let source = Source::Local {
+            root_path: PathBuf::from("/test/documents"),
+        };
+        storage.add_source(source.clone()).await.unwrap();
+        storage.remove_source(&source).await.unwrap();
+
+        let sources = storage.list_sources().await.unwrap();
+        // Should be empty or not contain our source
+        assert!(sources.is_empty() || !sources.iter().any(|s| s.source == source));
+    }
+
+    #[tokio::test]
+    async fn test_clear_all() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let memory = create_test_memory("test.txt", 1000);
+        storage.upsert_memory(&memory).await.unwrap();
+
+        storage.clear_all().await.unwrap();
+
+        let stats = storage.get_stats().await.unwrap();
+        assert_eq!(stats.memory_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_memory_by_path() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let memory = create_test_memory("test.txt", 1000);
+        storage.upsert_memory(&memory).await.unwrap();
+
+        let retrieved = storage
+            .get_memory_by_path(&memory.path)
+            .await
+            .unwrap();
+
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.id, memory.id);
+    }
+
+    #[tokio::test]
+    async fn test_remove_memory_by_path() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let memory = create_test_memory("test.txt", 1000);
+        storage.upsert_memory(&memory).await.unwrap();
+
+        storage.remove_memory_by_path(&memory.path).await.unwrap();
+
+        let retrieved = storage.get_memory(memory.id).await.unwrap();
+        assert!(retrieved.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_find_by_path_prefix() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let memory1 = create_test_memory("/home/user/docs/file1.txt", 1000);
+        let memory2 = create_test_memory("/home/user/docs/file2.txt", 2000);
+        let memory3 = create_test_memory("/home/user/photos/pic.jpg", 3000);
+
+        storage.upsert_memory(&memory1).await.unwrap();
+        storage.upsert_memory(&memory2).await.unwrap();
+        storage.upsert_memory(&memory3).await.unwrap();
+
+        let results = storage
+            .find_by_path_prefix("/home/user/docs")
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_store_and_get_embedding() {
+        let (storage, _temp) = create_test_storage().await;
+
+        let memory = create_test_memory("test.txt", 1000);
+        storage.upsert_memory(&memory).await.unwrap();
+
+        let embedding = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+        storage
+            .store_embedding(memory.id, &embedding, "test-model")
+            .await
+            .unwrap();
+
+        let retrieved = storage.get_embedding(memory.id).await.unwrap();
+        assert!(retrieved.is_some());
+        let retrieved_emb = retrieved.unwrap();
+        assert_eq!(retrieved_emb.len(), embedding.len());
+    }
+
+    fn create_test_memory(path: &str, size: u64) -> Memory {
+        Memory {
+            id: uuid::Uuid::new_v4(),
+            path: PathBuf::from(path),
+            source: Source::Local {
+                root_path: PathBuf::from("/test"),
+            },
+            kind: MemoryKind::Document {
+                format: DocumentFormat::Pdf,
+                page_count: None,
+            },
+            metadata: MemoryMetadata {
+                file_size: size,
+                title: Some(
+                    PathBuf::from(path)
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string(),
+                ),
+                ..Default::default()
+            },
+            tags: vec![],
+            embedding_id: None,
+            connections: vec![],
+            is_favorite: false,
+            created_at: chrono::Utc::now(),
+            modified_at: chrono::Utc::now(),
+            indexed_at: chrono::Utc::now(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod qdrant_manager_tests {
+    use super::*;
+    use hippo_core::qdrant::QdrantManager;
+
+    #[tokio::test]
+    async fn test_qdrant_manager_creation() {
+        let manager = QdrantManager::new();
+        assert!(manager.status().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_qdrant_manager_start_logic() {
+        let manager = QdrantManager::new();
+        // Should handle gracefully when Qdrant is not installed
+        let status = manager.status().await.unwrap();
+        // Status should be determinable regardless of whether Qdrant is running
+        assert!(
+            status == hippo_core::qdrant::QdrantStatus::Running
+                || status == hippo_core::qdrant::QdrantStatus::NotRunning
+                || status == hippo_core::qdrant::QdrantStatus::NotInstalled
+        );
+    }
+
+    #[tokio::test]
+    async fn test_qdrant_manager_connection_handling() {
+        let manager = QdrantManager::with_url("http://localhost:9999".to_string());
+        let status = manager.status().await.unwrap();
+        // Should handle unavailable Qdrant gracefully
+        assert!(
+            status == hippo_core::qdrant::QdrantStatus::NotRunning
+                || status == hippo_core::qdrant::QdrantStatus::NotInstalled
+        );
+    }
+}
+
+#[cfg(test)]
+mod ai_tagging_tests {
+    use super::*;
+    use hippo_core::ai::*;
+
+    #[test]
+    fn test_tag_suggestion_to_tag() {
+        let suggestion = TagSuggestion {
+            name: "test-tag".to_string(),
+            confidence: 85,
+            reason: "Test reason".to_string(),
+        };
+
+        let tag = suggestion.to_tag();
+        assert_eq!(tag.name, "test-tag");
+        assert_eq!(tag.confidence, Some(85));
+        assert!(matches!(tag.source, TagSource::Ai));
+    }
+
+    #[test]
+    fn test_file_analysis_structure() {
+        let analysis = FileAnalysis {
+            tags: vec![
+                TagSuggestion {
+                    name: "tag1".to_string(),
+                    confidence: 90,
+                    reason: "Reason 1".to_string(),
+                },
+                TagSuggestion {
+                    name: "tag2".to_string(),
+                    confidence: 75,
+                    reason: "Reason 2".to_string(),
+                },
+            ],
+            description: Some("Test description".to_string()),
+            organization: Some(OrganizationSuggestion {
+                suggested_folder: "Projects/Test".to_string(),
+                reason: "Project organization".to_string(),
+            }),
+        };
+
+        assert_eq!(analysis.tags.len(), 2);
+        assert!(analysis.description.is_some());
+        assert!(analysis.organization.is_some());
+    }
+
+    #[test]
+    fn test_ai_config_defaults() {
+        let config = AiConfig::default();
+        assert_eq!(config.provider, AiProvider::Ollama);
+        assert!(config.claude_api_key.is_none());
+        assert!(!config.ollama_url.is_empty());
+    }
+
+    #[test]
+    fn test_unified_ai_client_creation() {
+        let client = UnifiedAiClient::new();
+        assert_eq!(client.provider(), AiProvider::Ollama);
+    }
+
+    #[test]
+    fn test_unified_ai_client_with_ollama() {
+        let client = UnifiedAiClient::with_ollama(Some("http://localhost:11434".to_string()));
+        assert_eq!(client.provider(), AiProvider::Ollama);
+    }
+
+    #[test]
+    fn test_set_provider() {
+        let mut client = UnifiedAiClient::new();
+        client.set_provider(AiProvider::Claude);
+        assert_eq!(client.provider(), AiProvider::Claude);
     }
 }
