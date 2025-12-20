@@ -1016,12 +1016,14 @@
       filter: brightness(1.02);
     }
 
-    /* Smooth thumbnail loading */
+    /* Smooth thumbnail loading - only hide pending thumbnails */
     .card-preview img, .list-thumb img, .detail-preview img {
-      opacity: 0;
       transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .card-preview img.loaded, .list-thumb img.loaded, .detail-preview img.loaded {
+    .card-preview img.thumb-pending, .list-thumb img.thumb-pending {
+      opacity: 0;
+    }
+    .card-preview img.loaded, .list-thumb img.loaded {
       opacity: 1;
     }
 
@@ -2973,10 +2975,10 @@
             // Use thumbnail for images and videos (loaded async)
             var thumbSrc = thumbnailCache[mem.path];
             if (thumbSrc) {
-              html += '<img src="' + convertFileSrc(thumbSrc) + '" onerror="this.style.display=\'none\'" loading="lazy">';
+              html += '<img src="' + convertFileSrc(thumbSrc) + '" onload="this.classList.add(\'loaded\')" onerror="this.style.display=\'none\'" loading="lazy">';
             } else {
-              // Show placeholder, thumbnail will load async
-              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" style="display:none" loading="lazy">';
+              // Show placeholder, thumbnail will load async (hidden via CSS opacity)
+              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" loading="lazy">';
             }
           }
           html += getIcon(mem.kind, 'xl');
@@ -3003,9 +3005,9 @@
           if ((type === 'image' || type === 'video') && convertFileSrc) {
             var thumbSrc = thumbnailCache[mem.path];
             if (thumbSrc) {
-              html += '<img src="' + convertFileSrc(thumbSrc) + '" onerror="this.style.display=\'none\'" loading="lazy">';
+              html += '<img src="' + convertFileSrc(thumbSrc) + '" onload="this.classList.add(\'loaded\')" onerror="this.style.display=\'none\'" loading="lazy">';
             } else {
-              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" style="display:none" loading="lazy">';
+              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" loading="lazy">';
             }
           }
           html += getIcon(mem.kind, 'lg');

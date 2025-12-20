@@ -6,12 +6,6 @@
     "core:default",
     "dialog:default",
     "shell:default",
-    "shell:allow-execute",
-    "shell:allow-spawn",
-    {
-      "identifier": "shell:allow-open",
-      "allow": [{ "cmd": "qdrant" }]
-    },
     "fs:default",
     "fs:allow-read-text-file",
     "fs:read-all"
