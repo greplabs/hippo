@@ -4,7 +4,6 @@
 
 use reqwest::Method;
 use serde_json::json;
-use std::path::PathBuf;
 
 /// Helper to build a test client URL
 fn api_url(endpoint: &str) -> String {
