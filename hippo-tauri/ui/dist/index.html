@@ -138,6 +138,15 @@
     body.dark .source-item:hover { background: rgba(255,255,255,0.08); }
     .source-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
 
+    /* Status indicators */
+    .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 11px; color: #78716c; }
+    body.dark .status-row { color: #a8a29e; }
+    .status-indicator { display: flex; align-items: center; gap: 4px; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.online { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.5); }
+    .status-dot.offline { background: #a8a29e; }
+    .status-dot.loading { background: #f59e0b; animation: pulse 1s ease-in-out infinite; }
+
     .add-btn {
       width: 100%;
       padding: 12px 14px;
@@ -221,6 +230,100 @@
     .search-input { flex: 1; border: none; background: transparent; font-size: 14px; outline: none; color: #1c1917; font-weight: 400; }
     .search-input::placeholder { color: #a8a29e; }
     body.dark .search-input { color: #fafaf9; }
+
+    /* AI badge for natural language search */
+    .ai-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      color: white;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      animation: scaleIn 0.2s ease;
+      flex-shrink: 0;
+    }
+    .ai-badge .icon { font-size: 12px; }
+
+    /* NL interpretation display */
+    .nl-interpretation {
+      display: none;
+      margin-top: 10px;
+      padding: 10px 14px;
+      background: rgba(99, 102, 241, 0.08);
+      border-left: 3px solid #6366f1;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #4338ca;
+      animation: fadeInUp 0.2s ease;
+    }
+    .nl-interpretation.show { display: block; }
+    body.dark .nl-interpretation { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; }
+    .nl-interpretation-label { font-weight: 600; margin-right: 6px; }
+
+    /* Recent searches dropdown */
+    .search-wrapper { position: relative; }
+    .recent-searches {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+      padding: 8px;
+      z-index: 100;
+      animation: fadeInUp 0.15s ease;
+      display: none;
+    }
+    .recent-searches.show { display: block; }
+    body.dark .recent-searches { background: #1c1917; border-color: rgba(255,255,255,0.08); }
+    .recent-search-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #57534e;
+      transition: all 0.15s;
+    }
+    .recent-search-item:hover { background: #f5f5f4; color: #1c1917; }
+    body.dark .recent-search-item { color: #a8a29e; }
+    body.dark .recent-search-item:hover { background: #292524; color: #fafaf9; }
+    .recent-search-icon { opacity: 0.5; }
+
+    /* Date filter pills */
+    .date-filters {
+      display: flex;
+      gap: 6px;
+      margin-left: 12px;
+      padding-left: 12px;
+      border-left: 1px solid rgba(0,0,0,0.08);
+    }
+    body.dark .date-filters { border-left-color: rgba(255,255,255,0.08); }
+    .date-filter-btn {
+      padding: 6px 12px;
+      border: none;
+      background: transparent;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #78716c;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .date-filter-btn:hover { background: #f5f5f4; color: #1c1917; }
+    .date-filter-btn.active { background: #6366f1; color: white; }
+    body.dark .date-filter-btn { color: #a8a29e; }
+    body.dark .date-filter-btn:hover { background: #292524; color: #fafaf9; }
+    body.dark .date-filter-btn.active { background: #6366f1; color: white; }
+
     .active-tags { display: flex; gap: 6px; flex-wrap: wrap; }
     .active-tag {
       display: flex;
@@ -334,8 +437,15 @@
       transform: translateY(-4px);
     }
     .card:active { transform: translateY(-2px) scale(0.99); }
+    .card.keyboard-focused {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+      transform: translateY(-2px);
+    }
     body.dark .card { background: #1c1917; border-color: rgba(255,255,255,0.04); }
     body.dark .card:hover { box-shadow: 0 20px 40px -12px rgba(0,0,0,0.4); }
+    body.dark .card.keyboard-focused { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25); }
 
     .card-preview {
       aspect-ratio: 1;
@@ -401,7 +511,9 @@
     }
     .list-item:hover { background: white; transform: translateX(4px); box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
     .list-item:active { transform: translateX(4px) scale(0.99); }
+    .list-item.keyboard-focused { background: white; outline: 2px solid #3b82f6; outline-offset: -2px; }
     body.dark .list-item:hover { background: #1c1917; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+    body.dark .list-item.keyboard-focused { background: #1c1917; }
     .list-thumb {
       width: 48px;
       height: 48px;
@@ -893,6 +1005,284 @@
     .cmd-footer span { display: flex; align-items: center; gap: 4px; }
     .cmd-empty { padding: 32px; text-align: center; color: #a8a29e; }
     .cmd-empty .icon { margin-bottom: 8px; }
+
+    /* ===== UX ENHANCEMENTS ===== */
+
+    /* Skeleton Loading Cards */
+    .skeleton-card {
+      background: white;
+      border-radius: 16px;
+      border: 1px solid rgba(0,0,0,0.04);
+      overflow: hidden;
+    }
+    body.dark .skeleton-card { background: #1c1917; border-color: rgba(255,255,255,0.04); }
+    .skeleton-card .skeleton-preview {
+      aspect-ratio: 1;
+      background: linear-gradient(90deg, #f5f5f4 25%, #fafaf9 50%, #f5f5f4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+    body.dark .skeleton-card .skeleton-preview {
+      background: linear-gradient(90deg, #292524 25%, #3f3f46 50%, #292524 75%);
+      background-size: 200% 100%;
+    }
+    .skeleton-card .skeleton-info { padding: 14px 16px; }
+    .skeleton-card .skeleton-title {
+      height: 14px;
+      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      border-radius: 4px;
+      width: 70%;
+    }
+    body.dark .skeleton-card .skeleton-title {
+      background: linear-gradient(90deg, #44403c 25%, #57534e 50%, #44403c 75%);
+      background-size: 200% 100%;
+    }
+    .skeleton-card .skeleton-size {
+      height: 10px;
+      margin-top: 8px;
+      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      animation-delay: 0.1s;
+      border-radius: 4px;
+      width: 40%;
+    }
+    body.dark .skeleton-card .skeleton-size {
+      background: linear-gradient(90deg, #44403c 25%, #57534e 50%, #44403c 75%);
+      background-size: 200% 100%;
+    }
+
+    /* Skeleton List Item */
+    .skeleton-list-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+    }
+    .skeleton-list-item .skeleton-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    body.dark .skeleton-list-item .skeleton-thumb {
+      background: linear-gradient(90deg, #292524 25%, #3f3f46 50%, #292524 75%);
+      background-size: 200% 100%;
+    }
+    .skeleton-list-item .skeleton-info { flex: 1; }
+    .skeleton-list-item .skeleton-title-line {
+      height: 14px;
+      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      border-radius: 4px;
+      width: 60%;
+    }
+    .skeleton-list-item .skeleton-path-line {
+      height: 10px;
+      margin-top: 6px;
+      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      animation-delay: 0.1s;
+      border-radius: 4px;
+      width: 80%;
+    }
+    body.dark .skeleton-list-item .skeleton-title-line,
+    body.dark .skeleton-list-item .skeleton-path-line {
+      background: linear-gradient(90deg, #44403c 25%, #57534e 50%, #44403c 75%);
+      background-size: 200% 100%;
+    }
+
+    /* Staggered Card Animations */
+    .card, .list-item { animation: cardFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both; }
+    .card:nth-child(1), .list-item:nth-child(1) { animation-delay: 0ms; }
+    .card:nth-child(2), .list-item:nth-child(2) { animation-delay: 25ms; }
+    .card:nth-child(3), .list-item:nth-child(3) { animation-delay: 50ms; }
+    .card:nth-child(4), .list-item:nth-child(4) { animation-delay: 75ms; }
+    .card:nth-child(5), .list-item:nth-child(5) { animation-delay: 100ms; }
+    .card:nth-child(6), .list-item:nth-child(6) { animation-delay: 125ms; }
+    .card:nth-child(7), .list-item:nth-child(7) { animation-delay: 150ms; }
+    .card:nth-child(8), .list-item:nth-child(8) { animation-delay: 175ms; }
+    .card:nth-child(9), .list-item:nth-child(9) { animation-delay: 200ms; }
+    .card:nth-child(10), .list-item:nth-child(10) { animation-delay: 225ms; }
+    .card:nth-child(n+11), .list-item:nth-child(n+11) { animation-delay: 250ms; }
+
+    @keyframes cardFadeIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Enhanced Card Hover */
+    .card {
+      will-change: transform, box-shadow;
+      backface-visibility: hidden;
+    }
+    .card:hover .card-preview img {
+      transform: scale(1.08);
+      filter: brightness(1.02);
+    }
+
+    /* Smooth thumbnail loading - only hide pending thumbnails */
+    .card-preview img, .list-thumb img, .detail-preview img {
+      transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .card-preview img.thumb-pending, .list-thumb img.thumb-pending {
+      opacity: 0;
+    }
+    .card-preview img.loaded, .list-thumb img.loaded {
+      opacity: 1;
+    }
+
+    /* Loading Overlay */
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(248, 248, 247, 0.85);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      animation: fadeIn 0.2s ease;
+    }
+    body.dark .loading-overlay { background: rgba(15, 14, 13, 0.85); }
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(0,0,0,0.1);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    body.dark .loading-spinner { border-color: rgba(255,255,255,0.1); border-top-color: #818cf8; }
+
+    /* Enhanced Empty State */
+    .empty {
+      padding: 60px 20px;
+    }
+    .empty-icon {
+      width: 100px;
+      height: 100px;
+      margin: 0 auto 24px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #f5f5f4 0%, #e7e5e4 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: emptyBounce 2s ease-in-out infinite;
+    }
+    body.dark .empty-icon { background: linear-gradient(135deg, #292524 0%, #1c1917 100%); }
+    @keyframes emptyBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .empty-title {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .empty-text {
+      max-width: 320px;
+    }
+    .empty-action {
+      margin-top: 20px;
+    }
+    .empty-action-btn {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .empty-action-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3); }
+    .empty-action-btn:active { transform: translateY(0) scale(0.98); }
+
+    /* Progress bar for indexing */
+    .indexing-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: rgba(99, 102, 241, 0.2);
+      z-index: 2000;
+      overflow: hidden;
+    }
+    .indexing-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #6366f1, #8b5cf6, #6366f1);
+      background-size: 200% 100%;
+      animation: progressShimmer 1.5s ease-in-out infinite;
+      transition: width 0.3s ease;
+    }
+    @keyframes progressShimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Smooth filter transitions */
+    .filter-btn {
+      position: relative;
+      overflow: hidden;
+    }
+    .filter-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: currentColor;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .filter-btn:active::after { opacity: 0.1; }
+
+    /* Better focus states */
+    .card:focus-visible, .list-item:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: 2px;
+    }
+    .filter-btn:focus-visible, .view-btn:focus-visible, .action-btn:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: 2px;
+    }
+
+    /* Ripple effect for buttons */
+    .ripple {
+      position: relative;
+      overflow: hidden;
+    }
+    .ripple::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      background: rgba(255,255,255,0.3);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      transition: width 0.4s ease, height 0.4s ease, opacity 0.4s ease;
+      opacity: 0;
+    }
+    .ripple:active::before {
+      width: 200%;
+      height: 200%;
+      opacity: 1;
+      transition: width 0s, height 0s, opacity 0s;
+    }
+
+    /* ===== END UX ENHANCEMENTS ===== */
   </style>
 </head>
 <body>
@@ -910,7 +1300,17 @@
         <button class="sidebar-btn" id="discoverBtn" style="margin-top:8px;"><span class="icon icon-sm" style="color:#8b5cf6;">&#10024;</span> Discover Collections</button>
       </div>
       <div class="sidebar-footer">
-        <p id="statsText" style="margin-bottom:8px;">Loading...</p>
+        <p id="statsText" style="margin-bottom:4px;">Loading...</p>
+        <div class="status-row">
+          <div class="status-indicator" title="Qdrant vector search">
+            <span class="status-dot loading" id="qdrantDot"></span>
+            <span id="qdrantStatus">Qdrant</span>
+          </div>
+          <div class="status-indicator" title="Ollama local AI">
+            <span class="status-dot loading" id="ollamaDot"></span>
+            <span id="ollamaStatusText">Ollama</span>
+          </div>
+        </div>
         <button class="sidebar-btn ai-chat-btn" id="chatBtn"><span class="icon icon-sm" id="chatBtnIcon"></span> Ask Hippo</button>
         <button class="sidebar-btn" id="settingsBtn"><span class="icon icon-sm" id="settingsIcon"></span> AI Settings</button>
         <button class="sidebar-btn" id="darkModeBtn"><span class="icon icon-sm" id="themeIcon"></span> <span id="themeText">Dark Mode</span></button>
@@ -925,6 +1325,7 @@
             <span class="icon icon-md" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
             <div class="active-tags" id="activeTags"></div>
             <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)">
+            <div class="ai-badge" id="nlBadge" style="display:none;"><span class="icon">&#10024;</span> AI</div>
           </div>
           <div class="search-mode">
             <button class="search-mode-btn active" id="searchModeText" data-mode="text"><span class="icon icon-sm" id="searchModeTextIcon"></span> Text</button>
@@ -933,6 +1334,7 @@
           </div>
         </div>
         <div class="tag-bar" id="tagBar"></div>
+        <div class="nl-interpretation" id="nlInterpretation"></div>
       </div>
       <div class="symbol-results" id="symbolResults" style="display:none;"></div>
       <div class="filter-bar">
@@ -944,6 +1346,12 @@
         <button class="filter-btn" data-filter="code"><span class="icon icon-sm filter-icon" data-icon="code"></span> Code</button>
         <button class="filter-btn" data-filter="document"><span class="icon icon-sm filter-icon" data-icon="doc"></span> Docs</button>
         <div class="filter-spacer"></div>
+        <div class="date-filters">
+          <button class="date-filter-btn active" data-date="all">All Time</button>
+          <button class="date-filter-btn" data-date="today">Today</button>
+          <button class="date-filter-btn" data-date="week">This Week</button>
+          <button class="date-filter-btn" data-date="month">This Month</button>
+        </div>
         <span class="result-count" id="resultCount">0 files</span>
         <div class="view-toggle">
           <button class="view-btn active" id="gridViewBtn" title="Grid view"><span class="icon icon-sm" id="gridIcon"></span></button>
@@ -983,6 +1391,11 @@
           <div class="info-row"><span class="info-label">Size</span><span class="info-value" id="detailSize">-</span></div>
           <div class="info-row"><span class="info-label">Modified</span><span class="info-value" id="detailDate">-</span></div>
         </div>
+        <div class="detail-section" id="captionSection" style="display:none;">
+          <p class="detail-section-title">AI Caption</p>
+          <button class="action-btn secondary" id="generateCaptionBtn" style="width:100%;margin-bottom:8px;">Generate Caption</button>
+          <div id="captionText" style="font-size:13px;color:#57534e;line-height:1.5;"></div>
+        </div>
         <div class="ai-section" id="aiSection">
           <button class="ai-btn" id="aiAnalyzeBtn"><span class="icon icon-sm" id="aiIcon"></span> Analyze with AI</button>
           <div id="aiResults" style="display:none;">
@@ -1019,6 +1432,14 @@
   </div>
 
   <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Drop Zone Overlay -->
+  <div class="drop-zone-overlay" id="dropZone">
+    <div class="drop-zone-content">
+      <div class="icon" id="dropZoneIcon"></div>
+      <div>Drop folders here to index</div>
+    </div>
+  </div>
 
   <!-- Bulk Action Bar -->
   <div class="bulk-bar" id="bulkBar">
@@ -1139,6 +1560,14 @@
             <option value="semantic">AI Search (semantic understanding)</option>
             <option value="symbol">Code Search (functions & symbols)</option>
           </select>
+        </div>
+
+        <div class="settings-section">
+          <label class="settings-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="autoTagEnabled" style="width:16px;height:16px;cursor:pointer;">
+            Auto-tag new files during indexing
+          </label>
+          <p class="settings-desc">Automatically generate AI-suggested tags for newly indexed files. Requires Ollama to be running.</p>
         </div>
       </div>
       <div class="settings-footer">
@@ -1959,6 +2388,32 @@
     body.dark .ai-stats { border-color: rgba(255,255,255,0.08); }
     .ai-stat { display: flex; align-items: center; gap: 4px; }
     .ai-stat .icon { width: 12px; height: 12px; }
+
+    /* Drop Zone Overlay */
+    .drop-zone-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(99, 102, 241, 0.15);
+      backdrop-filter: blur(4px);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: 4px dashed rgba(99, 102, 241, 0.5);
+    }
+    .drop-zone-overlay.active { display: flex; }
+    .drop-zone-content {
+      text-align: center;
+      color: #6366f1;
+      font-size: 24px;
+      font-weight: 600;
+      padding: 40px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+    }
+    body.dark .drop-zone-content { background: #292524; color: #818cf8; }
+    .drop-zone-content .icon { width: 64px; height: 64px; margin-bottom: 16px; }
   </style>
 
   <script>
@@ -1994,6 +2449,7 @@
         command: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>',
         zap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
         check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
         checkSquare: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
         sparkles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>',
         brain: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"/></svg>',
@@ -2047,6 +2503,13 @@
       var similarMemories = [];
       var qdrantAvailable = false;
       var showCollections = false;
+
+      // UX enhancements state
+      var keyboardFocusIndex = -1;
+      var recentSearches = JSON.parse(localStorage.getItem('hippo-recent-searches') || '[]');
+      var dateFilter = 'all'; // 'all', 'today', 'week', 'month'
+      var autoTagEnabled = localStorage.getItem('hippo-auto-tag') === 'true';
+      var showRecentSearches = false;
 
       // Apply dark mode on load
       if (darkMode) document.body.classList.add('dark');
@@ -2388,13 +2851,17 @@
         });
 
         function loadData() {
+          // Show skeleton loading
+          showLoadingSkeletons();
+
           Promise.all([
             invoke('get_stats'),
             invoke('get_sources'),
             invoke('get_tags'),
             invoke('search', { query: '', tags: [] }),
             invoke('list_collections').catch(function() { return []; }),
-            invoke('get_qdrant_stats').catch(function() { return { available: false }; })
+            invoke('get_qdrant_stats').catch(function() { return { available: false }; }),
+            invoke('ollama_status').catch(function() { return { available: false }; })
           ]).then(function(r) {
             document.getElementById('statsText').textContent = (r[0] ? r[0].total_memories : 0) + ' memories';
             sources = r[1] || [];
@@ -2402,20 +2869,42 @@
             memories = (r[3].memories || []).map(function(x) { return x.memory; });
             collections = r[4] || [];
             qdrantAvailable = r[5] && r[5].available;
+            ollamaAvailable = r[6] && r[6].available;
+
+            // Update status indicators
+            updateStatusIndicators();
+
             renderSources();
             renderTagBar();
             renderFiles();
             renderCollections();
           }).catch(function(e) {
             showToast('Load failed: ' + e, 'error');
+            renderFiles(); // Show empty state on error
           });
         }
 
+        var searchDebounceTimer = null;
         function search(query) {
+          // Show subtle loading state for search
+          document.getElementById('resultCount').textContent = 'Searching...';
+
           invoke('search', { query: query || '', tags: activeTags }).then(function(r) {
             memories = (r.memories || []).map(function(x) { return x.memory; });
             renderFiles();
           });
+        }
+
+        function updateStatusIndicators() {
+          var qdrantDot = document.getElementById('qdrantDot');
+          var ollamaDot = document.getElementById('ollamaDot');
+
+          if (qdrantDot) {
+            qdrantDot.className = 'status-dot ' + (qdrantAvailable ? 'online' : 'offline');
+          }
+          if (ollamaDot) {
+            ollamaDot.className = 'status-dot ' + (ollamaAvailable ? 'online' : 'offline');
+          }
         }
 
         function renderSources() {
@@ -2603,7 +3092,106 @@
           } else if (filterType !== 'all') {
             filtered = memories.filter(function(m) { return getType(m.kind) === filterType; });
           }
+          // Apply date filter
+          if (dateFilter !== 'all') {
+            var now = new Date();
+            var cutoff;
+            if (dateFilter === 'today') {
+              cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            } else if (dateFilter === 'week') {
+              cutoff = new Date(now - 7 * 24 * 60 * 60 * 1000);
+            } else if (dateFilter === 'month') {
+              cutoff = new Date(now - 30 * 24 * 60 * 60 * 1000);
+            }
+            if (cutoff) {
+              filtered = filtered.filter(function(m) {
+                var mDate = new Date(m.modified_at || m.created_at);
+                return mDate >= cutoff;
+              });
+            }
+          }
           return filtered;
+        }
+
+        function getDisplayedMemories() {
+          return getFiltered();
+        }
+
+        // Keyboard navigation helpers
+        function handleArrowNavigation(key) {
+          var displayed = getDisplayedMemories();
+          if (displayed.length === 0) return;
+
+          var cols = 1;
+          if (viewMode === 'grid') {
+            var container = document.getElementById('filesContainer');
+            var grid = container.querySelector('.grid');
+            if (grid) {
+              var gridWidth = grid.offsetWidth;
+              cols = Math.floor(gridWidth / 220) || 1; // Approx card width
+            }
+          }
+
+          var newIndex = keyboardFocusIndex;
+          if (key === 'ArrowRight') {
+            newIndex = Math.min(displayed.length - 1, newIndex + 1);
+          } else if (key === 'ArrowLeft') {
+            newIndex = Math.max(0, newIndex - 1);
+          } else if (key === 'ArrowDown') {
+            newIndex = Math.min(displayed.length - 1, newIndex + (viewMode === 'grid' ? cols : 1));
+          } else if (key === 'ArrowUp') {
+            newIndex = Math.max(0, newIndex - (viewMode === 'grid' ? cols : 1));
+          }
+
+          if (keyboardFocusIndex === -1) newIndex = 0;
+          keyboardFocusIndex = newIndex;
+          updateKeyboardFocus();
+        }
+
+        function updateKeyboardFocus() {
+          // Remove previous focus
+          document.querySelectorAll('.keyboard-focused').forEach(function(el) {
+            el.classList.remove('keyboard-focused');
+          });
+
+          if (keyboardFocusIndex < 0) return;
+
+          var selector = viewMode === 'grid' ? '.card' : '.list-item';
+          var items = document.querySelectorAll(selector);
+          if (items[keyboardFocusIndex]) {
+            items[keyboardFocusIndex].classList.add('keyboard-focused');
+            items[keyboardFocusIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+
+        // Render skeleton loading cards
+        function renderSkeletons(count) {
+          var html = '';
+          if (viewMode === 'grid') {
+            html = '<div class="grid">';
+            for (var i = 0; i < count; i++) {
+              html += '<div class="skeleton-card" style="animation-delay:' + (i * 50) + 'ms">';
+              html += '<div class="skeleton-preview"></div>';
+              html += '<div class="skeleton-info"><div class="skeleton-title"></div><div class="skeleton-size"></div></div>';
+              html += '</div>';
+            }
+            html += '</div>';
+          } else {
+            html = '<div class="list">';
+            for (var i = 0; i < count; i++) {
+              html += '<div class="skeleton-list-item" style="animation-delay:' + (i * 30) + 'ms">';
+              html += '<div class="skeleton-thumb"></div>';
+              html += '<div class="skeleton-info"><div class="skeleton-title-line"></div><div class="skeleton-path-line"></div></div>';
+              html += '</div>';
+            }
+            html += '</div>';
+          }
+          return html;
+        }
+
+        // Show loading skeletons
+        function showLoadingSkeletons() {
+          document.getElementById('filesContainer').innerHTML = renderSkeletons(12);
         }
 
         function renderFiles() {
@@ -2611,11 +3199,15 @@
           document.getElementById('resultCount').textContent = filtered.length + ' files';
 
           if (filtered.length === 0) {
-            document.getElementById('filesContainer').innerHTML = '<div class="empty"><div class="empty-icon"><span class="icon icon-2xl" style="color:#a8a29e;">' + icons.folderEmpty + '</span></div><div class="empty-title">' +
-              (sources.length === 0 ? 'Add a folder to get started' : 'No files found') +
-              '</div><div class="empty-text">' +
-              (sources.length === 0 ? 'Click "+ Add Folder" to index your files' : 'Try a different search or filter') +
-              '</div></div>';
+            var emptyHtml = '<div class="empty">';
+            emptyHtml += '<div class="empty-icon"><span class="icon icon-2xl" style="color:#a8a29e;">' + icons.folderEmpty + '</span></div>';
+            emptyHtml += '<div class="empty-title">' + (sources.length === 0 ? 'Add a folder to get started' : 'No files found') + '</div>';
+            emptyHtml += '<div class="empty-text">' + (sources.length === 0 ? 'Click the button below to index your files' : 'Try a different search or filter') + '</div>';
+            if (sources.length === 0) {
+              emptyHtml += '<div class="empty-action"><button class="empty-action-btn" onclick="addSource()"><span class="icon icon-sm">' + icons.plus + '</span> Add Folder</button></div>';
+            }
+            emptyHtml += '</div>';
+            document.getElementById('filesContainer').innerHTML = emptyHtml;
             return;
           }
 
@@ -2654,10 +3246,10 @@
             // Use thumbnail for images and videos (loaded async)
             var thumbSrc = thumbnailCache[mem.path];
             if (thumbSrc) {
-              html += '<img src="' + convertFileSrc(thumbSrc) + '" onerror="this.style.display=\'none\'" loading="lazy">';
+              html += '<img src="' + convertFileSrc(thumbSrc) + '" onload="this.classList.add(\'loaded\')" onerror="this.style.display=\'none\'" loading="lazy">';
             } else {
-              // Show placeholder, thumbnail will load async
-              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" style="display:none" loading="lazy">';
+              // Show placeholder, thumbnail will load async (hidden via CSS opacity)
+              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" loading="lazy">';
             }
           }
           html += getIcon(mem.kind, 'xl');
@@ -2684,9 +3276,9 @@
           if ((type === 'image' || type === 'video') && convertFileSrc) {
             var thumbSrc = thumbnailCache[mem.path];
             if (thumbSrc) {
-              html += '<img src="' + convertFileSrc(thumbSrc) + '" onerror="this.style.display=\'none\'" loading="lazy">';
+              html += '<img src="' + convertFileSrc(thumbSrc) + '" onload="this.classList.add(\'loaded\')" onerror="this.style.display=\'none\'" loading="lazy">';
             } else {
-              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" style="display:none" loading="lazy">';
+              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" loading="lazy">';
             }
           }
           html += getIcon(mem.kind, 'lg');
@@ -2714,6 +3306,8 @@
               img.src = convertFileSrc(thumbnailCache[path]);
               img.style.display = '';
               img.classList.remove('thumb-pending');
+              // Smooth fade-in after image loads
+              img.onload = function() { img.classList.add('loaded'); };
               return;
             }
 
@@ -2730,6 +3324,8 @@
                 el.src = convertFileSrc(thumbPath);
                 el.style.display = '';
                 el.classList.remove('thumb-pending');
+                // Smooth fade-in after image loads
+                el.onload = function() { el.classList.add('loaded'); };
               });
             }).catch(function(e) {
               thumbnailPending[path] = false;
@@ -2738,6 +3334,7 @@
                 el.src = convertFileSrc(path);
                 el.style.display = '';
                 el.classList.remove('thumb-pending');
+                el.onload = function() { el.classList.add('loaded'); };
               });
             });
           });
@@ -2912,6 +3509,7 @@
           document.getElementById('apiKeyInput').value = apiKey;
           document.getElementById('defaultSearchMode').value = searchMode;
           document.getElementById('aiProvider').value = aiProvider;
+          document.getElementById('autoTagEnabled').checked = autoTagEnabled;
           updateProviderUI();
           checkOllamaStatus();
         }
@@ -2924,9 +3522,11 @@
           apiKey = document.getElementById('apiKeyInput').value.trim();
           searchMode = document.getElementById('defaultSearchMode').value;
           aiProvider = document.getElementById('aiProvider').value;
+          autoTagEnabled = document.getElementById('autoTagEnabled').checked;
           localStorage.setItem('hippo-api-key', apiKey);
           localStorage.setItem('hippo-search-mode', searchMode);
           localStorage.setItem('hippo-ai-provider', aiProvider);
+          localStorage.setItem('hippo-auto-tag', autoTagEnabled.toString());
           setSearchMode(searchMode);
           closeSettings();
           showToast('Settings saved', 'success');
@@ -3736,6 +4336,70 @@
           });
         }
 
+        // Natural Language Search Detection
+        function isNaturalLanguageQuery(query) {
+          if (!query || query.trim().length < 5) return false;
+
+          var lower = query.toLowerCase();
+
+          // Detect NL trigger phrases
+          var triggerPhrases = ['show me', 'find', 'search for', 'get me', 'look for', 'display'];
+          if (triggerPhrases.some(function(phrase) { return lower.includes(phrase); })) {
+            return true;
+          }
+
+          // Detect file type words
+          var fileTypeWords = ['images', 'photos', 'videos', 'documents', 'code', 'music', 'audio', 'pictures', 'pics', 'photo', 'image', 'video', 'doc', 'docs', 'pdf'];
+          var hasFileType = fileTypeWords.some(function(word) { return lower.includes(word); });
+
+          // Detect date words
+          var dateWords = ['today', 'yesterday', 'last week', 'this week', 'last month', 'this month', 'last year', 'this year'];
+          var hasDate = dateWords.some(function(word) { return lower.includes(word); });
+
+          // If query has file type or date words, it's likely NL
+          return hasFileType || hasDate;
+        }
+
+        function performNaturalLanguageSearch(query) {
+          showToast('Parsing your query...', 'info');
+
+          invoke('natural_language_search', { query: query }).then(function(result) {
+            var parsed = result.parsed;
+            var searchResults = result.results;
+
+            // Show interpretation
+            if (parsed && parsed.interpretation) {
+              var interpDiv = document.getElementById('nlInterpretation');
+              interpDiv.innerHTML = '<span class="nl-interpretation-label">Searching for:</span>' + esc(parsed.interpretation);
+              interpDiv.classList.add('show');
+            }
+
+            // Update memories with results
+            if (searchResults && searchResults.memories) {
+              memories = searchResults.memories.map(function(x) { return x.memory; });
+              renderFiles();
+              showToast('Found ' + memories.length + ' files', 'success');
+            } else {
+              memories = [];
+              renderFiles();
+              showToast('No files found', 'info');
+            }
+          }).catch(function(e) {
+            showToast('Natural language search failed: ' + e, 'error');
+            hideNLBadge();
+          });
+        }
+
+        function showNLBadge() {
+          document.getElementById('nlBadge').style.display = 'inline-flex';
+        }
+
+        function hideNLBadge() {
+          document.getElementById('nlBadge').style.display = 'none';
+          var interpDiv = document.getElementById('nlInterpretation');
+          interpDiv.classList.remove('show');
+        }
+
         function renderSymbolResults() {
           var container = document.getElementById('symbolResults');
           if (symbolResults.length === 0) {
@@ -3975,6 +4639,33 @@
           input.focus();
         }
 
+        function generateCaption() {
+          if (!selectedMemory) return;
+          var btn = document.getElementById('generateCaptionBtn');
+          var captionDiv = document.getElementById('captionText');
+
+          btn.disabled = true;
+          btn.textContent = 'Generating...';
+          captionDiv.textContent = '';
+
+          invoke('caption_image', { path: selectedMemory.path }).then(function(caption) {
+            btn.disabled = false;
+            btn.textContent = 'Generate Caption';
+            captionDiv.textContent = caption;
+
+            // Store caption in memory object
+            if (!selectedMemory.metadata) selectedMemory.metadata = {};
+            selectedMemory.metadata.ai_caption = caption;
+
+            showToast('Caption generated!', 'success');
+          }).catch(function(e) {
+            btn.disabled = false;
+            btn.textContent = 'Generate Caption';
+            captionDiv.textContent = '';
+            showToast('Caption failed: ' + e, 'error');
+          });
+        }
+
         function selectMemory(mem) {
           if (!mem) return;
           selectedMemory = mem;
@@ -4026,6 +4717,21 @@
             preview.innerHTML = '<video src="' + convertFileSrc(mem.path) + '" controls onerror="this.style.display=\'none\'"></video>' + getIcon(mem.kind, '2xl');
           } else {
             preview.innerHTML = getIcon(mem.kind, '2xl');
+          }
+
+          // Caption section (only for images)
+          var captionSection = document.getElementById('captionSection');
+          var captionText = document.getElementById('captionText');
+          if (type === 'image') {
+            captionSection.style.display = 'block';
+            var existingCaption = mem.metadata && mem.metadata.ai_caption;
+            if (existingCaption) {
+              captionText.textContent = existingCaption;
+            } else {
+              captionText.textContent = '';
+            }
+          } else {
+            captionSection.style.display = 'none';
           }
 
           // Load virtual paths and similar files
@@ -4096,11 +4802,14 @@
           }
         };
 
-        document.getElementById('addBtn').onclick = function() {
+        document.getElementById('generateCaptionBtn').onclick = generateCaption;
+
+        // Add source function - made global for empty state button
+        window.addSource = function() {
           if (window.__TAURI__.dialog) {
             window.__TAURI__.dialog.open({ directory: true }).then(function(path) {
               if (path) {
-                showToast('Indexing folder...', '');
+                showToast('Indexing folder...', 'info');
                 invoke('add_source', { sourceType: 'local', path: path }).then(function() {
                   var count = 0;
                   var interval = setInterval(function() {
@@ -4117,6 +4826,8 @@
             });
           }
         };
+
+        document.getElementById('addBtn').onclick = window.addSource;
 
         document.getElementById('discoverBtn').onclick = function() {
           discoverCollections();
@@ -4149,6 +4860,14 @@
 
         document.getElementById('searchInput').oninput = function(e) {
           var query = e.target.value;
+
+          // Detect if query is natural language
+          if (searchMode === 'text' && isNaturalLanguageQuery(query)) {
+            showNLBadge();
+          } else {
+            hideNLBadge();
+          }
+
           if (searchMode === 'text') {
             search(query);
           }
@@ -4156,9 +4875,17 @@
         };
 
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
-          if (e.key === 'Enter' && searchMode !== 'text') {
-            e.preventDefault();
-            handleAISearch(e.target.value);
+          if (e.key === 'Enter') {
+            var query = e.target.value;
+
+            // If in text mode but query looks like NL, use NL search
+            if (searchMode === 'text' && isNaturalLanguageQuery(query)) {
+              e.preventDefault();
+              performNaturalLanguageSearch(query);
+            } else if (searchMode !== 'text') {
+              e.preventDefault();
+              handleAISearch(query);
+            }
           }
         });
 
@@ -4181,6 +4908,18 @@
             document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
             btn.classList.add('active');
             filterType = btn.dataset.filter;
+            keyboardFocusIndex = -1; // Reset keyboard focus on filter change
+            renderFiles();
+          };
+        });
+
+        // Date filter buttons
+        document.querySelectorAll('.date-filter-btn').forEach(function(btn) {
+          btn.onclick = function() {
+            document.querySelectorAll('.date-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            dateFilter = btn.dataset.date;
+            keyboardFocusIndex = -1; // Reset keyboard focus
             renderFiles();
           };
         });
@@ -4333,12 +5072,117 @@
               closeCommandPalette();
             } else if (selectedIds.length > 0) {
               clearSelection();
+            } else if (keyboardFocusIndex >= 0) {
+              keyboardFocusIndex = -1;
+              updateKeyboardFocus();
             } else {
               document.getElementById('detailPanel').classList.remove('open');
               selectedMemory = null;
             }
           }
+          // Arrow key navigation for grid/list
+          if (!isTyping && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+            e.preventDefault();
+            handleArrowNavigation(e.key);
+          }
+          // Enter/Space to open focused item
+          if (!isTyping && (e.key === 'Enter' || e.key === ' ') && keyboardFocusIndex >= 0) {
+            e.preventDefault();
+            var displayed = getDisplayedMemories();
+            if (displayed[keyboardFocusIndex]) {
+              openDetail(displayed[keyboardFocusIndex]);
+            }
+          }
         });
+
+        // Drag and drop file upload
+        var dragCounter = 0;
+        var dropZoneEl = document.getElementById('dropZone');
+        var dropZoneIconEl = document.getElementById('dropZoneIcon');
+
+        document.addEventListener('dragenter', function(e) {
+          e.preventDefault();
+          dragCounter++;
+          if (dragCounter === 1) {
+            dropZoneEl.classList.add('active');
+            dropZoneIconEl.innerHTML = icons.folderPlus;
+          }
+        });
+
+        document.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        });
+
+        document.addEventListener('dragleave', function(e) {
+          e.preventDefault();
+          dragCounter--;
+          if (dragCounter === 0) {
+            dropZoneEl.classList.remove('active');
+          }
+        });
+
+        document.addEventListener('drop', function(e) {
+          e.preventDefault();
+          dragCounter = 0;
+          dropZoneEl.classList.remove('active');
+
+          // In Tauri, we need to use the event system to get dropped file paths
+          // The file paths will be handled by the Tauri window event listener below
+        });
+
+        // Listen for Tauri file drop events
+        if (window.__TAURI__ && window.__TAURI__.event) {
+          window.__TAURI__.event.listen('tauri://file-drop', function(event) {
+            var paths = event.payload;
+            if (paths && paths.length > 0) {
+              handleDroppedPaths(paths);
+            }
+          }).catch(function(err) {
+            console.error('Failed to set up file drop listener:', err);
+          });
+        }
+
+        function handleDroppedPaths(paths) {
+          if (paths.length === 0) return;
+
+          // Filter to only directories - we'll check each path
+          var folderCount = 0;
+          var completed = 0;
+
+          showToast('Processing ' + paths.length + ' item(s)...', 'info');
+
+          paths.forEach(function(path) {
+            // Try to add each path as a source
+            // The backend will validate if it's a directory
+            invoke('add_source', { sourceType: 'local', path: path }).then(function() {
+              folderCount++;
+              completed++;
+
+              if (completed === paths.length) {
+                if (folderCount > 0) {
+                  var count = 0;
+                  var interval = setInterval(function() {
+                    loadData();
+                    if (++count >= 15) {
+                      clearInterval(interval);
+                      showToast('Indexing complete! Added ' + folderCount + ' folder(s)', 'success');
+                    }
+                  }, 2000);
+                } else {
+                  showToast('No valid folders were dropped. Please drop directories to index.', 'error');
+                }
+              }
+            }).catch(function(e) {
+              completed++;
+              console.error('Failed to add source:', path, e);
+
+              if (completed === paths.length && folderCount === 0) {
+                showToast('Please drop folders (not individual files) to index', 'error');
+              }
+            });
+          });
+        }
 
         // Expose for inline handlers
         window.openInFinder = function(path) {

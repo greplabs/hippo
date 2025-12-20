@@ -7,23 +7,44 @@
     windows_subsystem = "windows"
 )]
 
+use chrono::Utc;
 use hippo_core::{
-    ClaudeClient, Hippo, MemoryId, OllamaClient, SearchQuery, Source, Tag, UnifiedAiClient,
+    ClaudeClient, Hippo, MemoryId, OllamaClient, QdrantManager, SearchQuery, Source,
+    Tag, UnifiedAiClient,
 };
+use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{Manager, State};
-use tauri_plugin_shell::process::CommandChild;
-use tauri_plugin_shell::ShellExt;
+use tauri::State;
 use tokio::sync::RwLock;
 
 struct AppState {
     hippo: Arc<RwLock<Option<Hippo>>>,
-    qdrant_process: Arc<RwLock<Option<CommandChild>>>,
+    qdrant_manager: Arc<QdrantManager>,
 }
 
 #[tauri::command]
 async fn initialize(state: State<'_, AppState>) -> Result<String, String> {
     println!("[Hippo] Initializing...");
+
+    // Ensure Qdrant is running
+    println!("[Hippo] Starting Qdrant...");
+    match state.qdrant_manager.ensure_running().await {
+        Ok(_) => {
+            let status = state.qdrant_manager.status().await;
+            if status.managed {
+                println!("[Hippo] Qdrant started successfully (managed)");
+            } else {
+                println!("[Hippo] Qdrant is running externally");
+            }
+        }
+        Err(e) => {
+            println!(
+                "[Hippo] Warning: Qdrant not available ({}). Vector search will be limited.",
+                e
+            );
+        }
+    }
+
     let mut hippo_lock = state.hippo.write().await;
 
     match Hippo::new().await {
@@ -1379,16 +1400,15 @@ async fn ai_smart_rename(
 
 #[tauri::command]
 async fn get_recommended_models() -> Result<serde_json::Value, String> {
+    use hippo_core::ollama::RecommendedModels;
     Ok(serde_json::json!({
-        "embedding": {
-            "light": hippo_core::RecommendedModels::EMBEDDING_LIGHT,
-            "standard": hippo_core::RecommendedModels::EMBEDDING_STANDARD
-        },
+        "embedding": RecommendedModels::EMBEDDINGS,
         "generation": {
-            "light": hippo_core::RecommendedModels::GENERATION_LIGHT,
-            "standard": hippo_core::RecommendedModels::GENERATION_STANDARD
+            "fast": RecommendedModels::FAST,
+            "balanced": RecommendedModels::BALANCED,
+            "quality": RecommendedModels::QUALITY
         },
-        "code": hippo_core::RecommendedModels::CODE_MODELS
+        "vision": RecommendedModels::VISION
     }))
 }
 
@@ -1621,6 +1641,233 @@ async fn get_qdrant_stats(state: State<'_, AppState>) -> Result<serde_json::Valu
     serde_json::to_value(stats).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn get_qdrant_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Getting Qdrant status...");
+    let status = state.qdrant_manager.status().await;
+    serde_json::to_value(status).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn install_qdrant(state: State<'_, AppState>) -> Result<String, String> {
+    println!("[Hippo] Installing Qdrant...");
+    state
+        .qdrant_manager
+        .install()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok("Qdrant installed successfully".to_string())
+}
+
+#[tauri::command]
+async fn start_qdrant(state: State<'_, AppState>) -> Result<String, String> {
+    println!("[Hippo] Starting Qdrant...");
+    state
+        .qdrant_manager
+        .start()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok("Qdrant started successfully".to_string())
+}
+
+// ==================== AI Natural Language Features ====================
+
+#[tauri::command]
+async fn parse_natural_query(query: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Parsing natural query: {}", query);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    // Access the searcher through the internal field
+    // Since we can't access private fields, we'll implement this directly
+    use regex::Regex;
+    use chrono::{Duration, Utc};
+
+    let query_lower = query.to_lowercase();
+    let mut keywords = query.clone();
+    let mut file_types = Vec::new();
+    let mut date_range = None;
+    let mut interpretations = Vec::new();
+
+    // Extract file types
+    let type_patterns = [
+        (r"\b(image|images|photo|photos|picture|pictures|pic|pics)\b", "image"),
+        (r"\b(video|videos|movie|movies|clip|clips)\b", "video"),
+        (r"\b(audio|music|song|songs|sound|sounds)\b", "audio"),
+        (r"\b(document|documents|doc|docs|pdf|pdfs|text|texts)\b", "document"),
+        (r"\b(code|source|script|scripts|program|programs)\b", "code"),
+    ];
+
+    for (pattern, kind_name) in type_patterns {
+        if let Ok(re) = Regex::new(pattern) {
+            if re.is_match(&query_lower) {
+                file_types.push(kind_name.to_string());
+                keywords = re.replace_all(&keywords, "").to_string();
+                interpretations.push(format!("file type: {}", kind_name));
+            }
+        }
+    }
+
+    // Extract date ranges
+    let now = Utc::now();
+    let date_patterns = [
+        (r"\b(today|tonight)\b", 0, "today"),
+        (r"\b(yesterday)\b", 1, "yesterday"),
+        (r"\blast week\b", 7, "last week"),
+        (r"\blast month\b", 30, "last month"),
+        (r"\blast year\b", 365, "last year"),
+        (r"\bthis week\b", 7, "this week"),
+        (r"\bthis month\b", 30, "this month"),
+        (r"\bthis year\b", 365, "this year"),
+    ];
+
+    for (pattern, days, desc) in date_patterns {
+        if let Ok(re) = Regex::new(pattern) {
+            if re.is_match(&query_lower) {
+                let start = now - Duration::days(days);
+                date_range = Some(serde_json::json!({
+                    "start": start.to_rfc3339(),
+                    "end": now.to_rfc3339()
+                }));
+                keywords = re.replace_all(&keywords, "").to_string();
+                interpretations.push(format!("date range: {}", desc));
+                break;
+            }
+        }
+    }
+
+    // Clean up keywords
+    keywords = keywords
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string();
+
+    let parsed = serde_json::json!({
+        "original": query,
+        "keywords": if keywords.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(keywords) },
+        "file_types": file_types,
+        "date_range": date_range,
+        "interpretation": if interpretations.is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::Value::String(interpretations.join(", "))
+        }
+    });
+
+    println!("[Hippo] Parsed query: {:?}", parsed);
+    Ok(parsed)
+}
+
+#[tauri::command]
+async fn natural_language_search(
+    query: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Natural language search: {}", query);
+
+    // First parse the query
+    let parsed = parse_natural_query(query.clone(), state.clone()).await?;
+
+    // Then perform search with extracted parameters
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let keywords = parsed.get("keywords")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let mut search_query = SearchQuery {
+        text: keywords,
+        ..Default::default()
+    };
+
+    // Add file type filters
+    if let Some(types) = parsed.get("file_types").and_then(|v| v.as_array()) {
+        for type_str in types.iter().filter_map(|v| v.as_str()) {
+            use hippo_core::{MemoryKind, DocumentFormat};
+            let kind = match type_str {
+                "image" => MemoryKind::Image {
+                    width: 0,
+                    height: 0,
+                    format: String::new(),
+                },
+                "video" => MemoryKind::Video {
+                    duration_ms: 0,
+                    format: String::new(),
+                },
+                "audio" => MemoryKind::Audio {
+                    duration_ms: 0,
+                    format: String::new(),
+                },
+                "document" => MemoryKind::Document {
+                    format: DocumentFormat::Pdf,
+                    page_count: None,
+                },
+                "code" => MemoryKind::Code {
+                    language: String::new(),
+                    lines: 0,
+                },
+                _ => continue,
+            };
+            search_query.kinds.push(kind);
+        }
+    }
+
+    // Add date range filter
+    if let Some(range) = parsed.get("date_range").and_then(|v| v.as_object()) {
+        if let (Some(start_str), Some(end_str)) = (
+            range.get("start").and_then(|v| v.as_str()),
+            range.get("end").and_then(|v| v.as_str()),
+        ) {
+            if let (Ok(start), Ok(end)) = (
+                chrono::DateTime::parse_from_rfc3339(start_str),
+                chrono::DateTime::parse_from_rfc3339(end_str),
+            ) {
+                search_query.date_range = Some(hippo_core::DateRange {
+                    start: Some(start.with_timezone(&Utc)),
+                    end: Some(end.with_timezone(&Utc)),
+                });
+            }
+        }
+    }
+
+    let results = hippo
+        .search_advanced(search_query)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "parsed": parsed,
+        "results": results
+    }))
+}
+
+#[tauri::command]
+async fn caption_image(path: String) -> Result<String, String> {
+    println!("[Hippo] Captioning image: {}", path);
+
+    let client = OllamaClient::new();
+
+    if !client.is_available().await {
+        return Err("Ollama is not running. Please start Ollama first.".to_string());
+    }
+
+    let image_path = std::path::Path::new(&path);
+    if !image_path.exists() {
+        return Err("Image file not found".to_string());
+    }
+
+    let caption = client
+        .caption_image(image_path)
+        .await
+        .map_err(|e| format!("Failed to caption image: {}", e))?;
+
+    println!("[Hippo] Image caption generated");
+    Ok(caption)
+}
+
 // Helper function for cosine similarity (kept for future semantic search)
 #[allow(dead_code)]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
@@ -1657,83 +1904,24 @@ fn main() {
     println!("[Hippo] Starting application...");
     tracing_subscriber::fmt::init();
 
+    // Get data directory for Qdrant
+    let data_dir = directories::ProjectDirs::from("com", "hippo", "app")
+        .map(|d| d.data_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from(".hippo"));
+
+    // Create Qdrant manager
+    let qdrant_manager = Arc::new(QdrantManager::new(data_dir, "http://localhost:6334"));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .manage(AppState {
             hippo: Arc::new(RwLock::new(None)),
-            qdrant_process: Arc::new(RwLock::new(None)),
+            qdrant_manager,
         })
-        .setup(|app| {
-            // Get app data directory for Qdrant storage
-            let data_dir = app
-                .path()
-                .app_data_dir()
-                .expect("Failed to get app data directory");
-            let qdrant_storage = data_dir.join("qdrant_storage");
-            std::fs::create_dir_all(&qdrant_storage).ok();
-
-            println!("[Hippo] Starting Qdrant sidecar...");
-            println!("[Hippo] Qdrant storage: {:?}", qdrant_storage);
-
-            // Try to spawn Qdrant sidecar
-            let shell = app.shell();
-            match shell
-                .sidecar("qdrant")
-                .expect("Failed to create Qdrant sidecar command")
-                .env(
-                    "QDRANT__STORAGE__STORAGE_PATH",
-                    qdrant_storage.to_string_lossy().to_string(),
-                )
-                .spawn()
-            {
-                Ok((mut rx, child)) => {
-                    println!("[Hippo] Qdrant sidecar started (PID: {})", child.pid());
-
-                    // Store the child process handle
-                    let state = app.state::<AppState>();
-                    let qdrant_process = state.qdrant_process.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let mut lock = qdrant_process.write().await;
-                        *lock = Some(child);
-                    });
-
-                    // Log Qdrant output in background
-                    tauri::async_runtime::spawn(async move {
-                        use tauri_plugin_shell::process::CommandEvent;
-                        while let Some(event) = rx.recv().await {
-                            match event {
-                                CommandEvent::Stdout(line) => {
-                                    let text = String::from_utf8_lossy(&line);
-                                    if text.contains("Qdrant") || text.contains("listening") {
-                                        println!("[Qdrant] {}", text.trim());
-                                    }
-                                }
-                                CommandEvent::Stderr(line) => {
-                                    let text = String::from_utf8_lossy(&line);
-                                    if !text.is_empty() {
-                                        eprintln!("[Qdrant] {}", text.trim());
-                                    }
-                                }
-                                CommandEvent::Terminated(status) => {
-                                    println!("[Qdrant] Process terminated: {:?}", status);
-                                    break;
-                                }
-                                _ => {}
-                            }
-                        }
-                    });
-
-                    // Give Qdrant a moment to start
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                }
-                Err(e) => {
-                    println!("[Hippo] Failed to start Qdrant sidecar: {}", e);
-                    println!("[Hippo] Vector search will use SQLite fallback");
-                }
-            }
-
+        .setup(|_app| {
+            println!("[Hippo] Application started. Qdrant will be auto-managed.");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1790,6 +1978,14 @@ fn main() {
             find_similar_memories,
             hybrid_search,
             get_qdrant_stats,
+            // Qdrant Management
+            get_qdrant_status,
+            install_qdrant,
+            start_qdrant,
+            // AI Natural Language Features
+            parse_natural_query,
+            natural_language_search,
+            caption_image,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -7,6 +7,7 @@ use crate::{
     embeddings::Embedder,
     error::{HippoError, Result},
     models::*,
+    ollama::OllamaClient,
     storage::Storage,
     HippoConfig,
 };
@@ -40,6 +41,7 @@ pub struct IndexerConfig {
     pub parallelism: usize,
     pub batch_size: usize,
     pub supported_extensions: Vec<String>,
+    pub auto_tag_enabled: bool,
 }
 
 impl Default for IndexerConfig {
@@ -64,6 +66,7 @@ impl Default for IndexerConfig {
             .into_iter()
             .map(String::from)
             .collect(),
+            auto_tag_enabled: false,
         }
     }
 }
@@ -86,6 +89,7 @@ impl Indexer {
 
         let indexer_config = IndexerConfig {
             parallelism: config.indexing_parallelism,
+            auto_tag_enabled: config.auto_tag_enabled,
             ..Default::default()
         };
 
@@ -331,6 +335,11 @@ impl Indexer {
                 }
             }
 
+            // Auto-tagging with Ollama (if enabled)
+            if config.auto_tag_enabled {
+                Self::auto_tag_batch(&memories, storage).await;
+            }
+
             println!("[Indexer] Stored batch of {} files", memories.len());
             info!("Processed batch of {} files", memories.len());
         }
@@ -338,6 +347,73 @@ impl Indexer {
         println!("[Indexer] Completed indexing path: {:?}", path);
         info!("Completed indexing path: {:?}", path);
         Ok(())
+    }
+
+    /// Auto-tag a batch of memories using Ollama
+    async fn auto_tag_batch(memories: &[Memory], storage: &Storage) {
+        let ollama_client = OllamaClient::new();
+
+        // Check if Ollama is available
+        if !ollama_client.is_available().await {
+            debug!("Ollama not available, skipping auto-tagging");
+            return;
+        }
+
+        println!("[Indexer] Auto-tagging {} files with Ollama", memories.len());
+
+        for memory in memories {
+            // Create a prompt based on file information
+            let filename = memory
+                .path
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let kind_name = match &memory.kind {
+                MemoryKind::Image { .. } => "image",
+                MemoryKind::Video { .. } => "video",
+                MemoryKind::Audio { .. } => "audio",
+                MemoryKind::Document { .. } => "document",
+                MemoryKind::Code { language, .. } => language.as_str(),
+                MemoryKind::Spreadsheet { .. } => "spreadsheet",
+                MemoryKind::Presentation { .. } => "presentation",
+                MemoryKind::Archive { .. } => "archive",
+                _ => "file",
+            };
+
+            let prompt = format!(
+                "Suggest 3-5 short tags for this file: {}, type: {}. Return only comma-separated tags, no explanations.",
+                filename, kind_name
+            );
+
+            // Generate tags using Ollama
+            match ollama_client.generate(&prompt, None).await {
+                Ok(response) => {
+                    // Parse comma-separated tags
+                    let tags: Vec<String> = response
+                        .split(',')
+                        .map(|s| s.trim().to_lowercase())
+                        .filter(|s| !s.is_empty() && s.len() <= 30)
+                        .take(5)
+                        .map(String::from)
+                        .collect();
+
+                    // Add AI tags to the memory
+                    for tag_name in tags {
+                        let tag = Tag::ai(tag_name, 80);
+                        if let Err(e) = storage.add_tag(memory.id, tag).await {
+                            debug!("Failed to add auto-tag: {}", e);
+                        }
+                    }
+
+                    debug!("Auto-tagged file: {}", filename);
+                }
+                Err(e) => {
+                    debug!("Failed to auto-tag {}: {}", filename, e);
+                }
+            }
+        }
+
+        println!("[Indexer] Auto-tagging completed");
     }
 
     /// Process a single file and extract metadata
