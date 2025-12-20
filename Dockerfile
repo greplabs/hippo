@@ -24,6 +24,9 @@ COPY Cargo.lock ./
 COPY Cargo.toml Cargo.toml.orig
 RUN sed '/hippo-tauri/d' Cargo.toml.orig > Cargo.toml && rm Cargo.toml.orig
 
+# Update lock file after modifying workspace (removes hippo-tauri entries)
+RUN cargo generate-lockfile
+
 # Build release binary (CLI only - Tauri requires desktop environment)
 RUN cargo build --release --package hippo-cli --locked
 
