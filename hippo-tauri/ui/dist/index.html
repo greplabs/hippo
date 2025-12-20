@@ -231,6 +231,39 @@
     .search-input::placeholder { color: #a8a29e; }
     body.dark .search-input { color: #fafaf9; }
 
+    /* AI badge for natural language search */
+    .ai-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      color: white;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      animation: scaleIn 0.2s ease;
+      flex-shrink: 0;
+    }
+    .ai-badge .icon { font-size: 12px; }
+
+    /* NL interpretation display */
+    .nl-interpretation {
+      display: none;
+      margin-top: 10px;
+      padding: 10px 14px;
+      background: rgba(99, 102, 241, 0.08);
+      border-left: 3px solid #6366f1;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #4338ca;
+      animation: fadeInUp 0.2s ease;
+    }
+    .nl-interpretation.show { display: block; }
+    body.dark .nl-interpretation { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; }
+    .nl-interpretation-label { font-weight: 600; margin-right: 6px; }
+
     /* Recent searches dropdown */
     .search-wrapper { position: relative; }
     .recent-searches {
@@ -1292,6 +1325,7 @@
             <span class="icon icon-md" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
             <div class="active-tags" id="activeTags"></div>
             <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)">
+            <div class="ai-badge" id="nlBadge" style="display:none;"><span class="icon">&#10024;</span> AI</div>
           </div>
           <div class="search-mode">
             <button class="search-mode-btn active" id="searchModeText" data-mode="text"><span class="icon icon-sm" id="searchModeTextIcon"></span> Text</button>
@@ -1300,6 +1334,7 @@
           </div>
         </div>
         <div class="tag-bar" id="tagBar"></div>
+        <div class="nl-interpretation" id="nlInterpretation"></div>
       </div>
       <div class="symbol-results" id="symbolResults" style="display:none;"></div>
       <div class="filter-bar">
@@ -1356,6 +1391,11 @@
           <div class="info-row"><span class="info-label">Size</span><span class="info-value" id="detailSize">-</span></div>
           <div class="info-row"><span class="info-label">Modified</span><span class="info-value" id="detailDate">-</span></div>
         </div>
+        <div class="detail-section" id="captionSection" style="display:none;">
+          <p class="detail-section-title">AI Caption</p>
+          <button class="action-btn secondary" id="generateCaptionBtn" style="width:100%;margin-bottom:8px;">Generate Caption</button>
+          <div id="captionText" style="font-size:13px;color:#57534e;line-height:1.5;"></div>
+        </div>
         <div class="ai-section" id="aiSection">
           <button class="ai-btn" id="aiAnalyzeBtn"><span class="icon icon-sm" id="aiIcon"></span> Analyze with AI</button>
           <div id="aiResults" style="display:none;">
@@ -1392,6 +1432,14 @@
   </div>
 
   <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Drop Zone Overlay -->
+  <div class="drop-zone-overlay" id="dropZone">
+    <div class="drop-zone-content">
+      <div class="icon" id="dropZoneIcon"></div>
+      <div>Drop folders here to index</div>
+    </div>
+  </div>
 
   <!-- Bulk Action Bar -->
   <div class="bulk-bar" id="bulkBar">
@@ -2340,6 +2388,32 @@
     body.dark .ai-stats { border-color: rgba(255,255,255,0.08); }
     .ai-stat { display: flex; align-items: center; gap: 4px; }
     .ai-stat .icon { width: 12px; height: 12px; }
+
+    /* Drop Zone Overlay */
+    .drop-zone-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(99, 102, 241, 0.15);
+      backdrop-filter: blur(4px);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: 4px dashed rgba(99, 102, 241, 0.5);
+    }
+    .drop-zone-overlay.active { display: flex; }
+    .drop-zone-content {
+      text-align: center;
+      color: #6366f1;
+      font-size: 24px;
+      font-weight: 600;
+      padding: 40px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+    }
+    body.dark .drop-zone-content { background: #292524; color: #818cf8; }
+    .drop-zone-content .icon { width: 64px; height: 64px; margin-bottom: 16px; }
   </style>
 
   <script>
@@ -4262,6 +4336,70 @@
           });
         }
 
+        // Natural Language Search Detection
+        function isNaturalLanguageQuery(query) {
+          if (!query || query.trim().length < 5) return false;
+
+          var lower = query.toLowerCase();
+
+          // Detect NL trigger phrases
+          var triggerPhrases = ['show me', 'find', 'search for', 'get me', 'look for', 'display'];
+          if (triggerPhrases.some(function(phrase) { return lower.includes(phrase); })) {
+            return true;
+          }
+
+          // Detect file type words
+          var fileTypeWords = ['images', 'photos', 'videos', 'documents', 'code', 'music', 'audio', 'pictures', 'pics', 'photo', 'image', 'video', 'doc', 'docs', 'pdf'];
+          var hasFileType = fileTypeWords.some(function(word) { return lower.includes(word); });
+
+          // Detect date words
+          var dateWords = ['today', 'yesterday', 'last week', 'this week', 'last month', 'this month', 'last year', 'this year'];
+          var hasDate = dateWords.some(function(word) { return lower.includes(word); });
+
+          // If query has file type or date words, it's likely NL
+          return hasFileType || hasDate;
+        }
+
+        function performNaturalLanguageSearch(query) {
+          showToast('Parsing your query...', 'info');
+
+          invoke('natural_language_search', { query: query }).then(function(result) {
+            var parsed = result.parsed;
+            var searchResults = result.results;
+
+            // Show interpretation
+            if (parsed && parsed.interpretation) {
+              var interpDiv = document.getElementById('nlInterpretation');
+              interpDiv.innerHTML = '<span class="nl-interpretation-label">Searching for:</span>' + esc(parsed.interpretation);
+              interpDiv.classList.add('show');
+            }
+
+            // Update memories with results
+            if (searchResults && searchResults.memories) {
+              memories = searchResults.memories.map(function(x) { return x.memory; });
+              renderFiles();
+              showToast('Found ' + memories.length + ' files', 'success');
+            } else {
+              memories = [];
+              renderFiles();
+              showToast('No files found', 'info');
+            }
+          }).catch(function(e) {
+            showToast('Natural language search failed: ' + e, 'error');
+            hideNLBadge();
+          });
+        }
+
+        function showNLBadge() {
+          document.getElementById('nlBadge').style.display = 'inline-flex';
+        }
+
+        function hideNLBadge() {
+          document.getElementById('nlBadge').style.display = 'none';
+          var interpDiv = document.getElementById('nlInterpretation');
+          interpDiv.classList.remove('show');
+        }
+
         function renderSymbolResults() {
           var container = document.getElementById('symbolResults');
           if (symbolResults.length === 0) {
@@ -4501,6 +4639,33 @@
           input.focus();
         }
 
+        function generateCaption() {
+          if (!selectedMemory) return;
+          var btn = document.getElementById('generateCaptionBtn');
+          var captionDiv = document.getElementById('captionText');
+
+          btn.disabled = true;
+          btn.textContent = 'Generating...';
+          captionDiv.textContent = '';
+
+          invoke('caption_image', { path: selectedMemory.path }).then(function(caption) {
+            btn.disabled = false;
+            btn.textContent = 'Generate Caption';
+            captionDiv.textContent = caption;
+
+            // Store caption in memory object
+            if (!selectedMemory.metadata) selectedMemory.metadata = {};
+            selectedMemory.metadata.ai_caption = caption;
+
+            showToast('Caption generated!', 'success');
+          }).catch(function(e) {
+            btn.disabled = false;
+            btn.textContent = 'Generate Caption';
+            captionDiv.textContent = '';
+            showToast('Caption failed: ' + e, 'error');
+          });
+        }
+
         function selectMemory(mem) {
           if (!mem) return;
           selectedMemory = mem;
@@ -4552,6 +4717,21 @@
             preview.innerHTML = '<video src="' + convertFileSrc(mem.path) + '" controls onerror="this.style.display=\'none\'"></video>' + getIcon(mem.kind, '2xl');
           } else {
             preview.innerHTML = getIcon(mem.kind, '2xl');
+          }
+
+          // Caption section (only for images)
+          var captionSection = document.getElementById('captionSection');
+          var captionText = document.getElementById('captionText');
+          if (type === 'image') {
+            captionSection.style.display = 'block';
+            var existingCaption = mem.metadata && mem.metadata.ai_caption;
+            if (existingCaption) {
+              captionText.textContent = existingCaption;
+            } else {
+              captionText.textContent = '';
+            }
+          } else {
+            captionSection.style.display = 'none';
           }
 
           // Load virtual paths and similar files
@@ -4622,6 +4802,8 @@
           }
         };
 
+        document.getElementById('generateCaptionBtn').onclick = generateCaption;
+
         // Add source function - made global for empty state button
         window.addSource = function() {
           if (window.__TAURI__.dialog) {
@@ -4678,6 +4860,14 @@
 
         document.getElementById('searchInput').oninput = function(e) {
           var query = e.target.value;
+
+          // Detect if query is natural language
+          if (searchMode === 'text' && isNaturalLanguageQuery(query)) {
+            showNLBadge();
+          } else {
+            hideNLBadge();
+          }
+
           if (searchMode === 'text') {
             search(query);
           }
@@ -4685,9 +4875,17 @@
         };
 
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
-          if (e.key === 'Enter' && searchMode !== 'text') {
-            e.preventDefault();
-            handleAISearch(e.target.value);
+          if (e.key === 'Enter') {
+            var query = e.target.value;
+
+            // If in text mode but query looks like NL, use NL search
+            if (searchMode === 'text' && isNaturalLanguageQuery(query)) {
+              e.preventDefault();
+              performNaturalLanguageSearch(query);
+            } else if (searchMode !== 'text') {
+              e.preventDefault();
+              handleAISearch(query);
+            }
           }
         });
 
@@ -4896,6 +5094,95 @@
             }
           }
         });
+
+        // Drag and drop file upload
+        var dragCounter = 0;
+        var dropZoneEl = document.getElementById('dropZone');
+        var dropZoneIconEl = document.getElementById('dropZoneIcon');
+
+        document.addEventListener('dragenter', function(e) {
+          e.preventDefault();
+          dragCounter++;
+          if (dragCounter === 1) {
+            dropZoneEl.classList.add('active');
+            dropZoneIconEl.innerHTML = icons.folderPlus;
+          }
+        });
+
+        document.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        });
+
+        document.addEventListener('dragleave', function(e) {
+          e.preventDefault();
+          dragCounter--;
+          if (dragCounter === 0) {
+            dropZoneEl.classList.remove('active');
+          }
+        });
+
+        document.addEventListener('drop', function(e) {
+          e.preventDefault();
+          dragCounter = 0;
+          dropZoneEl.classList.remove('active');
+
+          // In Tauri, we need to use the event system to get dropped file paths
+          // The file paths will be handled by the Tauri window event listener below
+        });
+
+        // Listen for Tauri file drop events
+        if (window.__TAURI__ && window.__TAURI__.event) {
+          window.__TAURI__.event.listen('tauri://file-drop', function(event) {
+            var paths = event.payload;
+            if (paths && paths.length > 0) {
+              handleDroppedPaths(paths);
+            }
+          }).catch(function(err) {
+            console.error('Failed to set up file drop listener:', err);
+          });
+        }
+
+        function handleDroppedPaths(paths) {
+          if (paths.length === 0) return;
+
+          // Filter to only directories - we'll check each path
+          var folderCount = 0;
+          var completed = 0;
+
+          showToast('Processing ' + paths.length + ' item(s)...', 'info');
+
+          paths.forEach(function(path) {
+            // Try to add each path as a source
+            // The backend will validate if it's a directory
+            invoke('add_source', { sourceType: 'local', path: path }).then(function() {
+              folderCount++;
+              completed++;
+
+              if (completed === paths.length) {
+                if (folderCount > 0) {
+                  var count = 0;
+                  var interval = setInterval(function() {
+                    loadData();
+                    if (++count >= 15) {
+                      clearInterval(interval);
+                      showToast('Indexing complete! Added ' + folderCount + ' folder(s)', 'success');
+                    }
+                  }, 2000);
+                } else {
+                  showToast('No valid folders were dropped. Please drop directories to index.', 'error');
+                }
+              }
+            }).catch(function(e) {
+              completed++;
+              console.error('Failed to add source:', path, e);
+
+              if (completed === paths.length && folderCount === 0) {
+                showToast('Please drop folders (not individual files) to index', 'error');
+              }
+            });
+          });
+        }
 
         // Expose for inline handlers
         window.openInFinder = function(path) {
