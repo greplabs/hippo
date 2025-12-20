@@ -11,11 +11,14 @@ use hippo_core::{
     ClaudeClient, Hippo, MemoryId, OllamaClient, SearchQuery, Source, Tag, UnifiedAiClient,
 };
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Manager, State};
+use tauri_plugin_shell::process::CommandChild;
+use tauri_plugin_shell::ShellExt;
 use tokio::sync::RwLock;
 
 struct AppState {
     hippo: Arc<RwLock<Option<Hippo>>>,
+    qdrant_process: Arc<RwLock<Option<CommandChild>>>,
 }
 
 #[tauri::command]
@@ -1660,6 +1663,78 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .manage(AppState {
             hippo: Arc::new(RwLock::new(None)),
+            qdrant_process: Arc::new(RwLock::new(None)),
+        })
+        .setup(|app| {
+            // Get app data directory for Qdrant storage
+            let data_dir = app
+                .path()
+                .app_data_dir()
+                .expect("Failed to get app data directory");
+            let qdrant_storage = data_dir.join("qdrant_storage");
+            std::fs::create_dir_all(&qdrant_storage).ok();
+
+            println!("[Hippo] Starting Qdrant sidecar...");
+            println!("[Hippo] Qdrant storage: {:?}", qdrant_storage);
+
+            // Try to spawn Qdrant sidecar
+            let shell = app.shell();
+            match shell
+                .sidecar("qdrant")
+                .expect("Failed to create Qdrant sidecar command")
+                .env(
+                    "QDRANT__STORAGE__STORAGE_PATH",
+                    qdrant_storage.to_string_lossy().to_string(),
+                )
+                .spawn()
+            {
+                Ok((mut rx, child)) => {
+                    println!("[Hippo] Qdrant sidecar started (PID: {})", child.pid());
+
+                    // Store the child process handle
+                    let state = app.state::<AppState>();
+                    let qdrant_process = state.qdrant_process.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let mut lock = qdrant_process.write().await;
+                        *lock = Some(child);
+                    });
+
+                    // Log Qdrant output in background
+                    tauri::async_runtime::spawn(async move {
+                        use tauri_plugin_shell::process::CommandEvent;
+                        while let Some(event) = rx.recv().await {
+                            match event {
+                                CommandEvent::Stdout(line) => {
+                                    let text = String::from_utf8_lossy(&line);
+                                    if text.contains("Qdrant") || text.contains("listening") {
+                                        println!("[Qdrant] {}", text.trim());
+                                    }
+                                }
+                                CommandEvent::Stderr(line) => {
+                                    let text = String::from_utf8_lossy(&line);
+                                    if !text.is_empty() {
+                                        eprintln!("[Qdrant] {}", text.trim());
+                                    }
+                                }
+                                CommandEvent::Terminated(status) => {
+                                    println!("[Qdrant] Process terminated: {:?}", status);
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                    });
+
+                    // Give Qdrant a moment to start
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+                Err(e) => {
+                    println!("[Hippo] Failed to start Qdrant sidecar: {}", e);
+                    println!("[Hippo] Vector search will use SQLite fallback");
+                }
+            }
+
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             initialize,

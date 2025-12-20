@@ -24,3 +24,4 @@
 *.db-journal
 storage/
 .qdrant-initialized
+hippo-tauri/binaries/
