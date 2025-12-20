@@ -3,6 +3,8 @@
 //! This crate provides client-side search capabilities for the Hippo file organizer,
 //! allowing fuzzy matching, semantic scoring, and local search to run directly in the browser.
 
+#![allow(missing_docs)]
+
 use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
