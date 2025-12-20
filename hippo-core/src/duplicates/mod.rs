@@ -263,6 +263,163 @@ pub fn format_bytes(bytes: u64) -> String {
     }
 }
 
+/// A group of semantically similar files (not exact duplicates)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SimilarGroup {
+    /// Representative memory ID (first in group)
+    pub representative_id: MemoryId,
+    /// Representative file name
+    pub representative_name: String,
+    /// All similar memory IDs including representative
+    pub memory_ids: Vec<MemoryId>,
+    /// File paths
+    pub paths: Vec<std::path::PathBuf>,
+    /// Similarity scores (1.0 = identical)
+    pub similarity_scores: Vec<f32>,
+    /// Average similarity within the group
+    pub avg_similarity: f32,
+    /// Type of files in group (e.g., "image", "document")
+    pub file_type: String,
+}
+
+/// Summary of semantic similarity detection
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct SimilarSummary {
+    /// Total files analyzed
+    pub files_analyzed: usize,
+    /// Number of similar groups found
+    pub similar_groups: usize,
+    /// Total files that have similar counterparts
+    pub total_similar: usize,
+    /// Similarity threshold used
+    pub threshold: f32,
+}
+
+/// Find semantically similar files using embeddings
+///
+/// This uses vector embeddings to find files that are similar in content,
+/// even if they're not exact duplicates. For example:
+/// - Photos of the same subject from different angles
+/// - Documents covering the same topic
+/// - Code files with similar functionality
+pub fn find_similar_by_embedding(
+    memories: &[Memory],
+    embeddings: &HashMap<MemoryId, Vec<f32>>,
+    threshold: f32,
+    min_group_size: usize,
+) -> (Vec<SimilarGroup>, SimilarSummary) {
+    let mut summary = SimilarSummary {
+        files_analyzed: memories.len(),
+        threshold,
+        ..Default::default()
+    };
+
+    // Only consider memories that have embeddings
+    let memories_with_embeddings: Vec<_> = memories
+        .iter()
+        .filter(|m| embeddings.contains_key(&m.id))
+        .collect();
+
+    if memories_with_embeddings.is_empty() {
+        return (vec![], summary);
+    }
+
+    // Track which memories have been grouped
+    let mut grouped: std::collections::HashSet<MemoryId> = std::collections::HashSet::new();
+    let mut groups: Vec<SimilarGroup> = Vec::new();
+
+    // For each memory, find similar ones
+    for memory in &memories_with_embeddings {
+        if grouped.contains(&memory.id) {
+            continue;
+        }
+
+        let embedding = match embeddings.get(&memory.id) {
+            Some(e) => e,
+            None => continue,
+        };
+
+        let mut similar: Vec<(&Memory, f32)> = Vec::new();
+        similar.push((memory, 1.0)); // Include self
+
+        // Find all similar memories
+        for other in &memories_with_embeddings {
+            if other.id == memory.id || grouped.contains(&other.id) {
+                continue;
+            }
+
+            if let Some(other_embedding) = embeddings.get(&other.id) {
+                let similarity = cosine_similarity(embedding, other_embedding);
+                if similarity >= threshold {
+                    similar.push((other, similarity));
+                }
+            }
+        }
+
+        // Only create a group if we have enough similar files
+        if similar.len() >= min_group_size {
+            // Mark all as grouped
+            for (m, _) in &similar {
+                grouped.insert(m.id);
+            }
+
+            // Calculate average similarity
+            let avg_sim = similar.iter().map(|(_, s)| s).sum::<f32>() / similar.len() as f32;
+
+            // Determine file type
+            let file_type = match &memory.kind {
+                crate::MemoryKind::Image { .. } => "image",
+                crate::MemoryKind::Video { .. } => "video",
+                crate::MemoryKind::Audio { .. } => "audio",
+                crate::MemoryKind::Code { .. } => "code",
+                crate::MemoryKind::Document { .. } => "document",
+                _ => "file",
+            };
+
+            let group = SimilarGroup {
+                representative_id: memory.id,
+                representative_name: memory
+                    .path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+                memory_ids: similar.iter().map(|(m, _)| m.id).collect(),
+                paths: similar.iter().map(|(m, _)| m.path.clone()).collect(),
+                similarity_scores: similar.iter().map(|(_, s)| *s).collect(),
+                avg_similarity: avg_sim,
+                file_type: file_type.to_string(),
+            };
+
+            summary.total_similar += group.memory_ids.len();
+            groups.push(group);
+        }
+    }
+
+    summary.similar_groups = groups.len();
+
+    // Sort by group size (largest first)
+    groups.sort_by_key(|g| std::cmp::Reverse(g.memory_ids.len()));
+
+    (groups, summary)
+}
+
+/// Compute cosine similarity between two vectors
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+
+    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return 0.0;
+    }
+
+    dot / (norm_a * norm_b)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
