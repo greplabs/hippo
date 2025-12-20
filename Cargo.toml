@@ -35,7 +35,8 @@ ndarray = "0.16"
 # File processing
 walkdir = "2.5"
 mime_guess = "2.0"
-image = "0.25"
+# Image processing - disable rayon and use minimal codecs to avoid zune-jpeg SIMD issues
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico", "tiff"] }
 symphonia = "0.5"          # Audio metadata
 pdf-extract = "0.7"
 zip = "2.2"
