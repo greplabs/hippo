@@ -9,12 +9,12 @@
 
 use chrono::Utc;
 use hippo_core::{
-    ClaudeClient, Hippo, MemoryId, OllamaClient, QdrantManager, SearchQuery, Source,
-    Tag, UnifiedAiClient, WatchEvent, WatchStats,
+    ClaudeClient, Hippo, MemoryId, OllamaClient, QdrantManager, SearchQuery, Source, Tag,
+    UnifiedAiClient,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{Manager, State};
+use tauri::State;
 use tokio::sync::RwLock;
 
 struct AppState {
@@ -165,7 +165,11 @@ async fn bulk_add_tag(
     tag: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!("[Hippo] Bulk adding tag '{}' to {} memories", tag, memory_ids.len());
+    println!(
+        "[Hippo] Bulk adding tag '{}' to {} memories",
+        tag,
+        memory_ids.len()
+    );
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1716,15 +1720,18 @@ async fn start_qdrant(state: State<'_, AppState>) -> Result<String, String> {
 // ==================== AI Natural Language Features ====================
 
 #[tauri::command]
-async fn parse_natural_query(query: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+async fn parse_natural_query(
+    query: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
     println!("[Hippo] Parsing natural query: {}", query);
     let hippo_lock = state.hippo.read().await;
-    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    let _hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     // Access the searcher through the internal field
     // Since we can't access private fields, we'll implement this directly
-    use regex::Regex;
     use chrono::{Duration, Utc};
+    use regex::Regex;
 
     let query_lower = query.to_lowercase();
     let mut keywords = query.clone();
@@ -1734,10 +1741,16 @@ async fn parse_natural_query(query: String, state: State<'_, AppState>) -> Resul
 
     // Extract file types
     let type_patterns = [
-        (r"\b(image|images|photo|photos|picture|pictures|pic|pics)\b", "image"),
+        (
+            r"\b(image|images|photo|photos|picture|pictures|pic|pics)\b",
+            "image",
+        ),
         (r"\b(video|videos|movie|movies|clip|clips)\b", "video"),
         (r"\b(audio|music|song|songs|sound|sounds)\b", "audio"),
-        (r"\b(document|documents|doc|docs|pdf|pdfs|text|texts)\b", "document"),
+        (
+            r"\b(document|documents|doc|docs|pdf|pdfs|text|texts)\b",
+            "document",
+        ),
         (r"\b(code|source|script|scripts|program|programs)\b", "code"),
     ];
 
@@ -1817,7 +1830,8 @@ async fn natural_language_search(
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    let keywords = parsed.get("keywords")
+    let keywords = parsed
+        .get("keywords")
         .and_then(|v| v.as_str())
         .map(String::from);
 
@@ -1829,7 +1843,7 @@ async fn natural_language_search(
     // Add file type filters
     if let Some(types) = parsed.get("file_types").and_then(|v| v.as_array()) {
         for type_str in types.iter().filter_map(|v| v.as_str()) {
-            use hippo_core::{MemoryKind, DocumentFormat};
+            use hippo_core::{DocumentFormat, MemoryKind};
             let kind = match type_str {
                 "image" => MemoryKind::Image {
                     width: 0,
@@ -1929,11 +1943,7 @@ async fn pause_indexing(state: State<'_, AppState>) -> Result<String, String> {
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    hippo
-        .indexer
-        .pause()
-        .await
-        .map_err(|e| e.to_string())?;
+    hippo.indexer.pause().await.map_err(|e| e.to_string())?;
 
     Ok("Indexing paused".to_string())
 }
@@ -1944,20 +1954,13 @@ async fn resume_indexing(state: State<'_, AppState>) -> Result<String, String> {
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    hippo
-        .indexer
-        .resume()
-        .await
-        .map_err(|e| e.to_string())?;
+    hippo.indexer.resume().await.map_err(|e| e.to_string())?;
 
     Ok("Indexing resumed".to_string())
 }
 
 #[tauri::command]
-async fn set_indexing_priority(
-    path: String,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+async fn set_indexing_priority(path: String, state: State<'_, AppState>) -> Result<String, String> {
     println!("[Hippo] Setting indexing priority for: {}", path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
@@ -2007,10 +2010,7 @@ async fn get_tag_suggestions(
 
     match ai_client.suggest_tags_for_memory(&memory).await {
         Ok(suggestions) => {
-            println!(
-                "[Hippo] Found {} tag suggestions",
-                suggestions.len()
-            );
+            println!("[Hippo] Found {} tag suggestions", suggestions.len());
             Ok(serde_json::json!({
                 "tags": suggestions,
                 "available": true
@@ -2084,7 +2084,10 @@ async fn get_organization_suggestions_for_memory(
     memory_id: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting organization suggestions for: {}", memory_id);
+    println!(
+        "[Hippo] Getting organization suggestions for: {}",
+        memory_id
+    );
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2101,7 +2104,10 @@ async fn get_organization_suggestions_for_memory(
 
     match ai_client.suggest_groupings(&all_memories).await {
         Ok(suggestions) => {
-            println!("[Hippo] Found {} organization suggestions", suggestions.len());
+            println!(
+                "[Hippo] Found {} organization suggestions",
+                suggestions.len()
+            );
             Ok(serde_json::json!({
                 "suggestions": suggestions,
                 "available": true
@@ -2151,9 +2157,7 @@ async fn deep_analyze_file(
 }
 
 #[tauri::command]
-async fn analyze_image_deep(
-    path: String,
-) -> Result<serde_json::Value, String> {
+async fn analyze_image_deep(path: String) -> Result<serde_json::Value, String> {
     println!("[Hippo] Deep analyzing image: {}", path);
 
     let image_path = std::path::Path::new(&path);
@@ -2163,7 +2167,9 @@ async fn analyze_image_deep(
 
     let ollama = OllamaClient::new();
     if !ollama.is_available().await {
-        return Err("Ollama is not running. Please start Ollama with a vision model (llava).".to_string());
+        return Err(
+            "Ollama is not running. Please start Ollama with a vision model (llava).".to_string(),
+        );
     }
 
     let analysis = hippo_core::analyze_image(image_path, &ollama)
@@ -2174,9 +2180,7 @@ async fn analyze_image_deep(
 }
 
 #[tauri::command]
-async fn analyze_document_deep(
-    path: String,
-) -> Result<serde_json::Value, String> {
+async fn analyze_document_deep(path: String) -> Result<serde_json::Value, String> {
     println!("[Hippo] Deep analyzing document: {}", path);
 
     let doc_path = std::path::Path::new(&path);
@@ -2197,9 +2201,7 @@ async fn analyze_document_deep(
 }
 
 #[tauri::command]
-async fn analyze_code_deep(
-    path: String,
-) -> Result<serde_json::Value, String> {
+async fn analyze_code_deep(path: String) -> Result<serde_json::Value, String> {
     println!("[Hippo] Deep analyzing code: {}", path);
 
     let code_path = std::path::Path::new(&path);
@@ -2221,7 +2223,10 @@ async fn analyze_code_deep(
 
 #[tauri::command]
 async fn read_file_content(path: String, max_lines: usize) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Reading file content: {} (max {} lines)", path, max_lines);
+    println!(
+        "[Hippo] Reading file content: {} (max {} lines)",
+        path, max_lines
+    );
 
     let file_path = std::path::Path::new(&path);
     if !file_path.exists() {
@@ -2307,13 +2312,19 @@ async fn export_index(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn import_index(json: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Importing index from JSON ({} bytes)...", json.len());
+async fn import_index(
+    json: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    println!(
+        "[Hippo] Importing index from JSON ({} bytes)...",
+        json.len()
+    );
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    let export: hippo_core::IndexExport = serde_json::from_str(&json)
-        .map_err(|e| format!("JSON deserialization failed: {}", e))?;
+    let export: hippo_core::IndexExport =
+        serde_json::from_str(&json).map_err(|e| format!("JSON deserialization failed: {}", e))?;
 
     let stats = hippo
         .import_index(export)
@@ -2340,20 +2351,21 @@ async fn export_to_file(path: String, state: State<'_, AppState>) -> Result<Stri
     let json = export_index(state).await?;
 
     // Write to file
-    std::fs::write(&path, json)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    std::fs::write(&path, json).map_err(|e| format!("Failed to write file: {}", e))?;
 
     println!("[Hippo] Export written to: {}", path);
     Ok(format!("Export written to {}", path))
 }
 
 #[tauri::command]
-async fn import_from_file(path: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+async fn import_from_file(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
     println!("[Hippo] Importing index from file: {}", path);
 
     // Read the file
-    let json = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let json = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))?;
 
     // Import the data
     import_index(json, state).await
@@ -2392,7 +2404,12 @@ async fn pause_watching(state: State<'_, AppState>) -> Result<String, String> {
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     if let Some(watcher) = &hippo.watcher {
-        watcher.read().await.pause().await.map_err(|e| e.to_string())?;
+        watcher
+            .read()
+            .await
+            .pause()
+            .await
+            .map_err(|e| e.to_string())?;
         println!("[Hippo] File watcher paused");
         Ok("File watcher paused successfully".to_string())
     } else {
@@ -2407,7 +2424,12 @@ async fn resume_watching(state: State<'_, AppState>) -> Result<String, String> {
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     if let Some(watcher) = &hippo.watcher {
-        watcher.read().await.resume().await.map_err(|e| e.to_string())?;
+        watcher
+            .read()
+            .await
+            .resume()
+            .await
+            .map_err(|e| e.to_string())?;
         println!("[Hippo] File watcher resumed");
         Ok("File watcher resumed successfully".to_string())
     } else {
@@ -2447,7 +2469,10 @@ async fn watch_source_path(path: String, state: State<'_, AppState>) -> Result<S
         root_path: path.into(),
     };
 
-    hippo.watch_source(&source).await.map_err(|e| e.to_string())?;
+    hippo
+        .watch_source(&source)
+        .await
+        .map_err(|e| e.to_string())?;
 
     println!("[Hippo] Watching source path started");
     Ok("Source path watching started".to_string())
@@ -2463,7 +2488,10 @@ async fn unwatch_source_path(path: String, state: State<'_, AppState>) -> Result
         root_path: path.into(),
     };
 
-    hippo.unwatch_source(&source).await.map_err(|e| e.to_string())?;
+    hippo
+        .unwatch_source(&source)
+        .await
+        .map_err(|e| e.to_string())?;
 
     println!("[Hippo] Unwatching source path completed");
     Ok("Source path unwatched".to_string())

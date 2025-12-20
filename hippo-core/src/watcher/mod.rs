@@ -4,14 +4,12 @@
 //! changes to indexed files and automatically update the index.
 
 use crate::{error::Result, models::Source, storage::Storage, HippoError};
-use notify::{
-    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher,
-};
-use std::collections::{HashMap, HashSet};
+use notify::{Event, EventKind, RecommendedWatcher};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 /// File system event types
@@ -19,19 +17,11 @@ use tracing::{debug, error, info, warn};
 #[serde(tag = "type")]
 pub enum WatchEvent {
     /// A new file was created
-    Created {
-        path: PathBuf,
-        source: Source,
-    },
+    Created { path: PathBuf, source: Source },
     /// An existing file was modified
-    Modified {
-        path: PathBuf,
-        source: Source,
-    },
+    Modified { path: PathBuf, source: Source },
     /// A file was deleted
-    Deleted {
-        path: PathBuf,
-    },
+    Deleted { path: PathBuf },
     /// A file was renamed
     Renamed {
         from: PathBuf,
@@ -43,9 +33,7 @@ pub enum WatchEvent {
     /// Watcher stopped
     WatcherStopped,
     /// Watcher error
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }
 
 /// Statistics about watched files
@@ -93,6 +81,7 @@ impl DebouncedEvents {
     }
 
     /// Add an event to the debounced queue
+    #[allow(dead_code)]
     fn add(&mut self, event: WatchEvent) {
         let path = match &event {
             WatchEvent::Created { path, .. } => path.clone(),
@@ -145,9 +134,7 @@ impl WatcherState {
             stats: RwLock::new(WatchStats::default()),
             watched_paths: RwLock::new(HashMap::new()),
             is_paused: RwLock::new(false),
-            debounced_events: RwLock::new(DebouncedEvents::new(Duration::from_millis(
-                debounce_ms,
-            ))),
+            debounced_events: RwLock::new(DebouncedEvents::new(Duration::from_millis(debounce_ms))),
         }
     }
 
@@ -288,6 +275,7 @@ impl FileWatcher {
     }
 
     /// Process a file system event
+    #[allow(dead_code)]
     async fn process_event(&self, event: Event) -> Result<()> {
         // Skip if paused
         if self.is_paused().await {
@@ -346,6 +334,7 @@ impl FileWatcher {
     }
 
     /// Find which source a path belongs to
+    #[allow(dead_code)]
     fn find_source_for_path(
         &self,
         path: &Path,
@@ -390,7 +379,7 @@ impl FileWatcher {
     /// Handle a watch event by updating the index
     async fn handle_event(&self, event: &WatchEvent) -> Result<()> {
         match event {
-            WatchEvent::Created { path, source } | WatchEvent::Modified { path, source } => {
+            WatchEvent::Created { path, source: _ } | WatchEvent::Modified { path, source: _ } => {
                 // Delete existing entry if it exists (for modified files)
                 if let Err(e) = self.storage.remove_memory_by_path(path).await {
                     debug!("Failed to delete old memory for {:?}: {}", path, e);
@@ -406,7 +395,11 @@ impl FileWatcher {
                     info!("Removed deleted file from index: {:?}", path);
                 }
             }
-            WatchEvent::Renamed { from, to, source } => {
+            WatchEvent::Renamed {
+                from,
+                to,
+                source: _,
+            } => {
                 // Delete old path
                 if let Err(e) = self.storage.remove_memory_by_path(from).await {
                     debug!("Failed to delete old memory for {:?}: {}", from, e);

@@ -172,7 +172,11 @@ impl AnalysisResult {
                 )
             }
             AnalysisResult::Video(vid) => {
-                format!("{}s duration, {} scenes", vid.duration, vid.scene_descriptions.len())
+                format!(
+                    "{}s duration, {} scenes",
+                    vid.duration,
+                    vid.scene_descriptions.len()
+                )
             }
             AnalysisResult::Unsupported { message } => message.clone(),
         }
@@ -349,8 +353,8 @@ pub async fn analyze_file(memory: &Memory, ollama: &OllamaClient) -> Result<Anal
 fn extract_dominant_colors(path: &Path) -> Result<Vec<Color>> {
     use image::GenericImageView;
 
-    let img = image::open(path)
-        .map_err(|e| HippoError::Other(format!("Failed to open image: {}", e)))?;
+    let img =
+        image::open(path).map_err(|e| HippoError::Other(format!("Failed to open image: {}", e)))?;
 
     // Sample colors from the image (simple approach: sample every 10th pixel)
     let mut color_counts: std::collections::HashMap<(u8, u8, u8), u32> =
@@ -412,8 +416,17 @@ fn parse_objects_and_scenes(caption: &str) -> (Vec<DetectedObject>, Vec<String>)
 
     // Common scenes
     let scene_keywords = [
-        "indoor", "outdoor", "beach", "city", "forest", "mountain", "office", "home", "street",
-        "park", "restaurant",
+        "indoor",
+        "outdoor",
+        "beach",
+        "city",
+        "forest",
+        "mountain",
+        "office",
+        "home",
+        "street",
+        "park",
+        "restaurant",
     ];
 
     for keyword in &scene_keywords {

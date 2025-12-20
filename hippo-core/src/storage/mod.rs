@@ -1318,18 +1318,16 @@ impl Storage {
                     match self.upsert_memory(&memory).await {
                         Ok(_) => stats.memories_imported += 1,
                         Err(e) => {
-                            stats.errors.push(format!(
-                                "Failed to import memory {:?}: {}",
-                                memory.path, e
-                            ));
+                            stats
+                                .errors
+                                .push(format!("Failed to import memory {:?}: {}", memory.path, e));
                         }
                     }
                 }
                 Err(e) => {
-                    stats.errors.push(format!(
-                        "Failed to check memory {:?}: {}",
-                        memory.path, e
-                    ));
+                    stats
+                        .errors
+                        .push(format!("Failed to check memory {:?}: {}", memory.path, e));
                 }
             }
         }
@@ -1455,37 +1453,61 @@ mod tests {
     fn test_get_kind_name() {
         use crate::models::DocumentFormat;
 
-        assert_eq!(Storage::get_kind_name(&MemoryKind::Image {
-            width: 1920, height: 1080, format: "jpg".to_string()
-        }), "image");
+        assert_eq!(
+            Storage::get_kind_name(&MemoryKind::Image {
+                width: 1920,
+                height: 1080,
+                format: "jpg".to_string()
+            }),
+            "image"
+        );
 
-        assert_eq!(Storage::get_kind_name(&MemoryKind::Video {
-            duration_ms: 1000, format: "mp4".to_string()
-        }), "video");
+        assert_eq!(
+            Storage::get_kind_name(&MemoryKind::Video {
+                duration_ms: 1000,
+                format: "mp4".to_string()
+            }),
+            "video"
+        );
 
-        assert_eq!(Storage::get_kind_name(&MemoryKind::Audio {
-            duration_ms: 1000, format: "mp3".to_string()
-        }), "audio");
+        assert_eq!(
+            Storage::get_kind_name(&MemoryKind::Audio {
+                duration_ms: 1000,
+                format: "mp3".to_string()
+            }),
+            "audio"
+        );
 
-        assert_eq!(Storage::get_kind_name(&MemoryKind::Code {
-            language: "rust".to_string(), lines: 100
-        }), "code");
+        assert_eq!(
+            Storage::get_kind_name(&MemoryKind::Code {
+                language: "rust".to_string(),
+                lines: 100
+            }),
+            "code"
+        );
 
-        assert_eq!(Storage::get_kind_name(&MemoryKind::Document {
-            format: DocumentFormat::Pdf, page_count: Some(10)
-        }), "document");
+        assert_eq!(
+            Storage::get_kind_name(&MemoryKind::Document {
+                format: DocumentFormat::Pdf,
+                page_count: Some(10)
+            }),
+            "document"
+        );
 
-        assert_eq!(Storage::get_kind_name(&MemoryKind::Spreadsheet {
-            sheet_count: 5
-        }), "spreadsheet");
+        assert_eq!(
+            Storage::get_kind_name(&MemoryKind::Spreadsheet { sheet_count: 5 }),
+            "spreadsheet"
+        );
 
-        assert_eq!(Storage::get_kind_name(&MemoryKind::Presentation {
-            slide_count: 20
-        }), "presentation");
+        assert_eq!(
+            Storage::get_kind_name(&MemoryKind::Presentation { slide_count: 20 }),
+            "presentation"
+        );
 
-        assert_eq!(Storage::get_kind_name(&MemoryKind::Archive {
-            item_count: 100
-        }), "archive");
+        assert_eq!(
+            Storage::get_kind_name(&MemoryKind::Archive { item_count: 100 }),
+            "archive"
+        );
 
         assert_eq!(Storage::get_kind_name(&MemoryKind::Database), "database");
         assert_eq!(Storage::get_kind_name(&MemoryKind::Folder), "folder");

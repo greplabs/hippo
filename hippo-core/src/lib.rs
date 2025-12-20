@@ -379,7 +379,9 @@ impl Hippo {
             if let Source::Local { root_path } = source {
                 watcher.write().await.watch(root_path, source.clone()).await
             } else {
-                Err(HippoError::Other("Only local sources can be watched".to_string()))
+                Err(HippoError::Other(
+                    "Only local sources can be watched".to_string(),
+                ))
             }
         } else {
             Err(HippoError::Other("File watcher not available".to_string()))
@@ -429,7 +431,14 @@ impl Hippo {
     /// Get list of watched paths
     pub async fn watched_paths(&self) -> Vec<PathBuf> {
         if let Some(watcher) = &self.watcher {
-            watcher.read().await.watched_paths().await.into_iter().map(|(p, _)| p).collect()
+            watcher
+                .read()
+                .await
+                .watched_paths()
+                .await
+                .into_iter()
+                .map(|(p, _)| p)
+                .collect()
         } else {
             vec![]
         }
@@ -445,16 +454,16 @@ impl Hippo {
     }
 
     /// Subscribe to file watch events
-    pub fn subscribe_watch_events(&self) -> Option<tokio::sync::broadcast::Receiver<watcher::WatchEvent>> {
+    pub fn subscribe_watch_events(
+        &self,
+    ) -> Option<tokio::sync::broadcast::Receiver<watcher::WatchEvent>> {
         self.watcher.as_ref().map(|w| {
             // This is a bit tricky - we need to get the receiver without blocking
             // For now, return None - we'll handle events differently in Tauri
             // The proper way would be to use a channel that can be subscribed to multiple times
             // We'll emit events via Tauri's event system instead
             tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async {
-                    w.read().await.subscribe()
-                })
+                tokio::runtime::Handle::current().block_on(async { w.read().await.subscribe() })
             })
         })
     }

@@ -130,7 +130,12 @@ impl QdrantManager {
         let client = reqwest::Client::new();
         let health_url = format!("{}/", self.url.replace("6334", "6333"));
 
-        match client.get(&health_url).timeout(std::time::Duration::from_secs(2)).send().await {
+        match client
+            .get(&health_url)
+            .timeout(std::time::Duration::from_secs(2))
+            .send()
+            .await
+        {
             Ok(response) => {
                 if response.status().is_success() {
                     let mut status = self.status.write().await;
@@ -211,7 +216,8 @@ impl QdrantManager {
                 .map_err(|e| HippoError::Other(format!("Failed to open ZIP: {}", e)))?;
 
             for i in 0..archive.len() {
-                let mut file = archive.by_index(i)
+                let mut file = archive
+                    .by_index(i)
                     .map_err(|e| HippoError::Other(format!("Failed to read ZIP entry: {}", e)))?;
 
                 if file.name().ends_with("qdrant.exe") {
@@ -340,7 +346,9 @@ impl QdrantManager {
             status.message = "Failed to start Qdrant".to_string();
         }
 
-        Err(HippoError::Other("Qdrant failed to start within 30 seconds".to_string()))
+        Err(HippoError::Other(
+            "Qdrant failed to start within 30 seconds".to_string(),
+        ))
     }
 
     /// Stop Qdrant process (if managed)

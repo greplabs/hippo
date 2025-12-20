@@ -13,10 +13,13 @@ use crate::{
 };
 
 use rayon::prelude::*;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, atomic::{AtomicBool, AtomicUsize, Ordering}};
-use std::collections::VecDeque;
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc,
+};
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
@@ -73,6 +76,7 @@ impl IndexingProgress {
 
 /// File with priority for indexing
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct PrioritizedFile {
     path: PathBuf,
     source: Source,
@@ -241,9 +245,11 @@ impl Indexer {
     /// Pause indexing
     pub async fn pause(&self) -> Result<()> {
         self.state.is_paused.store(true, Ordering::SeqCst);
-        self.state.update_progress(|p| {
-            p.is_paused = true;
-        }).await;
+        self.state
+            .update_progress(|p| {
+                p.is_paused = true;
+            })
+            .await;
         info!("Indexing paused");
         Ok(())
     }
@@ -251,9 +257,11 @@ impl Indexer {
     /// Resume indexing
     pub async fn resume(&self) -> Result<()> {
         self.state.is_paused.store(false, Ordering::SeqCst);
-        self.state.update_progress(|p| {
-            p.is_paused = false;
-        }).await;
+        self.state
+            .update_progress(|p| {
+                p.is_paused = false;
+            })
+            .await;
         info!("Indexing resumed");
         Ok(())
     }
@@ -407,9 +415,11 @@ impl Indexer {
                     }
 
                     // Mark as complete
-                    state.update_progress(|p| {
-                        p.stage = IndexingStage::Complete;
-                    }).await;
+                    state
+                        .update_progress(|p| {
+                            p.stage = IndexingStage::Complete;
+                        })
+                        .await;
                     let _ = progress_tx.send(state.progress.read().await.clone());
                 }
                 IndexTask::Reindex(id) => {
@@ -447,10 +457,12 @@ impl Indexer {
         }
 
         // STAGE 1: Scanning
-        state.update_progress(|p| {
-            p.stage = IndexingStage::Scanning;
-            p.current_file = Some("Scanning directory...".to_string());
-        }).await;
+        state
+            .update_progress(|p| {
+                p.stage = IndexingStage::Scanning;
+                p.current_file = Some("Scanning directory...".to_string());
+            })
+            .await;
         let _ = progress_tx.send(state.progress.read().await.clone());
 
         // Collect all files
@@ -473,10 +485,12 @@ impl Indexer {
         info!("Found {} files to index", files.len());
 
         // Set total count
-        state.update_progress(|p| {
-            p.total = files.len();
-            p.stage = IndexingStage::Embedding;
-        }).await;
+        state
+            .update_progress(|p| {
+                p.total = files.len();
+                p.stage = IndexingStage::Embedding;
+            })
+            .await;
         let _ = progress_tx.send(state.progress.read().await.clone());
 
         // STAGE 2: Process in batches with pause support
@@ -496,7 +510,7 @@ impl Indexer {
                 .par_iter()
                 .filter_map(|file_path| {
                     // Update current file (note: may be overwritten by parallel processing)
-                    let file_name = file_path
+                    let _file_name = file_path
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
@@ -515,16 +529,18 @@ impl Indexer {
 
             // Store memories and track progress
             for memory in &memories {
-                state.update_progress(|p| {
-                    p.current_file = Some(
-                        memory
-                            .path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_default(),
-                    );
-                    p.stage = IndexingStage::Embedding;
-                }).await;
+                state
+                    .update_progress(|p| {
+                        p.current_file = Some(
+                            memory
+                                .path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_default(),
+                        );
+                        p.stage = IndexingStage::Embedding;
+                    })
+                    .await;
 
                 if let Err(e) = storage.upsert_memory(memory).await {
                     println!("[Indexer] Failed to store memory: {}", e);
@@ -539,15 +555,17 @@ impl Indexer {
 
             // Generate and store embeddings
             for memory in &memories {
-                state.update_progress(|p| {
-                    p.current_file = Some(
-                        memory
-                            .path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_default(),
-                    );
-                }).await;
+                state
+                    .update_progress(|p| {
+                        p.current_file = Some(
+                            memory
+                                .path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_default(),
+                        );
+                    })
+                    .await;
 
                 match embedder.embed_memory(memory).await {
                     Ok(embedding) => {
@@ -575,9 +593,11 @@ impl Indexer {
 
                 // Update progress counter
                 state.files_processed_count.fetch_add(1, Ordering::SeqCst);
-                state.update_progress(|p| {
-                    p.processed += 1;
-                }).await;
+                state
+                    .update_progress(|p| {
+                        p.processed += 1;
+                    })
+                    .await;
                 let _ = progress_tx.send(state.progress.read().await.clone());
 
                 // Check for pause
@@ -588,9 +608,11 @@ impl Indexer {
 
             // STAGE 3: Auto-tagging (if enabled)
             if config.auto_tag_enabled && !memories.is_empty() {
-                state.update_progress(|p| {
-                    p.stage = IndexingStage::Tagging;
-                }).await;
+                state
+                    .update_progress(|p| {
+                        p.stage = IndexingStage::Tagging;
+                    })
+                    .await;
                 let _ = progress_tx.send(state.progress.read().await.clone());
 
                 Self::auto_tag_batch(&memories, storage).await;
@@ -611,6 +633,7 @@ impl Indexer {
     }
 
     /// Index all files in a path (backward compatibility wrapper)
+    #[allow(dead_code)]
     #[instrument(skip(storage, embedder, config))]
     async fn index_path(
         path: &Path,
@@ -645,7 +668,10 @@ impl Indexer {
             return;
         }
 
-        println!("[Indexer] Auto-tagging {} files with Ollama", memories.len());
+        println!(
+            "[Indexer] Auto-tagging {} files with Ollama",
+            memories.len()
+        );
 
         for memory in memories {
             // Create a prompt based on file information

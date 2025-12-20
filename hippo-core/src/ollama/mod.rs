@@ -3,12 +3,11 @@
 //! Supports local embeddings, text generation, and RAG pipelines.
 //! Includes support for high-quality models like Gemma2, Llama3.2, and Qwen2.5.
 
-use base64::Engine;
 use crate::error::{HippoError, Result};
+use base64::Engine;
 use futures_util::stream::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::pin::Pin;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
@@ -546,7 +545,10 @@ impl OllamaClient {
             },
         };
 
-        debug!("Starting streaming chat with model: {}", self.generation_model);
+        debug!(
+            "Starting streaming chat with model: {}",
+            self.generation_model
+        );
 
         let resp = self
             .client
@@ -573,8 +575,8 @@ impl OllamaClient {
                 return Err(HippoError::Other("Stream cancelled".to_string()));
             }
 
-            let chunk = chunk_result
-                .map_err(|e| HippoError::Other(format!("Stream error: {}", e)))?;
+            let chunk =
+                chunk_result.map_err(|e| HippoError::Other(format!("Stream error: {}", e)))?;
 
             buffer.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -637,7 +639,10 @@ impl OllamaClient {
             },
         };
 
-        debug!("Starting streaming generation with model: {}", self.generation_model);
+        debug!(
+            "Starting streaming generation with model: {}",
+            self.generation_model
+        );
 
         let resp = self
             .client
@@ -668,8 +673,8 @@ impl OllamaClient {
                 return Err(HippoError::Other("Stream cancelled".to_string()));
             }
 
-            let chunk = chunk_result
-                .map_err(|e| HippoError::Other(format!("Stream error: {}", e)))?;
+            let chunk =
+                chunk_result.map_err(|e| HippoError::Other(format!("Stream error: {}", e)))?;
 
             buffer.push_str(&String::from_utf8_lossy(&chunk));
 

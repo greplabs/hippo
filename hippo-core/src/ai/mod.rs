@@ -1566,10 +1566,7 @@ impl UnifiedAiClient {
                 },
             ) = (&target.kind, &memory.kind)
             {
-                if tw == mw
-                    && th == mh
-                    && target.metadata.file_size == memory.metadata.file_size
-                {
+                if tw == mw && th == mh && target.metadata.file_size == memory.metadata.file_size {
                     duplicates.push(DuplicateMatch {
                         memory_id: memory.id,
                         path: memory.path.clone(),

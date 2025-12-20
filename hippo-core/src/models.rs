@@ -178,7 +178,7 @@ pub struct MemoryMetadata {
     // AI-generated
     pub ai_summary: Option<String>,
     pub ai_tags: Vec<String>,
-    pub scene_tags: Vec<String>, // beach, city, food, etc.
+    pub scene_tags: Vec<String>,    // beach, city, food, etc.
     pub ai_caption: Option<String>, // Vision model generated caption for images
 
     // Custom fields

@@ -574,11 +574,7 @@ mod duplicates_tests {
         create_mock_memory_with_id(uuid::Uuid::new_v4(), size, hash)
     }
 
-    fn create_mock_memory_with_id(
-        id: uuid::Uuid,
-        size: u64,
-        hash: Option<String>,
-    ) -> Memory {
+    fn create_mock_memory_with_id(id: uuid::Uuid, size: u64, hash: Option<String>) -> Memory {
         Memory {
             id,
             path: PathBuf::from(format!("/test/{}.txt", id)),
@@ -636,7 +632,11 @@ mod natural_language_search_tests {
         };
 
         let storage = Arc::new(hippo_core::storage::Storage::new(&config).await.unwrap());
-        let embedder = Arc::new(hippo_core::embeddings::Embedder::new(&config).await.unwrap());
+        let embedder = Arc::new(
+            hippo_core::embeddings::Embedder::new(&config)
+                .await
+                .unwrap(),
+        );
         let searcher = Searcher::new(storage, embedder, &config).await.unwrap();
 
         (searcher, temp_dir)
@@ -646,7 +646,9 @@ mod natural_language_search_tests {
     async fn test_parse_natural_query_image_type() {
         let (searcher, _temp) = create_test_searcher().await;
 
-        let parsed = searcher.parse_natural_query("show me images from yesterday").unwrap();
+        let parsed = searcher
+            .parse_natural_query("show me images from yesterday")
+            .unwrap();
 
         assert!(parsed.original.contains("images"));
         assert!(!parsed.file_types.is_empty());
@@ -668,7 +670,9 @@ mod natural_language_search_tests {
     async fn test_parse_natural_query_code_type() {
         let (searcher, _temp) = create_test_searcher().await;
 
-        let parsed = searcher.parse_natural_query("search for code files").unwrap();
+        let parsed = searcher
+            .parse_natural_query("search for code files")
+            .unwrap();
 
         assert!(!parsed.file_types.is_empty());
         assert!(matches!(parsed.file_types[0], MemoryKind::Code { .. }));
@@ -690,7 +694,9 @@ mod natural_language_search_tests {
     async fn test_parse_natural_query_date_range_last_week() {
         let (searcher, _temp) = create_test_searcher().await;
 
-        let parsed = searcher.parse_natural_query("show last week documents").unwrap();
+        let parsed = searcher
+            .parse_natural_query("show last week documents")
+            .unwrap();
 
         assert!(parsed.date_range.is_some());
     }
@@ -725,9 +731,7 @@ mod natural_language_search_tests {
     async fn test_parse_natural_query_multiple_types() {
         let (searcher, _temp) = create_test_searcher().await;
 
-        let parsed = searcher
-            .parse_natural_query("images and videos")
-            .unwrap();
+        let parsed = searcher.parse_natural_query("images and videos").unwrap();
 
         // Should detect the first type mentioned
         assert!(!parsed.file_types.is_empty());
@@ -966,10 +970,7 @@ mod storage_operations_tests {
             storage.upsert_memory(&memory).await.unwrap();
         }
 
-        let count = storage
-            .count_search_results(None, &[], None)
-            .await
-            .unwrap();
+        let count = storage.count_search_results(None, &[], None).await.unwrap();
 
         assert_eq!(count, 5);
     }
@@ -1022,10 +1023,7 @@ mod storage_operations_tests {
         let memory = create_test_memory("test.txt", 1000);
         storage.upsert_memory(&memory).await.unwrap();
 
-        let retrieved = storage
-            .get_memory_by_path(&memory.path)
-            .await
-            .unwrap();
+        let retrieved = storage.get_memory_by_path(&memory.path).await.unwrap();
 
         assert!(retrieved.is_some());
         let retrieved = retrieved.unwrap();

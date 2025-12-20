@@ -533,10 +533,16 @@ impl Searcher {
 
         // Extract file types
         let type_patterns = [
-            (r"\b(image|images|photo|photos|picture|pictures|pic|pics)\b", "image"),
+            (
+                r"\b(image|images|photo|photos|picture|pictures|pic|pics)\b",
+                "image",
+            ),
             (r"\b(video|videos|movie|movies|clip|clips)\b", "video"),
             (r"\b(audio|music|song|songs|sound|sounds)\b", "audio"),
-            (r"\b(document|documents|doc|docs|pdf|pdfs|text|texts)\b", "document"),
+            (
+                r"\b(document|documents|doc|docs|pdf|pdfs|text|texts)\b",
+                "document",
+            ),
             (r"\b(code|source|script|scripts|program|programs)\b", "code"),
         ];
 
@@ -686,11 +692,42 @@ mod tests {
 
     #[test]
     fn test_kind_name() {
-        assert_eq!(Searcher::kind_name(&MemoryKind::Image { width: 0, height: 0, format: String::new() }), "image");
-        assert_eq!(Searcher::kind_name(&MemoryKind::Video { duration_ms: 0, format: String::new() }), "video");
-        assert_eq!(Searcher::kind_name(&MemoryKind::Audio { duration_ms: 0, format: String::new() }), "audio");
-        assert_eq!(Searcher::kind_name(&MemoryKind::Code { language: String::new(), lines: 0 }), "code");
-        assert_eq!(Searcher::kind_name(&MemoryKind::Document { format: DocumentFormat::Pdf, page_count: None }), "document");
+        assert_eq!(
+            Searcher::kind_name(&MemoryKind::Image {
+                width: 0,
+                height: 0,
+                format: String::new()
+            }),
+            "image"
+        );
+        assert_eq!(
+            Searcher::kind_name(&MemoryKind::Video {
+                duration_ms: 0,
+                format: String::new()
+            }),
+            "video"
+        );
+        assert_eq!(
+            Searcher::kind_name(&MemoryKind::Audio {
+                duration_ms: 0,
+                format: String::new()
+            }),
+            "audio"
+        );
+        assert_eq!(
+            Searcher::kind_name(&MemoryKind::Code {
+                language: String::new(),
+                lines: 0
+            }),
+            "code"
+        );
+        assert_eq!(
+            Searcher::kind_name(&MemoryKind::Document {
+                format: DocumentFormat::Pdf,
+                page_count: None
+            }),
+            "document"
+        );
         assert_eq!(Searcher::kind_name(&MemoryKind::Unknown), "unknown");
     }
 
@@ -713,7 +750,9 @@ mod tests {
     #[tokio::test]
     async fn test_parse_natural_query_this_year() {
         let searcher = create_mock_searcher();
-        let parsed = searcher.parse_natural_query("files from this year").unwrap();
+        let parsed = searcher
+            .parse_natural_query("files from this year")
+            .unwrap();
         assert!(parsed.date_range.is_some());
     }
 
@@ -740,12 +779,10 @@ mod tests {
         // Create minimal components for testing
         // Note: This will fail in some tests that need actual storage
         // but works for pure function tests like string_similarity
-        tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async {
-                let storage = Arc::new(crate::storage::Storage::new(&config).await.unwrap());
-                let embedder = Arc::new(crate::embeddings::Embedder::new(&config).await.unwrap());
-                Searcher::new(storage, embedder, &config).await.unwrap()
-            })
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let storage = Arc::new(crate::storage::Storage::new(&config).await.unwrap());
+            let embedder = Arc::new(crate::embeddings::Embedder::new(&config).await.unwrap());
+            Searcher::new(storage, embedder, &config).await.unwrap()
+        })
     }
 }
