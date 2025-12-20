@@ -5,6 +5,8 @@ use crate::error::Result;
 use crate::models::*;
 use crate::storage::Storage;
 use crate::HippoConfig;
+use chrono::{Duration, Utc};
+use regex::Regex;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -520,4 +522,123 @@ impl Searcher {
 
         (jaccard + prefix_bonus).min(1.0)
     }
+
+    /// Parse natural language query into structured search filters
+    pub fn parse_natural_query(&self, query: &str) -> Result<ParsedQuery> {
+        let query_lower = query.to_lowercase();
+        let mut keywords = query.to_string();
+        let mut file_types = Vec::new();
+        let mut date_range = None;
+        let mut interpretations = Vec::new();
+
+        // Extract file types
+        let type_patterns = [
+            (r"\b(image|images|photo|photos|picture|pictures|pic|pics)\b", "image"),
+            (r"\b(video|videos|movie|movies|clip|clips)\b", "video"),
+            (r"\b(audio|music|song|songs|sound|sounds)\b", "audio"),
+            (r"\b(document|documents|doc|docs|pdf|pdfs|text|texts)\b", "document"),
+            (r"\b(code|source|script|scripts|program|programs)\b", "code"),
+        ];
+
+        for (pattern, kind_name) in type_patterns {
+            if let Ok(re) = Regex::new(pattern) {
+                if re.is_match(&query_lower) {
+                    let kind = match kind_name {
+                        "image" => MemoryKind::Image {
+                            width: 0,
+                            height: 0,
+                            format: String::new(),
+                        },
+                        "video" => MemoryKind::Video {
+                            duration_ms: 0,
+                            format: String::new(),
+                        },
+                        "audio" => MemoryKind::Audio {
+                            duration_ms: 0,
+                            format: String::new(),
+                        },
+                        "document" => MemoryKind::Document {
+                            format: DocumentFormat::Pdf,
+                            page_count: None,
+                        },
+                        "code" => MemoryKind::Code {
+                            language: String::new(),
+                            lines: 0,
+                        },
+                        _ => continue,
+                    };
+                    file_types.push(kind);
+                    keywords = re.replace_all(&keywords, "").to_string();
+                    interpretations.push(format!("file type: {}", kind_name));
+                }
+            }
+        }
+
+        // Extract date ranges
+        let now = Utc::now();
+        let date_patterns = [
+            (r"\b(today|tonight)\b", 0, "today"),
+            (r"\b(yesterday)\b", 1, "yesterday"),
+            (r"\blast week\b", 7, "last week"),
+            (r"\blast month\b", 30, "last month"),
+            (r"\blast year\b", 365, "last year"),
+            (r"\bthis week\b", 7, "this week"),
+            (r"\bthis month\b", 30, "this month"),
+            (r"\bthis year\b", 365, "this year"),
+        ];
+
+        for (pattern, days, desc) in date_patterns {
+            if let Ok(re) = Regex::new(pattern) {
+                if re.is_match(&query_lower) {
+                    let start = now - Duration::days(days);
+                    date_range = Some(DateRange {
+                        start: Some(start),
+                        end: Some(now),
+                    });
+                    keywords = re.replace_all(&keywords, "").to_string();
+                    interpretations.push(format!("date range: {}", desc));
+                    break;
+                }
+            }
+        }
+
+        // Clean up keywords - remove extra whitespace
+        keywords = keywords
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string();
+
+        Ok(ParsedQuery {
+            original: query.to_string(),
+            keywords: if keywords.is_empty() {
+                None
+            } else {
+                Some(keywords)
+            },
+            file_types,
+            date_range,
+            interpretation: if interpretations.is_empty() {
+                None
+            } else {
+                Some(interpretations.join(", "))
+            },
+        })
+    }
+}
+
+/// Parsed natural language query
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ParsedQuery {
+    /// Original query text
+    pub original: String,
+    /// Extracted keywords (after removing file types and dates)
+    pub keywords: Option<String>,
+    /// Extracted file types
+    pub file_types: Vec<MemoryKind>,
+    /// Extracted date range
+    pub date_range: Option<DateRange>,
+    /// Human-readable interpretation
+    pub interpretation: Option<String>,
 }

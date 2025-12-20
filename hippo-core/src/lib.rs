@@ -79,6 +79,7 @@ pub mod watcher;
 
 pub use error::{HippoError, Result};
 pub use models::*;
+pub use search::ParsedQuery;
 
 // Re-export graph types for the API
 pub use graph::MindMap;
@@ -158,6 +159,9 @@ pub struct HippoConfig {
 
     /// Maximum concurrent indexing operations
     pub indexing_parallelism: usize,
+
+    /// Whether to enable auto-tagging during indexing using Ollama
+    pub auto_tag_enabled: bool,
 }
 
 impl Default for HippoConfig {
@@ -172,6 +176,7 @@ impl Default for HippoConfig {
             ai_api_key: None,
             qdrant_url: "http://localhost:6334".into(),
             indexing_parallelism: num_cpus::get().min(8),
+            auto_tag_enabled: false,
         }
     }
 }

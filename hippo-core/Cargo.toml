@@ -50,6 +50,7 @@ rayon = { workspace = true }
 # AI / HTTP
 reqwest = { workspace = true }
 base64 = "0.22"
+regex = "1"
 
 # Hashing
 sha2 = { workspace = true }

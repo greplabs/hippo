@@ -3,6 +3,7 @@
 //! Supports local embeddings, text generation, and RAG pipelines.
 //! Includes support for high-quality models like Gemma2, Llama3.2, and Qwen2.5.
 
+use base64::Engine;
 use crate::error::{HippoError, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -190,6 +191,28 @@ struct GenerateResponse {
 pub struct ChatMessage {
     pub role: String, // "system", "user", "assistant"
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<String>>, // Base64-encoded images
+}
+
+impl ChatMessage {
+    /// Create a new text message
+    pub fn new(role: &str, content: &str) -> Self {
+        Self {
+            role: role.to_string(),
+            content: content.to_string(),
+            images: None,
+        }
+    }
+
+    /// Create a new message with images
+    pub fn with_images(role: &str, content: &str, images: Vec<String>) -> Self {
+        Self {
+            role: role.to_string(),
+            content: content.to_string(),
+            images: Some(images),
+        }
+    }
 }
 
 /// Request body for chat endpoint
@@ -704,6 +727,67 @@ Always cite which document(s) you used for your answer."#;
     /// Get current generation model
     pub fn generation_model(&self) -> &str {
         &self.generation_model
+    }
+
+    /// Caption an image using a vision model (llava:7b)
+    pub async fn caption_image(&self, image_path: &std::path::Path) -> Result<String> {
+        // Read image file and convert to base64
+        let image_data = std::fs::read(image_path)
+            .map_err(|e| HippoError::Other(format!("Failed to read image: {}", e)))?;
+        let base64_image = base64::engine::general_purpose::STANDARD.encode(&image_data);
+
+        // Use llava:7b model for vision
+        let vision_model = "llava:7b";
+
+        // Check if vision model is available
+        if !self.has_model(vision_model).await {
+            return Err(HippoError::Other(format!(
+                "Vision model '{}' not installed. Run: ollama pull {}",
+                vision_model, vision_model
+            )));
+        }
+
+        // Create chat request with image
+        let url = format!("{}/api/chat", self.base_url);
+
+        let messages = vec![ChatMessage::with_images(
+            "user",
+            "Describe this image in detail. What do you see?",
+            vec![base64_image],
+        )];
+
+        let request = ChatRequest {
+            model: vision_model.to_string(),
+            messages,
+            stream: false,
+            options: GenerateOptions {
+                temperature: Some(0.7),
+                num_predict: Some(512),
+                top_p: Some(0.9),
+            },
+        };
+
+        debug!("Generating image caption with model: {}", vision_model);
+
+        let resp = self
+            .client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| HippoError::Other(format!("Vision request failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let error = resp.text().await.unwrap_or_default();
+            return Err(HippoError::Other(format!("Vision failed: {}", error)));
+        }
+
+        let chat_resp: ChatResponse = resp
+            .json()
+            .await
+            .map_err(|e| HippoError::Other(format!("Failed to parse vision response: {}", e)))?;
+
+        Ok(chat_resp.message.content)
     }
 }
 

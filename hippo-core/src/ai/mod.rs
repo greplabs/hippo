@@ -1232,7 +1232,7 @@ impl UnifiedAiClient {
     pub async fn chat(&self, messages: Vec<(String, String)>) -> Result<String> {
         let chat_messages: Vec<ChatMessage> = messages
             .into_iter()
-            .map(|(role, content)| ChatMessage { role, content })
+            .map(|(role, content)| ChatMessage::new(&role, &content))
             .collect();
 
         self.ollama.chat(&chat_messages).await

@@ -2180,6 +2180,7 @@ dependencies = [
  "parking_lot",
  "qdrant-client",
  "rayon",
+ "regex",
  "reqwest",
  "rusqlite",
  "serde",
@@ -2205,8 +2206,10 @@ dependencies = [
 name = "hippo-tauri"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "directories",
  "hippo-core",
+ "regex",
  "serde",
  "serde_json",
  "tauri",
