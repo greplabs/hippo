@@ -24,16 +24,11 @@ allow = [
     "Zlib",
     "CC0-1.0",
     "0BSD",
+    "MPL-2.0",
+    "Unicode-3.0",
 ]
-# Deny specific licenses
-deny = [
-    "GPL-3.0",
-    "AGPL-3.0",
-]
-# Copyleft licenses (warn only)
-copyleft = "warn"
-# Allow OSI/FSF approved licenses
-allow-osi-fsf-free = "both"
+# How to handle licenses that are not in the allow list
+unlicensed = "deny"
 # Confidence threshold for license detection
 confidence-threshold = 0.8
 
