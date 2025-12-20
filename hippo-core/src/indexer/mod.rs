@@ -52,8 +52,8 @@ pub struct IndexingProgress {
     pub estimated_seconds_remaining: Option<u64>,
 }
 
-impl IndexingProgress {
-    pub fn new() -> Self {
+impl Default for IndexingProgress {
+    fn default() -> Self {
         Self {
             total: 0,
             processed: 0,
@@ -63,6 +63,12 @@ impl IndexingProgress {
             files_per_second: 0.0,
             estimated_seconds_remaining: None,
         }
+    }
+}
+
+impl IndexingProgress {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn percentage(&self) -> f64 {
@@ -105,7 +111,7 @@ impl IndexingState {
 
     async fn update_progress(&self, update_fn: impl FnOnce(&mut IndexingProgress)) {
         let mut progress = self.progress.write().await;
-        update_fn(&mut *progress);
+        update_fn(&mut progress);
 
         // Update ETA
         if progress.processed > 0 {
@@ -706,7 +712,6 @@ impl Indexer {
                         .map(|s| s.trim().to_lowercase())
                         .filter(|s| !s.is_empty() && s.len() <= 30)
                         .take(5)
-                        .map(String::from)
                         .collect();
 
                     // Add AI tags to the memory

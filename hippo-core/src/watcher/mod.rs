@@ -37,7 +37,7 @@ pub enum WatchEvent {
 }
 
 /// Statistics about watched files
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct WatchStats {
     pub total_watched_paths: usize,
     pub events_processed: u64,
@@ -47,21 +47,6 @@ pub struct WatchStats {
     pub files_renamed: u64,
     pub is_watching: bool,
     pub is_paused: bool,
-}
-
-impl Default for WatchStats {
-    fn default() -> Self {
-        Self {
-            total_watched_paths: 0,
-            events_processed: 0,
-            files_created: 0,
-            files_modified: 0,
-            files_deleted: 0,
-            files_renamed: 0,
-            is_watching: false,
-            is_paused: false,
-        }
-    }
 }
 
 /// Debounced event tracker to prevent rapid-fire updates

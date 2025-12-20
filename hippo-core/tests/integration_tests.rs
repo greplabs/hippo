@@ -557,7 +557,7 @@ mod duplicates_tests {
         let (groups, summary) = find_similar_by_embedding(&memories, &embeddings, 0.8, 2);
 
         assert_eq!(summary.files_analyzed, 3);
-        assert!(groups.len() > 0);
+        assert!(!groups.is_empty());
     }
 
     #[test]
@@ -1125,8 +1125,8 @@ mod qdrant_manager_tests {
         let data_dir = PathBuf::from("/tmp/hippo-test-qdrant");
         let manager = QdrantManager::new(data_dir, "http://localhost:6334");
         let status = manager.status().await;
-        // Status should always be returned, check that installed is boolean
-        assert!(status.installed || !status.installed);
+        // Status should always be returned with a valid URL
+        assert_eq!(status.url, "http://localhost:6334");
     }
 
     #[tokio::test]
@@ -1136,8 +1136,8 @@ mod qdrant_manager_tests {
         // Should handle gracefully when Qdrant is not installed
         let status = manager.status().await;
         // Status should be determinable regardless of whether Qdrant is running
-        // Status is a struct with available, managed, installed fields
-        assert!(status.available || !status.available);
+        // In test environment, Qdrant is likely not installed or not running
+        assert!(!status.managed || status.available);
     }
 
     #[tokio::test]
@@ -1146,7 +1146,8 @@ mod qdrant_manager_tests {
         let manager = QdrantManager::new(data_dir, "http://localhost:9999");
         let status = manager.status().await;
         // Should handle unavailable Qdrant gracefully (port 9999 is unlikely to be running)
-        assert!(!status.available || status.installed || !status.installed);
+        // Either not available (expected) or if somehow available, just pass
+        assert!(!status.available || status.url == "http://localhost:9999");
     }
 }
 
