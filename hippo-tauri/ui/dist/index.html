@@ -893,6 +893,282 @@
     .cmd-footer span { display: flex; align-items: center; gap: 4px; }
     .cmd-empty { padding: 32px; text-align: center; color: #a8a29e; }
     .cmd-empty .icon { margin-bottom: 8px; }
+
+    /* ===== UX ENHANCEMENTS ===== */
+
+    /* Skeleton Loading Cards */
+    .skeleton-card {
+      background: white;
+      border-radius: 16px;
+      border: 1px solid rgba(0,0,0,0.04);
+      overflow: hidden;
+    }
+    body.dark .skeleton-card { background: #1c1917; border-color: rgba(255,255,255,0.04); }
+    .skeleton-card .skeleton-preview {
+      aspect-ratio: 1;
+      background: linear-gradient(90deg, #f5f5f4 25%, #fafaf9 50%, #f5f5f4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+    body.dark .skeleton-card .skeleton-preview {
+      background: linear-gradient(90deg, #292524 25%, #3f3f46 50%, #292524 75%);
+      background-size: 200% 100%;
+    }
+    .skeleton-card .skeleton-info { padding: 14px 16px; }
+    .skeleton-card .skeleton-title {
+      height: 14px;
+      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      border-radius: 4px;
+      width: 70%;
+    }
+    body.dark .skeleton-card .skeleton-title {
+      background: linear-gradient(90deg, #44403c 25%, #57534e 50%, #44403c 75%);
+      background-size: 200% 100%;
+    }
+    .skeleton-card .skeleton-size {
+      height: 10px;
+      margin-top: 8px;
+      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      animation-delay: 0.1s;
+      border-radius: 4px;
+      width: 40%;
+    }
+    body.dark .skeleton-card .skeleton-size {
+      background: linear-gradient(90deg, #44403c 25%, #57534e 50%, #44403c 75%);
+      background-size: 200% 100%;
+    }
+
+    /* Skeleton List Item */
+    .skeleton-list-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+    }
+    .skeleton-list-item .skeleton-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    body.dark .skeleton-list-item .skeleton-thumb {
+      background: linear-gradient(90deg, #292524 25%, #3f3f46 50%, #292524 75%);
+      background-size: 200% 100%;
+    }
+    .skeleton-list-item .skeleton-info { flex: 1; }
+    .skeleton-list-item .skeleton-title-line {
+      height: 14px;
+      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      border-radius: 4px;
+      width: 60%;
+    }
+    .skeleton-list-item .skeleton-path-line {
+      height: 10px;
+      margin-top: 6px;
+      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      animation-delay: 0.1s;
+      border-radius: 4px;
+      width: 80%;
+    }
+    body.dark .skeleton-list-item .skeleton-title-line,
+    body.dark .skeleton-list-item .skeleton-path-line {
+      background: linear-gradient(90deg, #44403c 25%, #57534e 50%, #44403c 75%);
+      background-size: 200% 100%;
+    }
+
+    /* Staggered Card Animations */
+    .card, .list-item { animation: cardFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both; }
+    .card:nth-child(1), .list-item:nth-child(1) { animation-delay: 0ms; }
+    .card:nth-child(2), .list-item:nth-child(2) { animation-delay: 25ms; }
+    .card:nth-child(3), .list-item:nth-child(3) { animation-delay: 50ms; }
+    .card:nth-child(4), .list-item:nth-child(4) { animation-delay: 75ms; }
+    .card:nth-child(5), .list-item:nth-child(5) { animation-delay: 100ms; }
+    .card:nth-child(6), .list-item:nth-child(6) { animation-delay: 125ms; }
+    .card:nth-child(7), .list-item:nth-child(7) { animation-delay: 150ms; }
+    .card:nth-child(8), .list-item:nth-child(8) { animation-delay: 175ms; }
+    .card:nth-child(9), .list-item:nth-child(9) { animation-delay: 200ms; }
+    .card:nth-child(10), .list-item:nth-child(10) { animation-delay: 225ms; }
+    .card:nth-child(n+11), .list-item:nth-child(n+11) { animation-delay: 250ms; }
+
+    @keyframes cardFadeIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Enhanced Card Hover */
+    .card {
+      will-change: transform, box-shadow;
+      backface-visibility: hidden;
+    }
+    .card:hover .card-preview img {
+      transform: scale(1.08);
+      filter: brightness(1.02);
+    }
+
+    /* Smooth thumbnail loading */
+    .card-preview img, .list-thumb img, .detail-preview img {
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .card-preview img.loaded, .list-thumb img.loaded, .detail-preview img.loaded {
+      opacity: 1;
+    }
+
+    /* Loading Overlay */
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(248, 248, 247, 0.85);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      animation: fadeIn 0.2s ease;
+    }
+    body.dark .loading-overlay { background: rgba(15, 14, 13, 0.85); }
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(0,0,0,0.1);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    body.dark .loading-spinner { border-color: rgba(255,255,255,0.1); border-top-color: #818cf8; }
+
+    /* Enhanced Empty State */
+    .empty {
+      padding: 60px 20px;
+    }
+    .empty-icon {
+      width: 100px;
+      height: 100px;
+      margin: 0 auto 24px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #f5f5f4 0%, #e7e5e4 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: emptyBounce 2s ease-in-out infinite;
+    }
+    body.dark .empty-icon { background: linear-gradient(135deg, #292524 0%, #1c1917 100%); }
+    @keyframes emptyBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .empty-title {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .empty-text {
+      max-width: 320px;
+    }
+    .empty-action {
+      margin-top: 20px;
+    }
+    .empty-action-btn {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .empty-action-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3); }
+    .empty-action-btn:active { transform: translateY(0) scale(0.98); }
+
+    /* Progress bar for indexing */
+    .indexing-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: rgba(99, 102, 241, 0.2);
+      z-index: 2000;
+      overflow: hidden;
+    }
+    .indexing-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #6366f1, #8b5cf6, #6366f1);
+      background-size: 200% 100%;
+      animation: progressShimmer 1.5s ease-in-out infinite;
+      transition: width 0.3s ease;
+    }
+    @keyframes progressShimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Smooth filter transitions */
+    .filter-btn {
+      position: relative;
+      overflow: hidden;
+    }
+    .filter-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: currentColor;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .filter-btn:active::after { opacity: 0.1; }
+
+    /* Better focus states */
+    .card:focus-visible, .list-item:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: 2px;
+    }
+    .filter-btn:focus-visible, .view-btn:focus-visible, .action-btn:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: 2px;
+    }
+
+    /* Ripple effect for buttons */
+    .ripple {
+      position: relative;
+      overflow: hidden;
+    }
+    .ripple::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      background: rgba(255,255,255,0.3);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      transition: width 0.4s ease, height 0.4s ease, opacity 0.4s ease;
+      opacity: 0;
+    }
+    .ripple:active::before {
+      width: 200%;
+      height: 200%;
+      opacity: 1;
+      transition: width 0s, height 0s, opacity 0s;
+    }
+
+    /* ===== END UX ENHANCEMENTS ===== */
   </style>
 </head>
 <body>
@@ -1994,6 +2270,7 @@
         command: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>',
         zap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
         check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
         checkSquare: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
         sparkles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>',
         brain: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"/></svg>',
@@ -2388,6 +2665,9 @@
         });
 
         function loadData() {
+          // Show skeleton loading
+          showLoadingSkeletons();
+
           Promise.all([
             invoke('get_stats'),
             invoke('get_sources'),
@@ -2408,10 +2688,15 @@
             renderCollections();
           }).catch(function(e) {
             showToast('Load failed: ' + e, 'error');
+            renderFiles(); // Show empty state on error
           });
         }
 
+        var searchDebounceTimer = null;
         function search(query) {
+          // Show subtle loading state for search
+          document.getElementById('resultCount').textContent = 'Searching...';
+
           invoke('search', { query: query || '', tags: activeTags }).then(function(r) {
             memories = (r.memories || []).map(function(x) { return x.memory; });
             renderFiles();
@@ -2606,16 +2891,50 @@
           return filtered;
         }
 
+        // Render skeleton loading cards
+        function renderSkeletons(count) {
+          var html = '';
+          if (viewMode === 'grid') {
+            html = '<div class="grid">';
+            for (var i = 0; i < count; i++) {
+              html += '<div class="skeleton-card" style="animation-delay:' + (i * 50) + 'ms">';
+              html += '<div class="skeleton-preview"></div>';
+              html += '<div class="skeleton-info"><div class="skeleton-title"></div><div class="skeleton-size"></div></div>';
+              html += '</div>';
+            }
+            html += '</div>';
+          } else {
+            html = '<div class="list">';
+            for (var i = 0; i < count; i++) {
+              html += '<div class="skeleton-list-item" style="animation-delay:' + (i * 30) + 'ms">';
+              html += '<div class="skeleton-thumb"></div>';
+              html += '<div class="skeleton-info"><div class="skeleton-title-line"></div><div class="skeleton-path-line"></div></div>';
+              html += '</div>';
+            }
+            html += '</div>';
+          }
+          return html;
+        }
+
+        // Show loading skeletons
+        function showLoadingSkeletons() {
+          document.getElementById('filesContainer').innerHTML = renderSkeletons(12);
+        }
+
         function renderFiles() {
           var filtered = getFiltered();
           document.getElementById('resultCount').textContent = filtered.length + ' files';
 
           if (filtered.length === 0) {
-            document.getElementById('filesContainer').innerHTML = '<div class="empty"><div class="empty-icon"><span class="icon icon-2xl" style="color:#a8a29e;">' + icons.folderEmpty + '</span></div><div class="empty-title">' +
-              (sources.length === 0 ? 'Add a folder to get started' : 'No files found') +
-              '</div><div class="empty-text">' +
-              (sources.length === 0 ? 'Click "+ Add Folder" to index your files' : 'Try a different search or filter') +
-              '</div></div>';
+            var emptyHtml = '<div class="empty">';
+            emptyHtml += '<div class="empty-icon"><span class="icon icon-2xl" style="color:#a8a29e;">' + icons.folderEmpty + '</span></div>';
+            emptyHtml += '<div class="empty-title">' + (sources.length === 0 ? 'Add a folder to get started' : 'No files found') + '</div>';
+            emptyHtml += '<div class="empty-text">' + (sources.length === 0 ? 'Click the button below to index your files' : 'Try a different search or filter') + '</div>';
+            if (sources.length === 0) {
+              emptyHtml += '<div class="empty-action"><button class="empty-action-btn" onclick="addSource()"><span class="icon icon-sm">' + icons.plus + '</span> Add Folder</button></div>';
+            }
+            emptyHtml += '</div>';
+            document.getElementById('filesContainer').innerHTML = emptyHtml;
             return;
           }
 
@@ -2714,6 +3033,8 @@
               img.src = convertFileSrc(thumbnailCache[path]);
               img.style.display = '';
               img.classList.remove('thumb-pending');
+              // Smooth fade-in after image loads
+              img.onload = function() { img.classList.add('loaded'); };
               return;
             }
 
@@ -2730,6 +3051,8 @@
                 el.src = convertFileSrc(thumbPath);
                 el.style.display = '';
                 el.classList.remove('thumb-pending');
+                // Smooth fade-in after image loads
+                el.onload = function() { el.classList.add('loaded'); };
               });
             }).catch(function(e) {
               thumbnailPending[path] = false;
@@ -2738,6 +3061,7 @@
                 el.src = convertFileSrc(path);
                 el.style.display = '';
                 el.classList.remove('thumb-pending');
+                el.onload = function() { el.classList.add('loaded'); };
               });
             });
           });
@@ -4096,11 +4420,12 @@
           }
         };
 
-        document.getElementById('addBtn').onclick = function() {
+        // Add source function - made global for empty state button
+        window.addSource = function() {
           if (window.__TAURI__.dialog) {
             window.__TAURI__.dialog.open({ directory: true }).then(function(path) {
               if (path) {
-                showToast('Indexing folder...', '');
+                showToast('Indexing folder...', 'info');
                 invoke('add_source', { sourceType: 'local', path: path }).then(function() {
                   var count = 0;
                   var interval = setInterval(function() {
@@ -4117,6 +4442,8 @@
             });
           }
         };
+
+        document.getElementById('addBtn').onclick = window.addSource;
 
         document.getElementById('discoverBtn').onclick = function() {
           discoverCollections();
