@@ -15,17 +15,34 @@ use tracing::{debug, error, info, warn};
 /// File system event types
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
+#[allow(missing_docs)]
 pub enum WatchEvent {
     /// A new file was created
-    Created { path: PathBuf, source: Source },
+    Created {
+        /// Path to the created file
+        path: PathBuf,
+        /// Source containing the file
+        source: Source,
+    },
     /// An existing file was modified
-    Modified { path: PathBuf, source: Source },
+    Modified {
+        /// Path to the modified file
+        path: PathBuf,
+        /// Source containing the file
+        source: Source,
+    },
     /// A file was deleted
-    Deleted { path: PathBuf },
+    Deleted {
+        /// Path to the deleted file
+        path: PathBuf,
+    },
     /// A file was renamed
     Renamed {
+        /// Original path before rename
         from: PathBuf,
+        /// New path after rename
         to: PathBuf,
+        /// Source containing the file
         source: Source,
     },
     /// Watcher started
@@ -33,19 +50,30 @@ pub enum WatchEvent {
     /// Watcher stopped
     WatcherStopped,
     /// Watcher error
-    Error { message: String },
+    Error {
+        /// Error message
+        message: String,
+    },
 }
 
 /// Statistics about watched files
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct WatchStats {
+    /// Total number of paths being watched
     pub total_watched_paths: usize,
+    /// Total events processed since start
     pub events_processed: u64,
+    /// Number of files created
     pub files_created: u64,
+    /// Number of files modified
     pub files_modified: u64,
+    /// Number of files deleted
     pub files_deleted: u64,
+    /// Number of files renamed
     pub files_renamed: u64,
+    /// Whether the watcher is actively monitoring
     pub is_watching: bool,
+    /// Whether the watcher is temporarily paused
     pub is_paused: bool,
 }
 
