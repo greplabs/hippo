@@ -1,18 +1,186 @@
 //! Search engine combining SQL search, fuzzy matching, and semantic search
 
+mod advanced_filter;
+
+pub use advanced_filter::{
+    AdvancedFilter, ExtensionFilter, FilterBuilder, MatchMode, MetadataMatch,
+};
+
 use crate::embeddings::Embedder;
 use crate::error::Result;
 use crate::models::*;
 use crate::storage::Storage;
 use crate::HippoConfig;
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use regex::Regex;
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::warn;
+
+/// Configuration for hybrid search scoring weights
+#[derive(Debug, Clone)]
+pub struct HybridSearchConfig {
+    /// Weight for semantic similarity score (0.0 to 1.0)
+    pub semantic_weight: f32,
+    /// Weight for keyword matching score (0.0 to 1.0)
+    pub keyword_weight: f32,
+}
+
+impl Default for HybridSearchConfig {
+    fn default() -> Self {
+        Self {
+            semantic_weight: 0.7,
+            keyword_weight: 0.3,
+        }
+    }
+}
+
+/// Calculate cosine similarity between two embedding vectors
+/// Returns a value between -1.0 and 1.0, where 1.0 means identical direction
+pub fn semantic_score(query_embedding: &[f32], doc_embedding: &[f32]) -> f32 {
+    // Handle edge cases
+    if query_embedding.is_empty() || doc_embedding.is_empty() {
+        return 0.0;
+    }
+
+    if query_embedding.len() != doc_embedding.len() {
+        return 0.0;
+    }
+
+    // Calculate dot product and magnitudes
+    let mut dot_product = 0.0;
+    let mut query_magnitude = 0.0;
+    let mut doc_magnitude = 0.0;
+
+    for i in 0..query_embedding.len() {
+        dot_product += query_embedding[i] * doc_embedding[i];
+        query_magnitude += query_embedding[i] * query_embedding[i];
+        doc_magnitude += doc_embedding[i] * doc_embedding[i];
+    }
+
+    // Handle zero magnitude vectors
+    if query_magnitude == 0.0 || doc_magnitude == 0.0 {
+        return 0.0;
+    }
+
+    // Calculate cosine similarity
+    let similarity = dot_product / (query_magnitude.sqrt() * doc_magnitude.sqrt());
+
+    // Clamp to [-1.0, 1.0] to handle floating point errors
+    similarity.max(-1.0).min(1.0)
+}
+
+/// Calculate fuzzy match score using Levenshtein distance
+/// Returns a value between 0.0 and 1.0, where 1.0 means exact match
+pub fn fuzzy_match(query: &str, text: &str) -> f32 {
+    if query.is_empty() && text.is_empty() {
+        return 1.0;
+    }
+    if query.is_empty() || text.is_empty() {
+        return 0.0;
+    }
+
+    let query_lower = query.to_lowercase();
+    let text_lower = text.to_lowercase();
+
+    // Exact match
+    if query_lower == text_lower {
+        return 1.0;
+    }
+
+    // Contains match (high score)
+    if text_lower.contains(&query_lower) {
+        let ratio = query_lower.len() as f32 / text_lower.len() as f32;
+        return 0.8 + (0.2 * ratio);
+    }
+
+    // Calculate Levenshtein distance
+    let distance = levenshtein_distance(&query_lower, &text_lower);
+    let max_len = query_lower.len().max(text_lower.len());
+
+    // Convert distance to similarity score (0.0 to 1.0)
+    let similarity = 1.0 - (distance as f32 / max_len as f32);
+    similarity.max(0.0)
+}
+
+/// Calculate Levenshtein distance between two strings
+fn levenshtein_distance(s1: &str, s2: &str) -> usize {
+    let s1_chars: Vec<char> = s1.chars().collect();
+    let s2_chars: Vec<char> = s2.chars().collect();
+
+    let len1 = s1_chars.len();
+    let len2 = s2_chars.len();
+
+    // Quick optimizations
+    if len1 == 0 {
+        return len2;
+    }
+    if len2 == 0 {
+        return len1;
+    }
+
+    // Create distance matrix
+    let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
+
+    // Initialize first column
+    for (i, row) in matrix.iter_mut().enumerate().take(len1 + 1) {
+        row[0] = i;
+    }
+
+    // Initialize first row
+    for j in 0..=len2 {
+        matrix[0][j] = j;
+    }
+
+    // Fill in the rest of the matrix
+    for i in 1..=len1 {
+        for j in 1..=len2 {
+            let cost = if s1_chars[i - 1] == s2_chars[j - 1] { 0 } else { 1 };
+
+            matrix[i][j] = (matrix[i - 1][j] + 1)           // deletion
+                .min(matrix[i][j - 1] + 1)                   // insertion
+                .min(matrix[i - 1][j - 1] + cost);           // substitution
+        }
+    }
+
+    matrix[len1][len2]
+}
+
+/// Find best fuzzy match in a text, returning the score and matched substring
+pub fn fuzzy_find_best_match(query: &str, text: &str) -> (f32, Option<String>) {
+    if query.is_empty() || text.is_empty() {
+        return (0.0, None);
+    }
+
+    let query_lower = query.to_lowercase();
+    let text_lower = text.to_lowercase();
+
+    // Check for exact match first
+    if text_lower.contains(&query_lower) {
+        return (1.0, Some(query.to_string()));
+    }
+
+    // Split text into words and find best matching word
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let mut best_score = 0.0f32;
+    let mut best_match = None;
+
+    for word in words {
+        let score = fuzzy_match(&query_lower, &word.to_lowercase());
+        if score > best_score {
+            best_score = score;
+            best_match = Some(word.to_string());
+        }
+    }
+
+    (best_score, best_match)
+}
 
 pub struct Searcher {
     storage: Arc<Storage>,
     embedder: Arc<Embedder>,
+    hybrid_config: HybridSearchConfig,
 }
 
 impl Searcher {
@@ -21,7 +189,25 @@ impl Searcher {
         embedder: Arc<Embedder>,
         _config: &HippoConfig,
     ) -> Result<Self> {
-        Ok(Self { storage, embedder })
+        Ok(Self {
+            storage,
+            embedder,
+            hybrid_config: HybridSearchConfig::default(),
+        })
+    }
+
+    /// Create a new Searcher with custom hybrid search configuration
+    pub async fn with_hybrid_config(
+        storage: Arc<Storage>,
+        embedder: Arc<Embedder>,
+        _config: &HippoConfig,
+        hybrid_config: HybridSearchConfig,
+    ) -> Result<Self> {
+        Ok(Self {
+            storage,
+            embedder,
+            hybrid_config,
+        })
     }
 
     /// Perform a search with the given query - uses SQL for performance
@@ -248,10 +434,11 @@ impl Searcher {
         })
     }
 
-    /// Hybrid search combining semantic and keyword scoring
+    /// Hybrid search combining semantic and keyword scoring with configurable weights
     pub async fn hybrid_search(&self, query: &str, limit: usize) -> Result<SearchResults> {
-        const SEMANTIC_WEIGHT: f32 = 0.7;
-        const KEYWORD_WEIGHT: f32 = 0.3;
+        // Use configured weights
+        let semantic_weight = self.hybrid_config.semantic_weight;
+        let keyword_weight = self.hybrid_config.keyword_weight;
 
         // Get semantic results
         let semantic_results = self.semantic_search(query, limit * 2).await?;
@@ -275,7 +462,7 @@ impl Searcher {
                 result.memory.id,
                 (
                     result.memory,
-                    result.score * SEMANTIC_WEIGHT,
+                    result.score * semantic_weight,
                     result.highlights,
                 ),
             );
@@ -286,12 +473,12 @@ impl Searcher {
             combined
                 .entry(result.memory.id)
                 .and_modify(|(_, score, highlights)| {
-                    *score += result.score * KEYWORD_WEIGHT;
+                    *score += result.score * keyword_weight;
                     highlights.extend(result.highlights.clone());
                 })
                 .or_insert((
                     result.memory,
-                    result.score * KEYWORD_WEIGHT,
+                    result.score * keyword_weight,
                     result.highlights,
                 ));
         }
