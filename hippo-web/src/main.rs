@@ -455,6 +455,37 @@ impl SearchParams {
                 .collect();
         }
 
+        // Parse type/kind filter
+        if let Some(kind_str) = self.kind {
+            query.kinds = kind_str
+                .split(',')
+                .filter_map(|k| match k.trim() {
+                    "Image" | "image" => Some(hippo_core::MemoryKind::Image {
+                        width: 0,
+                        height: 0,
+                        format: String::new(),
+                    }),
+                    "Video" | "video" => Some(hippo_core::MemoryKind::Video {
+                        duration_ms: 0,
+                        format: String::new(),
+                    }),
+                    "Audio" | "audio" => Some(hippo_core::MemoryKind::Audio {
+                        duration_ms: 0,
+                        format: String::new(),
+                    }),
+                    "Document" | "document" => Some(hippo_core::MemoryKind::Document {
+                        format: hippo_core::DocumentFormat::Other(String::new()),
+                        page_count: None,
+                    }),
+                    "Code" | "code" => Some(hippo_core::MemoryKind::Code {
+                        language: String::new(),
+                        lines: 0,
+                    }),
+                    _ => None,
+                })
+                .collect();
+        }
+
         // Parse sort order
         if let Some(sort_str) = self.sort {
             query.sort = match sort_str.as_str() {
