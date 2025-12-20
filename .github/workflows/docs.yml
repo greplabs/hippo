@@ -1,0 +1,189 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.rs'
+      - '**.md'
+      - 'Cargo.toml'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - '**.rs'
+      - '**.md'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Build and deploy rustdoc
+  rustdoc:
+    name: Build Rustdoc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-docs-
+
+      - name: Build documentation
+        run: |
+          cargo doc --workspace --no-deps --all-features
+          echo '<meta http-equiv="refresh" content="0; url=hippo_core">' > target/doc/index.html
+
+      - name: Fix file permissions
+        run: |
+          chmod -c -R +rX "target/doc/" | while read line; do
+            echo "::warning title=Invalid file permissions automatically fixed::$line"
+          done
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdoc
+          path: target/doc/
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+          cname: ${{ vars.DOCS_CNAME }}
+          force_orphan: true
+
+  # Check documentation quality
+  doc-check:
+    name: Documentation Quality Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: Check for missing documentation
+        run: |
+          RUSTDOCFLAGS="-D missing_docs -D rustdoc::broken_intra_doc_links" cargo doc --workspace --no-deps --all-features
+
+      - name: Test documentation examples
+        run: cargo test --doc --workspace
+
+      - name: Check markdown links
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          config-file: '.github/markdown-link-check-config.json'
+        continue-on-error: true
+
+  # Generate README badges and stats
+  readme-stats:
+    name: Update README Stats
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install tokei (code statistics)
+        run: cargo install tokei
+
+      - name: Generate code statistics
+        run: |
+          tokei --output json > tokei.json
+          echo "## Code Statistics" > stats.md
+          echo "" >> stats.md
+          tokei >> stats.md
+
+      - name: Count dependencies
+        run: |
+          DEP_COUNT=$(cargo tree --workspace --depth 0 | wc -l)
+          echo "Total dependencies: $DEP_COUNT" >> stats.md
+
+      - name: Upload statistics
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-statistics
+          path: |
+            tokei.json
+            stats.md
+
+  # Validate CLAUDE.md and other documentation
+  validate-docs:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check CLAUDE.md exists and is updated
+        run: |
+          if [ ! -f "CLAUDE.md" ]; then
+            echo "::error::CLAUDE.md not found"
+            exit 1
+          fi
+
+          # Check if CLAUDE.md is reasonably up-to-date (modified in last 90 days)
+          LAST_MODIFIED=$(git log -1 --format="%ct" CLAUDE.md)
+          NOW=$(date +%s)
+          DAYS_SINCE=$((($NOW - $LAST_MODIFIED) / 86400))
+
+          if [ $DAYS_SINCE -gt 90 ]; then
+            echo "::warning::CLAUDE.md was last updated $DAYS_SINCE days ago. Consider updating it."
+          fi
+
+      - name: Check README.md
+        run: |
+          if [ ! -f "README.md" ]; then
+            echo "::warning::README.md not found"
+          fi
+
+      - name: Spell check documentation
+        uses: streetsidesoftware/cspell-action@v6
+        with:
+          files: |
+            **/*.md
+            **/*.rs
+          config: .cspell.json
+        continue-on-error: true
