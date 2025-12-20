@@ -1,8 +1,17 @@
 //! Thumbnail generation and caching for fast image and video previews
+//!
+//! Features:
+//! - Disk caching for persistence across restarts
+//! - In-memory LRU cache for hot thumbnails
+//! - Automatic cache eviction when memory limit reached
+//! - Support for images and videos (via ffmpeg)
 
 use crate::error::{HippoError, Result};
 use image::{DynamicImage, ImageFormat};
+use lru::LruCache;
+use parking_lot::Mutex;
 use std::fs;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, warn};
@@ -10,10 +19,26 @@ use tracing::{debug, warn};
 /// Default thumbnail size (width and height)
 pub const THUMBNAIL_SIZE: u32 = 256;
 
+/// Default LRU cache capacity (number of thumbnails to keep in memory)
+pub const DEFAULT_CACHE_CAPACITY: usize = 500;
+
+/// Maximum memory usage for in-memory cache (50MB)
+pub const MAX_CACHE_MEMORY_BYTES: usize = 50 * 1024 * 1024;
+
 /// Thumbnail manager for generating and caching image thumbnails
 pub struct ThumbnailManager {
     cache_dir: PathBuf,
     size: u32,
+    /// In-memory LRU cache for recently accessed thumbnails
+    memory_cache: Mutex<LruCache<String, CachedThumbnail>>,
+    /// Current memory usage of the cache
+    cache_memory_usage: Mutex<usize>,
+}
+
+/// A cached thumbnail with its data
+#[derive(Clone)]
+struct CachedThumbnail {
+    data: Vec<u8>,
 }
 
 impl ThumbnailManager {
@@ -36,7 +61,83 @@ impl ThumbnailManager {
         Ok(Self {
             cache_dir,
             size: THUMBNAIL_SIZE,
+            memory_cache: Mutex::new(LruCache::new(
+                NonZeroUsize::new(DEFAULT_CACHE_CAPACITY).unwrap(),
+            )),
+            cache_memory_usage: Mutex::new(0),
         })
+    }
+
+    /// Get thumbnail data from memory cache or disk
+    pub fn get_thumbnail_data(&self, image_path: &Path) -> Result<Vec<u8>> {
+        let cache_key = self.get_thumbnail_name(image_path);
+
+        // Check memory cache first
+        {
+            let mut cache = self.memory_cache.lock();
+            if let Some(cached) = cache.get(&cache_key) {
+                debug!("Thumbnail cache hit (memory): {}", cache_key);
+                return Ok(cached.data.clone());
+            }
+        }
+
+        // Not in memory, check disk cache
+        let thumbnail_path = self.cache_dir.join(&cache_key);
+        if thumbnail_path.exists() {
+            let data = fs::read(&thumbnail_path)?;
+            self.add_to_memory_cache(cache_key, data.clone());
+            debug!("Thumbnail cache hit (disk): {:?}", thumbnail_path);
+            return Ok(data);
+        }
+
+        // Need to generate
+        let generated_path = self.generate_thumbnail(image_path)?;
+        let data = fs::read(&generated_path)?;
+        self.add_to_memory_cache(self.get_thumbnail_name(image_path), data.clone());
+        Ok(data)
+    }
+
+    /// Add a thumbnail to the memory cache with memory limit enforcement
+    fn add_to_memory_cache(&self, key: String, data: Vec<u8>) {
+        let data_size = data.len();
+
+        // Check if adding this would exceed memory limit
+        let mut memory_usage = self.cache_memory_usage.lock();
+        let mut cache = self.memory_cache.lock();
+
+        // Evict entries if necessary to stay under memory limit
+        while *memory_usage + data_size > MAX_CACHE_MEMORY_BYTES && !cache.is_empty() {
+            if let Some((_, evicted)) = cache.pop_lru() {
+                *memory_usage = memory_usage.saturating_sub(evicted.data.len());
+            }
+        }
+
+        // Add to cache
+        if let Some(old) = cache.put(key, CachedThumbnail { data }) {
+            *memory_usage = memory_usage.saturating_sub(old.data.len());
+        }
+        *memory_usage += data_size;
+    }
+
+    /// Clear the in-memory cache
+    pub fn clear_memory_cache(&self) {
+        let mut cache = self.memory_cache.lock();
+        let mut memory_usage = self.cache_memory_usage.lock();
+        cache.clear();
+        *memory_usage = 0;
+        debug!("Memory cache cleared");
+    }
+
+    /// Get memory cache statistics
+    pub fn memory_cache_stats(&self) -> MemoryCacheStats {
+        let cache = self.memory_cache.lock();
+        let memory_usage = self.cache_memory_usage.lock();
+        MemoryCacheStats {
+            entries: cache.len(),
+            memory_bytes: *memory_usage,
+            capacity: DEFAULT_CACHE_CAPACITY,
+            max_memory_bytes: MAX_CACHE_MEMORY_BYTES,
+        }
     }
 
     /// Set the thumbnail size
@@ -255,11 +356,20 @@ impl Default for ThumbnailManager {
     }
 }
 
-/// Statistics about the thumbnail cache
+/// Statistics about the thumbnail disk cache
 #[derive(Debug, Clone)]
 pub struct ThumbnailStats {
     pub count: usize,
     pub total_size: u64,
+}
+
+/// Statistics about the in-memory thumbnail cache
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MemoryCacheStats {
+    pub entries: usize,
+    pub memory_bytes: usize,
+    pub capacity: usize,
+    pub max_memory_bytes: usize,
 }
 
 /// Helper function to encode bytes as hex
