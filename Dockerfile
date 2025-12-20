@@ -19,12 +19,11 @@ COPY hippo-core ./hippo-core
 COPY hippo-cli ./hippo-cli
 COPY Cargo.lock ./
 
-# Create minimal workspace manifest (excluding hippo-tauri which needs GTK)
-# The workspace.dependencies are duplicated from main Cargo.toml
+# Create minimal workspace manifest (excluding packages that aren't needed for CLI)
 COPY Cargo.toml Cargo.toml.orig
-RUN sed '/hippo-tauri/d' Cargo.toml.orig > Cargo.toml && rm Cargo.toml.orig
+RUN sed -e '/hippo-tauri/d' -e '/hippo-wasm/d' -e '/hippo-web/d' Cargo.toml.orig > Cargo.toml && rm Cargo.toml.orig
 
-# Update lock file after modifying workspace (removes hippo-tauri entries)
+# Update lock file after modifying workspace
 RUN cargo generate-lockfile
 
 # Build release binary (CLI only - Tauri requires desktop environment)

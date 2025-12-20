@@ -17,163 +17,12 @@ WORKDIR /app
 
 # Copy workspace members and manifests
 COPY hippo-core ./hippo-core
+COPY hippo-web ./hippo-web
 COPY Cargo.lock ./
 
-# Create minimal workspace manifest for web build
-# Note: hippo-web crate needs to be created separately
+# Create minimal workspace manifest (excluding packages that aren't needed for web)
 COPY Cargo.toml Cargo.toml.orig
-
-# For now, we'll prepare the workspace for when hippo-web is added
-# This creates a placeholder structure that can be uncommented when ready
-RUN sed '/hippo-tauri/d' Cargo.toml.orig > Cargo.toml && rm Cargo.toml.orig
-
-# Create hippo-web directory structure (to be implemented)
-RUN mkdir -p hippo-web/src && \
-    echo '[package]' > hippo-web/Cargo.toml && \
-    echo 'name = "hippo-web"' >> hippo-web/Cargo.toml && \
-    echo 'version = "0.1.0"' >> hippo-web/Cargo.toml && \
-    echo 'edition = "2021"' >> hippo-web/Cargo.toml && \
-    echo '' >> hippo-web/Cargo.toml && \
-    echo '[dependencies]' >> hippo-web/Cargo.toml && \
-    echo 'hippo-core = { path = "../hippo-core" }' >> hippo-web/Cargo.toml && \
-    echo 'tokio = { workspace = true }' >> hippo-web/Cargo.toml && \
-    echo 'serde = { workspace = true }' >> hippo-web/Cargo.toml && \
-    echo 'serde_json = { workspace = true }' >> hippo-web/Cargo.toml && \
-    echo 'anyhow = { workspace = true }' >> hippo-web/Cargo.toml && \
-    echo 'tracing = { workspace = true }' >> hippo-web/Cargo.toml && \
-    echo 'tracing-subscriber = { workspace = true }' >> hippo-web/Cargo.toml && \
-    echo 'axum = "0.7"' >> hippo-web/Cargo.toml && \
-    echo 'tower = "0.5"' >> hippo-web/Cargo.toml && \
-    echo 'tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }' >> hippo-web/Cargo.toml
-
-# Create a minimal main.rs for hippo-web
-RUN cat > hippo-web/src/main.rs << 'EOF'
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-    routing::{get, post},
-    Router,
-};
-use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tower_http::cors::CorsLayer;
-use tower_http::trace::TraceLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-#[derive(Clone)]
-struct AppState {
-    hippo: Arc<RwLock<hippo_core::Hippo>>,
-}
-
-#[derive(Serialize)]
-struct HealthResponse {
-    status: String,
-    version: String,
-}
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // Initialize tracing
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "hippo_web=info,tower_http=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-
-    // Initialize Hippo
-    let db_path = std::env::var("HIPPO_DB_PATH")
-        .unwrap_or_else(|_| "/data/hippo.db".to_string());
-
-    tracing::info!("Initializing Hippo with database: {}", db_path);
-    let hippo = hippo_core::Hippo::new(&db_path).await?;
-
-    let state = AppState {
-        hippo: Arc::new(RwLock::new(hippo)),
-    };
-
-    // Build router
-    let app = Router::new()
-        .route("/health", get(health_check))
-        .route("/api/stats", get(get_stats))
-        .route("/api/search", post(search))
-        .route("/api/sources", get(list_sources))
-        .with_state(state)
-        .layer(CorsLayer::permissive())
-        .layer(TraceLayer::new_for_http());
-
-    // Start server
-    let host = std::env::var("HIPPO_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port = std::env::var("HIPPO_PORT")
-        .unwrap_or_else(|_| "3000".to_string())
-        .parse::<u16>()
-        .unwrap_or(3000);
-
-    let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
-
-    tracing::info!("Starting Hippo web server on http://{}", addr);
-
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
-
-    Ok(())
-}
-
-async fn health_check() -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: "ok".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-    })
-}
-
-async fn get_stats(State(state): State<AppState>) -> Result<Json<serde_json::Value>, StatusCode> {
-    let hippo = state.hippo.read().await;
-    match hippo.get_stats().await {
-        Ok(stats) => Ok(Json(serde_json::to_value(stats).unwrap())),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-
-async fn search(
-    State(state): State<AppState>,
-    Json(payload): Json<serde_json::Value>,
-) -> Result<Json<Vec<hippo_core::Memory>>, StatusCode> {
-    let hippo = state.hippo.read().await;
-    // Simple text search for now
-    let query_text = payload["text"].as_str().unwrap_or("");
-
-    let query = hippo_core::SearchQuery {
-        text: if query_text.is_empty() { None } else { Some(query_text.to_string()) },
-        tags: vec![],
-        sources: vec![],
-        kinds: vec![],
-        date_range: None,
-        sort: hippo_core::SortOrder::ModifiedDesc,
-        limit: 100,
-        offset: 0,
-    };
-
-    match hippo.search(&query).await {
-        Ok(results) => Ok(Json(results)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-
-async fn list_sources(State(state): State<AppState>) -> Result<Json<Vec<hippo_core::Source>>, StatusCode> {
-    let hippo = state.hippo.read().await;
-    match hippo.get_sources().await {
-        Ok(sources) => Ok(Json(sources)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-EOF
-
-# Add hippo-web to workspace members
-RUN sed -i '/members = \[/a\    "hippo-web",' Cargo.toml
+RUN sed -e '/hippo-tauri/d' -e '/hippo-wasm/d' -e '/hippo-cli/d' Cargo.toml.orig > Cargo.toml && rm Cargo.toml.orig
 
 # Update lock file after modifying workspace
 RUN cargo generate-lockfile
@@ -195,14 +44,14 @@ RUN apt-get update && apt-get install -y \
 
 # Create non-root user
 RUN useradd -m -u 1000 hippo && \
-    mkdir -p /data /mnt/index && \
-    chown -R hippo:hippo /data /mnt/index
+    mkdir -p /data /mnt/index /app/static && \
+    chown -R hippo:hippo /data /mnt/index /app
 
 # Copy binary from builder
 COPY --from=builder /app/target/release/hippo-web /usr/local/bin/hippo-web
 
-# Copy static files (if any)
-# COPY hippo-web/static /app/static
+# Copy static files
+COPY --chown=hippo:hippo hippo-web/static /app/static
 
 # Set user
 USER hippo
@@ -214,6 +63,7 @@ WORKDIR /data
 ENV HIPPO_HOST=0.0.0.0
 ENV HIPPO_PORT=3000
 ENV HIPPO_DB_PATH=/data/hippo.db
+ENV HIPPO_STATIC_DIR=/app/static
 ENV RUST_LOG=info
 
 # Expose port
