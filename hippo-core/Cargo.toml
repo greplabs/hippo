@@ -58,6 +58,11 @@ sha2 = { workspace = true }
 lru = { workspace = true }
 parking_lot = { workspace = true }
 
+# Archive extraction (for Qdrant auto-install)
+flate2 = { workspace = true }
+tar = { workspace = true }
+zip = { workspace = true }
+
 [dev-dependencies]
 tempfile = "3"
 tokio-test = "0.4"

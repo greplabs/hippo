@@ -138,6 +138,15 @@
     body.dark .source-item:hover { background: rgba(255,255,255,0.08); }
     .source-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
 
+    /* Status indicators */
+    .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 11px; color: #78716c; }
+    body.dark .status-row { color: #a8a29e; }
+    .status-indicator { display: flex; align-items: center; gap: 4px; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.online { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.5); }
+    .status-dot.offline { background: #a8a29e; }
+    .status-dot.loading { background: #f59e0b; animation: pulse 1s ease-in-out infinite; }
+
     .add-btn {
       width: 100%;
       padding: 12px 14px;
@@ -1188,7 +1197,17 @@
         <button class="sidebar-btn" id="discoverBtn" style="margin-top:8px;"><span class="icon icon-sm" style="color:#8b5cf6;">&#10024;</span> Discover Collections</button>
       </div>
       <div class="sidebar-footer">
-        <p id="statsText" style="margin-bottom:8px;">Loading...</p>
+        <p id="statsText" style="margin-bottom:4px;">Loading...</p>
+        <div class="status-row">
+          <div class="status-indicator" title="Qdrant vector search">
+            <span class="status-dot loading" id="qdrantDot"></span>
+            <span id="qdrantStatus">Qdrant</span>
+          </div>
+          <div class="status-indicator" title="Ollama local AI">
+            <span class="status-dot loading" id="ollamaDot"></span>
+            <span id="ollamaStatusText">Ollama</span>
+          </div>
+        </div>
         <button class="sidebar-btn ai-chat-btn" id="chatBtn"><span class="icon icon-sm" id="chatBtnIcon"></span> Ask Hippo</button>
         <button class="sidebar-btn" id="settingsBtn"><span class="icon icon-sm" id="settingsIcon"></span> AI Settings</button>
         <button class="sidebar-btn" id="darkModeBtn"><span class="icon icon-sm" id="themeIcon"></span> <span id="themeText">Dark Mode</span></button>
@@ -2676,7 +2695,8 @@
             invoke('get_tags'),
             invoke('search', { query: '', tags: [] }),
             invoke('list_collections').catch(function() { return []; }),
-            invoke('get_qdrant_stats').catch(function() { return { available: false }; })
+            invoke('get_qdrant_stats').catch(function() { return { available: false }; }),
+            invoke('ollama_status').catch(function() { return { available: false }; })
           ]).then(function(r) {
             document.getElementById('statsText').textContent = (r[0] ? r[0].total_memories : 0) + ' memories';
             sources = r[1] || [];
@@ -2684,6 +2704,11 @@
             memories = (r[3].memories || []).map(function(x) { return x.memory; });
             collections = r[4] || [];
             qdrantAvailable = r[5] && r[5].available;
+            ollamaAvailable = r[6] && r[6].available;
+
+            // Update status indicators
+            updateStatusIndicators();
+
             renderSources();
             renderTagBar();
             renderFiles();
@@ -2703,6 +2728,18 @@
             memories = (r.memories || []).map(function(x) { return x.memory; });
             renderFiles();
           });
+        }
+
+        function updateStatusIndicators() {
+          var qdrantDot = document.getElementById('qdrantDot');
+          var ollamaDot = document.getElementById('ollamaDot');
+
+          if (qdrantDot) {
+            qdrantDot.className = 'status-dot ' + (qdrantAvailable ? 'online' : 'offline');
+          }
+          if (ollamaDot) {
+            ollamaDot.className = 'status-dot ' + (ollamaAvailable ? 'online' : 'offline');
+          }
         }
 
         function renderSources() {

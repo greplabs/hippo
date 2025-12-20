@@ -3,6 +3,10 @@
 //! Provides vector storage and similarity search using Qdrant.
 //! Falls back gracefully when Qdrant is unavailable.
 
+pub mod manager;
+
+pub use manager::{QdrantManager, QdrantStatus};
+
 use crate::embeddings::{CODE_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, TEXT_EMBEDDING_DIM};
 use crate::error::{HippoError, Result};
 use crate::models::*;

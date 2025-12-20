@@ -8,19 +8,42 @@
 )]
 
 use hippo_core::{
-    ClaudeClient, Hippo, MemoryId, OllamaClient, SearchQuery, Source, Tag, UnifiedAiClient,
+    ClaudeClient, Hippo, MemoryId, OllamaClient, QdrantManager, SearchQuery, Source, Tag,
+    UnifiedAiClient,
 };
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
 
 struct AppState {
     hippo: Arc<RwLock<Option<Hippo>>>,
+    qdrant_manager: Arc<QdrantManager>,
 }
 
 #[tauri::command]
 async fn initialize(state: State<'_, AppState>) -> Result<String, String> {
     println!("[Hippo] Initializing...");
+
+    // Ensure Qdrant is running
+    println!("[Hippo] Starting Qdrant...");
+    match state.qdrant_manager.ensure_running().await {
+        Ok(_) => {
+            let status = state.qdrant_manager.status().await;
+            if status.managed {
+                println!("[Hippo] Qdrant started successfully (managed)");
+            } else {
+                println!("[Hippo] Qdrant is running externally");
+            }
+        }
+        Err(e) => {
+            println!(
+                "[Hippo] Warning: Qdrant not available ({}). Vector search will be limited.",
+                e
+            );
+        }
+    }
+
     let mut hippo_lock = state.hippo.write().await;
 
     match Hippo::new().await {
@@ -1617,6 +1640,35 @@ async fn get_qdrant_stats(state: State<'_, AppState>) -> Result<serde_json::Valu
     serde_json::to_value(stats).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn get_qdrant_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Getting Qdrant status...");
+    let status = state.qdrant_manager.status().await;
+    serde_json::to_value(status).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn install_qdrant(state: State<'_, AppState>) -> Result<String, String> {
+    println!("[Hippo] Installing Qdrant...");
+    state
+        .qdrant_manager
+        .install()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok("Qdrant installed successfully".to_string())
+}
+
+#[tauri::command]
+async fn start_qdrant(state: State<'_, AppState>) -> Result<String, String> {
+    println!("[Hippo] Starting Qdrant...");
+    state
+        .qdrant_manager
+        .start()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok("Qdrant started successfully".to_string())
+}
+
 // Helper function for cosine similarity (kept for future semantic search)
 #[allow(dead_code)]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
@@ -1653,17 +1705,24 @@ fn main() {
     println!("[Hippo] Starting application...");
     tracing_subscriber::fmt::init();
 
+    // Get data directory for Qdrant
+    let data_dir = directories::ProjectDirs::from("com", "hippo", "app")
+        .map(|d| d.data_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from(".hippo"));
+
+    // Create Qdrant manager
+    let qdrant_manager = Arc::new(QdrantManager::new(data_dir, "http://localhost:6334"));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .manage(AppState {
             hippo: Arc::new(RwLock::new(None)),
+            qdrant_manager,
         })
         .setup(|_app| {
-            println!("[Hippo] Starting application...");
-            // Note: Qdrant should be started separately or installed on the system
-            // Run: qdrant --storage-path ~/.local/share/hippo/qdrant
+            println!("[Hippo] Application started. Qdrant will be auto-managed.");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1720,6 +1779,10 @@ fn main() {
             find_similar_memories,
             hybrid_search,
             get_qdrant_stats,
+            // Qdrant Management
+            get_qdrant_status,
+            install_qdrant,
+            start_qdrant,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

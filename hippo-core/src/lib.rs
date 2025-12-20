@@ -121,7 +121,7 @@ pub use organization::{
 };
 
 // Re-export qdrant types
-pub use qdrant::QdrantStats;
+pub use qdrant::{QdrantManager, QdrantStats, QdrantStatus};
 
 use std::path::PathBuf;
 use std::sync::Arc;
