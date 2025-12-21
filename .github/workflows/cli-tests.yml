@@ -1,0 +1,136 @@
+name: CLI Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'hippo-cli/**'
+      - 'hippo-core/**'
+      - '.github/workflows/cli-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'hippo-cli/**'
+      - 'hippo-core/**'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test CLI
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-target-
+
+      - name: Check formatting
+        run: cargo fmt --package hippo-cli -- --check
+        continue-on-error: true
+
+      - name: Run clippy
+        run: cargo clippy --package hippo-cli -- -D warnings
+        continue-on-error: true
+
+      - name: Build CLI
+        run: cargo build --package hippo-cli --verbose
+
+      - name: Run unit tests
+        run: cargo test --package hippo-cli command_parsing_tests -- --nocapture
+
+      - name: Run integration tests
+        run: cargo test --package hippo-cli integration_tests -- --nocapture
+
+      - name: Run watch tests
+        run: cargo test --package hippo-cli watch_tests -- --nocapture
+        continue-on-error: true  # Watch tests can be flaky
+
+      - name: Run error tests
+        run: cargo test --package hippo-cli error_tests -- --nocapture
+
+      - name: Run workflow tests
+        run: cargo test --package hippo-cli workflow_tests -- --nocapture
+
+      - name: Run brain tests (no API)
+        run: cargo test --package hippo-cli brain_tests::test_brain_without_api_key -- --nocapture
+
+      - name: Run all tests together
+        run: cargo test --package hippo-cli --verbose
+
+  test-with-ai:
+    name: Test CLI with AI (if API key available)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run AI tests
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: cargo test --package hippo-cli -- --ignored --nocapture
+        continue-on-error: true
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Generate coverage
+        run: cargo tarpaulin --package hippo-cli --out xml --output-dir coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/cobertura.xml
+          flags: cli-tests
+          name: hippo-cli-coverage
+        continue-on-error: true

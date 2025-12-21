@@ -91,8 +91,8 @@ pub use ai::{
     analyze_code, analyze_document, analyze_file, analyze_image, analyze_video, AiConfig,
     AiProvider, AnalysisResult, ClaudeClient, CodeAnalysis, CodeSummary, CollectionSuggestion,
     Color, DetectedObject, DocumentAnalysis, DocumentSummary, DuplicateMatch, DuplicateType,
-    FileAnalysis, FunctionInfo, ImageAnalysis, OrganizationSuggestion, SimilarFile, TagSuggestion,
-    UnifiedAiClient, VideoAnalysis,
+    ExtractedEntities, FileAnalysis, FunctionInfo, ImageAnalysis, OrganizationSuggestion,
+    SimilarFile, TagSuggestion, UnifiedAiClient, VideoAnalysis,
 };
 
 // Re-export watcher types
