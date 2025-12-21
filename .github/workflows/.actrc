@@ -1,0 +1,20 @@
+# Configuration for act (GitHub Actions local runner)
+# https://github.com/nektos/act
+
+# Use medium-sized images for better compatibility
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+-P macos-latest=sickcodes/docker-osx:latest
+-P windows-latest=ghcr.io/catthehacker/windows:latest
+
+# Set default secrets file
+--secret-file .github/workflows/.secrets
+
+# Enable verbose output
+--verbose
+
+# Reuse containers for faster subsequent runs
+--reuse
+
+# Container architecture
+--container-architecture linux/amd64

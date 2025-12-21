@@ -1,0 +1,112 @@
+{
+  "name": "Hippo - The Memory That Never Forgets",
+  "short_name": "Hippo",
+  "description": "Local-first, cross-platform file organizer with powerful search and metadata extraction",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8f8f7",
+  "theme_color": "#6366f1",
+  "categories": ["productivity", "utilities"],
+  "scope": "/",
+  "lang": "en-US",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop-1.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Hippo search interface"
+    },
+    {
+      "src": "/screenshots/mobile-1.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Hippo mobile view"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Search Files",
+      "short_name": "Search",
+      "description": "Search your indexed files",
+      "url": "/?action=search",
+      "icons": [
+        {
+          "src": "/icons/search-icon.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Add Source",
+      "short_name": "Add",
+      "description": "Add a new folder to index",
+      "url": "/?action=add-source",
+      "icons": [
+        {
+          "src": "/icons/add-icon.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": ["image/*", "video/*", "audio/*", "application/pdf", ".txt", ".md"]
+        }
+      ]
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "/open",
+      "accept": {
+        "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"],
+        "video/*": [".mp4", ".mov", ".avi", ".webm"],
+        "audio/*": [".mp3", ".wav", ".ogg", ".m4a"],
+        "application/pdf": [".pdf"],
+        "text/*": [".txt", ".md", ".json", ".log"]
+      }
+    }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+hippo",
+      "url": "/handle?protocol=%s"
+    }
+  ],
+  "prefer_related_applications": false,
+  "related_applications": []
+}

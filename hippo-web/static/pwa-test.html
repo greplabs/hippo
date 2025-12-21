@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PWA Features Test - Hippo</title>
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8f8f7;
+      padding: 20px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: #6366f1;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #6b7280;
+      margin-bottom: 32px;
+    }
+
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      margin-bottom: 16px;
+      color: #1f2937;
+    }
+
+    .test-item {
+      padding: 12px;
+      margin-bottom: 12px;
+      border-left: 3px solid #e5e7eb;
+      background: #f9fafb;
+      border-radius: 6px;
+    }
+
+    .test-item.success {
+      border-left-color: #10b981;
+      background: #ecfdf5;
+    }
+
+    .test-item.error {
+      border-left-color: #ef4444;
+      background: #fef2f2;
+    }
+
+    .test-item.warning {
+      border-left-color: #f59e0b;
+      background: #fffbeb;
+    }
+
+    .test-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .test-result {
+      font-size: 0.9rem;
+      color: #6b7280;
+      font-family: monospace;
+    }
+
+    .button {
+      display: inline-block;
+      padding: 10px 20px;
+      background: #6366f1;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-bottom: 8px;
+      transition: background 0.2s;
+    }
+
+    .button:hover {
+      background: #4f46e5;
+    }
+
+    .button.secondary {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .button.secondary:hover {
+      background: #d1d5db;
+    }
+
+    .button.danger {
+      background: #ef4444;
+    }
+
+    .button.danger:hover {
+      background: #dc2626;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .stat-card {
+      padding: 16px;
+      background: #f9fafb;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #6366f1;
+    }
+
+    .stat-label {
+      font-size: 0.875rem;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .log {
+      background: #1f2937;
+      color: #f3f4f6;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 16px;
+    }
+
+    .log-entry {
+      margin-bottom: 4px;
+    }
+
+    .log-time {
+      color: #9ca3af;
+    }
+
+    .log-info {
+      color: #60a5fa;
+    }
+
+    .log-success {
+      color: #34d399;
+    }
+
+    .log-error {
+      color: #f87171;
+    }
+
+    .log-warning {
+      color: #fbbf24;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge.success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .badge.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .badge.info {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>PWA Features Test</h1>
+    <p class="subtitle">Test and debug Progressive Web App functionality for Hippo</p>
+
+    <!-- Environment Info -->
+    <div class="section">
+      <h2>Environment Information</h2>
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-label">Platform</div>
+          <div class="stat-value" id="platform">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Install Status</div>
+          <div class="stat-value" id="install-status">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Connection</div>
+          <div class="stat-value" id="connection">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Network Type</div>
+          <div class="stat-value" id="network-type">-</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feature Detection -->
+    <div class="section">
+      <h2>Feature Detection</h2>
+      <div id="feature-tests"></div>
+    </div>
+
+    <!-- Service Worker Tests -->
+    <div class="section">
+      <h2>Service Worker</h2>
+      <div id="sw-status" class="test-item">
+        <div class="test-title">Status: <span id="sw-state">Checking...</span></div>
+        <div class="test-result" id="sw-result"></div>
+      </div>
+      <button class="button" onclick="testServiceWorker()">Register SW</button>
+      <button class="button secondary" onclick="checkCaches()">Check Caches</button>
+      <button class="button danger" onclick="clearCaches()">Clear All Caches</button>
+    </div>
+
+    <!-- Install Prompt Tests -->
+    <div class="section">
+      <h2>Install Prompt</h2>
+      <div id="install-test" class="test-item">
+        <div class="test-title">Install Prompt Available: <span id="install-available">No</span></div>
+      </div>
+      <button class="button" onclick="showInstallPrompt()">Show Install Prompt</button>
+      <button class="button secondary" onclick="dismissInstallPrompt()">Dismiss Install Prompt</button>
+    </div>
+
+    <!-- Offline Tests -->
+    <div class="section">
+      <h2>Offline Capabilities</h2>
+      <div id="offline-test" class="test-item">
+        <div class="test-title">Current Status: <span id="online-status">Online</span></div>
+      </div>
+      <button class="button" onclick="testOfflineMode()">Test Offline Mode</button>
+      <button class="button secondary" onclick="queueOfflineOperation()">Queue Operation</button>
+    </div>
+
+    <!-- Notifications -->
+    <div class="section">
+      <h2>Push Notifications</h2>
+      <div id="notification-test" class="test-item">
+        <div class="test-title">Permission: <span id="notification-permission">default</span></div>
+      </div>
+      <button class="button" onclick="requestNotifications()">Request Permission</button>
+      <button class="button secondary" onclick="showTestNotification()">Show Test Notification</button>
+    </div>
+
+    <!-- Share API -->
+    <div class="section">
+      <h2>Web Share API</h2>
+      <div id="share-test" class="test-item">
+        <div class="test-title">Share API Available: <span id="share-available">No</span></div>
+      </div>
+      <button class="button" onclick="testShare()">Test Share</button>
+    </div>
+
+    <!-- Performance -->
+    <div class="section">
+      <h2>Performance Metrics</h2>
+      <div id="performance-metrics"></div>
+      <button class="button" onclick="showPerformance()">Show Metrics</button>
+    </div>
+
+    <!-- Console Log -->
+    <div class="section">
+      <h2>Console Log</h2>
+      <button class="button secondary" onclick="clearLog()">Clear Log</button>
+      <div class="log" id="console-log"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import {
+      registerServiceWorker,
+      setupInstallPrompt,
+      setupOfflineDetection,
+      requestNotificationPermission,
+      showNotification,
+      shareContent,
+      canShare,
+      getPerformanceMetrics,
+      isInstalledPWA,
+      isTauriApp,
+      detectPlatform,
+      getNetworkInfo,
+      clearAllCaches
+    } from './pwa-utils.js';
+
+    // Global references
+    window.pwaUtils = {
+      registerServiceWorker,
+      setupInstallPrompt,
+      setupOfflineDetection,
+      requestNotificationPermission,
+      showNotification,
+      shareContent,
+      canShare,
+      getPerformanceMetrics,
+      isInstalledPWA,
+      isTauriApp,
+      detectPlatform,
+      getNetworkInfo,
+      clearAllCaches
+    };
+
+    let installPromptController = null;
+    let registration = null;
+
+    // Logging
+    const logEntries = [];
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      logEntries.push({ timestamp, message, type });
+
+      const logDiv = document.getElementById('console-log');
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `<span class="log-time">[${timestamp}]</span> <span class="log-${type}">${message}</span>`;
+      logDiv.appendChild(entry);
+      logDiv.scrollTop = logDiv.scrollHeight;
+
+      console.log(`[PWA Test] ${message}`);
+    }
+
+    window.clearLog = () => {
+      logEntries.length = 0;
+      document.getElementById('console-log').innerHTML = '';
+    };
+
+    // Initialize environment info
+    function updateEnvironmentInfo() {
+      document.getElementById('platform').textContent = detectPlatform();
+      document.getElementById('install-status').textContent = isInstalledPWA() ? 'PWA' : 'Browser';
+      document.getElementById('connection').textContent = navigator.onLine ? 'Online' : 'Offline';
+
+      const networkInfo = getNetworkInfo();
+      document.getElementById('network-type').textContent = networkInfo ? networkInfo.effectiveType : 'Unknown';
+    }
+
+    // Feature detection
+    function runFeatureTests() {
+      const features = {
+        'Service Workers': 'serviceWorker' in navigator,
+        'Push Notifications': 'Notification' in window,
+        'Background Sync': 'sync' in ServiceWorkerRegistration.prototype,
+        'Web Share': 'share' in navigator,
+        'Cache API': 'caches' in window,
+        'IndexedDB': 'indexedDB' in window,
+        'Fetch API': 'fetch' in window,
+        'Promises': 'Promise' in window,
+        'Web App Manifest': document.querySelector('link[rel="manifest"]') !== null,
+        'HTTPS': window.location.protocol === 'https:' || window.location.hostname === 'localhost'
+      };
+
+      const container = document.getElementById('feature-tests');
+      container.innerHTML = '';
+
+      Object.entries(features).forEach(([name, supported]) => {
+        const div = document.createElement('div');
+        div.className = `test-item ${supported ? 'success' : 'error'}`;
+        div.innerHTML = `
+          <div class="test-title">${name}</div>
+          <div class="test-result">${supported ? '✓ Supported' : '✗ Not Supported'}</div>
+        `;
+        container.appendChild(div);
+      });
+
+      log('Feature detection completed', 'success');
+    }
+
+    // Service Worker tests
+    window.testServiceWorker = async () => {
+      try {
+        log('Registering service worker...', 'info');
+        registration = await registerServiceWorker('/sw.js', (reg) => {
+          log('Service worker update available!', 'warning');
+        });
+
+        if (registration) {
+          document.getElementById('sw-state').textContent = 'Registered';
+          document.getElementById('sw-status').className = 'test-item success';
+          document.getElementById('sw-result').textContent = `Scope: ${registration.scope}`;
+          log('Service worker registered successfully', 'success');
+        } else {
+          document.getElementById('sw-state').textContent = 'Failed';
+          document.getElementById('sw-status').className = 'test-item error';
+          log('Service worker registration failed', 'error');
+        }
+      } catch (error) {
+        log(`Error: ${error.message}`, 'error');
+      }
+    };
+
+    window.checkCaches = async () => {
+      const cacheNames = await caches.keys();
+      log(`Found ${cacheNames.length} caches: ${cacheNames.join(', ')}`, 'info');
+
+      for (const name of cacheNames) {
+        const cache = await caches.open(name);
+        const keys = await cache.keys();
+        log(`Cache "${name}" has ${keys.length} items`, 'info');
+      }
+    };
+
+    window.clearCaches = async () => {
+      try {
+        await clearAllCaches();
+        log('All caches cleared successfully', 'success');
+      } catch (error) {
+        log(`Error clearing caches: ${error.message}`, 'error');
+      }
+    };
+
+    // Install prompt tests
+    window.showInstallPrompt = async () => {
+      if (!installPromptController) {
+        log('Install prompt not available', 'warning');
+        return;
+      }
+
+      const outcome = await installPromptController.show();
+      log(`Install prompt result: ${outcome}`, outcome === 'accepted' ? 'success' : 'info');
+    };
+
+    window.dismissInstallPrompt = () => {
+      if (installPromptController) {
+        installPromptController.dismiss();
+        log('Install prompt dismissed for 7 days', 'info');
+      }
+    };
+
+    // Offline tests
+    window.testOfflineMode = () => {
+      log('Testing offline mode - open DevTools Network tab and enable offline', 'info');
+      fetch('/manifest.json')
+        .then(() => log('Fetch successful (online)', 'success'))
+        .catch(() => log('Fetch failed (offline)', 'warning'));
+    };
+
+    window.queueOfflineOperation = () => {
+      log('Queuing operation for background sync', 'info');
+      // This would use the background sync API
+      log('Background sync not fully implemented in demo', 'warning');
+    };
+
+    // Notification tests
+    window.requestNotifications = async () => {
+      try {
+        const permission = await requestNotificationPermission();
+        document.getElementById('notification-permission').textContent = permission;
+        log(`Notification permission: ${permission}`, permission === 'granted' ? 'success' : 'warning');
+      } catch (error) {
+        log(`Error: ${error.message}`, 'error');
+      }
+    };
+
+    window.showTestNotification = async () => {
+      try {
+        await showNotification('Test Notification', {
+          body: 'This is a test notification from Hippo PWA',
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          tag: 'test',
+          actions: [
+            { action: 'open', title: 'Open' },
+            { action: 'close', title: 'Close' }
+          ]
+        });
+        log('Test notification shown', 'success');
+      } catch (error) {
+        log(`Error: ${error.message}`, 'error');
+      }
+    };
+
+    // Share API tests
+    window.testShare = async () => {
+      if (!canShare()) {
+        log('Web Share API not supported', 'error');
+        return;
+      }
+
+      try {
+        await shareContent({
+          title: 'Hippo PWA Test',
+          text: 'Testing the Web Share API from Hippo',
+          url: window.location.href
+        });
+        log('Share successful', 'success');
+      } catch (error) {
+        log(`Share failed: ${error.message}`, 'error');
+      }
+    };
+
+    // Performance tests
+    window.showPerformance = () => {
+      const metrics = getPerformanceMetrics();
+      if (!metrics) {
+        log('Performance API not available', 'error');
+        return;
+      }
+
+      const container = document.getElementById('performance-metrics');
+      container.innerHTML = '';
+
+      Object.entries(metrics).forEach(([key, value]) => {
+        const div = document.createElement('div');
+        div.className = 'test-item';
+        div.innerHTML = `
+          <div class="test-title">${key}</div>
+          <div class="test-result">${value.toFixed(2)} ms</div>
+        `;
+        container.appendChild(div);
+      });
+
+      log('Performance metrics displayed', 'success');
+    };
+
+    // Initialize on load
+    window.addEventListener('load', () => {
+      log('PWA Test page loaded', 'info');
+
+      updateEnvironmentInfo();
+      runFeatureTests();
+
+      // Setup install prompt
+      installPromptController = setupInstallPrompt();
+      installPromptController.on('show', () => {
+        document.getElementById('install-available').textContent = 'Yes';
+        document.getElementById('install-test').className = 'test-item success';
+        log('Install prompt became available', 'success');
+      });
+
+      // Setup offline detection
+      setupOfflineDetection(
+        () => {
+          document.getElementById('online-status').textContent = 'Online';
+          document.getElementById('offline-test').className = 'test-item success';
+          updateEnvironmentInfo();
+          log('Connection restored', 'success');
+        },
+        () => {
+          document.getElementById('online-status').textContent = 'Offline';
+          document.getElementById('offline-test').className = 'test-item warning';
+          updateEnvironmentInfo();
+          log('Connection lost', 'warning');
+        }
+      );
+
+      // Check notification permission
+      if ('Notification' in window) {
+        document.getElementById('notification-permission').textContent = Notification.permission;
+      }
+
+      // Check share API
+      document.getElementById('share-available').textContent = canShare() ? 'Yes' : 'No';
+      if (canShare()) {
+        document.getElementById('share-test').className = 'test-item success';
+      }
+
+      // Auto-register service worker
+      testServiceWorker();
+    });
+  </script>
+</body>
+</html>

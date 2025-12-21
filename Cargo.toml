@@ -4,6 +4,8 @@ members = [
     "hippo-core",      # Core library: indexing, embeddings, search
     "hippo-tauri",     # Desktop app with Tauri
     "hippo-cli",       # CLI for shell usage
+    "hippo-wasm",      # WebAssembly bindings for browser
+    "hippo-web",       # REST API server
 ]
 
 [workspace.package]
@@ -33,7 +35,8 @@ ndarray = "0.16"
 # File processing
 walkdir = "2.5"
 mime_guess = "2.0"
-image = "0.25"
+# Image processing - disable rayon and use minimal codecs to avoid zune-jpeg SIMD issues
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico", "tiff"] }
 symphonia = "0.5"          # Audio metadata
 pdf-extract = "0.7"
 zip = "2.2"
@@ -79,7 +82,7 @@ dialoguer = "0.11"         # Interactive prompts
 tabled = "0.16"            # Table output
 
 # AI / HTTP
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 sha2 = "0.10"              # For duplicate detection
 ctrlc = "3.4"              # For Ctrl+C handling
 

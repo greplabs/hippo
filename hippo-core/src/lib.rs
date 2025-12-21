@@ -4,6 +4,8 @@
 //!
 //! Hippo is an intelligent file memory system that indexes, understands,
 //! and connects all your files across local storage and cloud providers.
+
+#![allow(missing_docs)]
 //!
 //! ## Architecture
 //!
@@ -86,8 +88,11 @@ pub use graph::MindMap;
 
 // Re-export AI types
 pub use ai::{
-    AiConfig, AiProvider, ClaudeClient, CodeSummary, DocumentSummary, ExtractedEntities,
-    FileAnalysis, OrganizationSuggestion, TagSuggestion, UnifiedAiClient,
+    analyze_code, analyze_document, analyze_file, analyze_image, analyze_video, AiConfig,
+    AiProvider, AnalysisResult, ClaudeClient, CodeAnalysis, CodeSummary, CollectionSuggestion,
+    Color, DetectedObject, DocumentAnalysis, DocumentSummary, DuplicateMatch, DuplicateType,
+    FileAnalysis, FunctionInfo, ImageAnalysis, OrganizationSuggestion, SimilarFile, TagSuggestion,
+    UnifiedAiClient, VideoAnalysis,
 };
 
 // Re-export watcher types
@@ -132,11 +137,13 @@ use tokio::sync::RwLock;
 #[allow(dead_code)]
 pub struct Hippo {
     storage: Arc<storage::Storage>,
+    /// The file indexer for scanning and processing files
     pub indexer: Arc<indexer::Indexer>,
     embedder: Arc<embeddings::Embedder>,
     searcher: Arc<search::Searcher>,
     graph: Arc<RwLock<graph::KnowledgeGraph>>,
-    watcher: Option<Arc<watcher::FileWatcher>>,
+    /// The file watcher for real-time updates
+    pub watcher: Option<Arc<RwLock<watcher::FileWatcher>>>,
     thumbnail_manager: Arc<thumbnails::ThumbnailManager>,
     organizer: Arc<organization::Organizer>,
     config: HippoConfig,
@@ -205,8 +212,8 @@ impl Hippo {
         let graph = Arc::new(RwLock::new(graph::KnowledgeGraph::new(storage.clone())));
 
         // Initialize watcher (optional - can be started later)
-        let watcher = match watcher::FileWatcher::new(storage.clone(), indexer.clone()) {
-            Ok(w) => Some(Arc::new(w)),
+        let watcher = match watcher::FileWatcher::new(storage.clone(), None) {
+            Ok(w) => Some(Arc::new(RwLock::new(w))),
             Err(e) => {
                 tracing::warn!("Failed to create file watcher: {}", e);
                 None
@@ -301,6 +308,11 @@ impl Hippo {
         self.storage.get_memory(id).await
     }
 
+    /// Delete a memory by its ID
+    pub async fn delete_memory(&self, id: MemoryId) -> Result<()> {
+        self.storage.delete_memory(id).await
+    }
+
     /// Add a tag to a memory
     pub async fn add_tag(&self, memory_id: MemoryId, tag: Tag) -> Result<()> {
         self.storage.add_tag(memory_id, tag).await
@@ -368,7 +380,13 @@ impl Hippo {
     /// Start watching a source for file changes
     pub async fn watch_source(&self, source: &Source) -> Result<()> {
         if let Some(watcher) = &self.watcher {
-            watcher.watch(source).await
+            if let Source::Local { root_path } = source {
+                watcher.write().await.watch(root_path, source.clone()).await
+            } else {
+                Err(HippoError::Other(
+                    "Only local sources can be watched".to_string(),
+                ))
+            }
         } else {
             Err(HippoError::Other("File watcher not available".to_string()))
         }
@@ -377,7 +395,11 @@ impl Hippo {
     /// Stop watching a source
     pub async fn unwatch_source(&self, source: &Source) -> Result<()> {
         if let Some(watcher) = &self.watcher {
-            watcher.unwatch(source).await
+            if let Source::Local { root_path } = source {
+                watcher.write().await.unwatch(root_path).await
+            } else {
+                Ok(())
+            }
         } else {
             Ok(())
         }
@@ -386,7 +408,7 @@ impl Hippo {
     /// Start watching all configured sources
     pub async fn watch_all(&self) -> Result<()> {
         if let Some(watcher) = &self.watcher {
-            watcher.watch_all_sources().await
+            watcher.write().await.watch_all_sources().await
         } else {
             Err(HippoError::Other("File watcher not available".to_string()))
         }
@@ -395,7 +417,7 @@ impl Hippo {
     /// Stop all file watchers
     pub async fn unwatch_all(&self) -> Result<()> {
         if let Some(watcher) = &self.watcher {
-            watcher.unwatch_all().await
+            watcher.write().await.unwatch_all().await
         } else {
             Ok(())
         }
@@ -404,7 +426,7 @@ impl Hippo {
     /// Get the number of active watchers
     pub async fn active_watchers(&self) -> usize {
         if let Some(watcher) = &self.watcher {
-            watcher.active_count().await
+            watcher.read().await.active_count().await
         } else {
             0
         }
@@ -413,10 +435,41 @@ impl Hippo {
     /// Get list of watched paths
     pub async fn watched_paths(&self) -> Vec<PathBuf> {
         if let Some(watcher) = &self.watcher {
-            watcher.watched_paths().await
+            watcher
+                .read()
+                .await
+                .watched_paths()
+                .await
+                .into_iter()
+                .map(|(p, _)| p)
+                .collect()
         } else {
             vec![]
         }
+    }
+
+    /// Get watcher stats
+    pub async fn watcher_stats(&self) -> Option<watcher::WatchStats> {
+        if let Some(watcher) = &self.watcher {
+            Some(watcher.read().await.stats().await)
+        } else {
+            None
+        }
+    }
+
+    /// Subscribe to file watch events
+    pub fn subscribe_watch_events(
+        &self,
+    ) -> Option<tokio::sync::broadcast::Receiver<watcher::WatchEvent>> {
+        self.watcher.as_ref().map(|w| {
+            // This is a bit tricky - we need to get the receiver without blocking
+            // For now, return None - we'll handle events differently in Tauri
+            // The proper way would be to use a channel that can be subscribed to multiple times
+            // We'll emit events via Tauri's event system instead
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async { w.read().await.subscribe() })
+            })
+        })
     }
 
     // === Duplicate Detection ===
@@ -575,6 +628,18 @@ impl Hippo {
     /// Get the organizer for direct access
     pub fn organizer(&self) -> &Arc<organization::Organizer> {
         &self.organizer
+    }
+
+    // === Export/Import Operations ===
+
+    /// Export all index data to a serializable structure
+    pub async fn export_index(&self) -> Result<IndexExport> {
+        self.storage.export_index().await
+    }
+
+    /// Import index data from an export structure
+    pub async fn import_index(&self, data: IndexExport) -> Result<ImportStats> {
+        self.storage.import_index(data).await
     }
 }
 

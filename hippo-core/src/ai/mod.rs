@@ -5,6 +5,17 @@
 //! - Anthropic's Claude API (cloud)
 //! - Ollama (local, privacy-first)
 
+#![allow(missing_docs)]
+
+pub mod analysis;
+
+// Re-export analysis types
+pub use analysis::{
+    analyze_code, analyze_document, analyze_file, analyze_image, analyze_video, AnalysisResult,
+    CodeAnalysis, Color, DetectedObject, DocumentAnalysis, ExtractedEntities, FunctionInfo,
+    ImageAnalysis, VideoAnalysis,
+};
+
 use crate::ollama::{
     ChatMessage, LocalAnalysis, OllamaClient, OllamaConfig, RagContext, RagDocument,
 };
@@ -12,6 +23,7 @@ use crate::{HippoError, Memory, MemoryKind, Result, Tag, TagSource};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 /// Claude API client for AI-powered features
@@ -76,6 +88,42 @@ pub struct TagSuggestion {
 pub struct OrganizationSuggestion {
     pub suggested_folder: String,
     pub reason: String,
+}
+
+/// Collection suggestion for grouping similar files
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectionSuggestion {
+    pub name: String,
+    pub description: String,
+    pub memory_ids: Vec<crate::MemoryId>,
+    pub confidence: u8,
+    pub reason: String,
+}
+
+/// Duplicate match with confidence score
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuplicateMatch {
+    pub memory_id: crate::MemoryId,
+    pub path: std::path::PathBuf,
+    pub similarity_type: DuplicateType,
+    pub confidence: u8,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DuplicateType {
+    ExactHash,
+    SimilarName,
+    SimilarContent,
+    SimilarDimensions,
+}
+
+/// Similar file result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimilarFile {
+    pub memory: crate::Memory,
+    pub similarity_score: f32,
+    pub reasons: Vec<String>,
 }
 
 /// Full AI analysis result for a file
@@ -749,6 +797,7 @@ Respond in this exact JSON format:
             organizations: Option<Vec<String>>,
             locations: Option<Vec<String>>,
             technologies: Option<Vec<String>>,
+            dates: Option<Vec<String>>,
         }
 
         match serde_json::from_str::<SummaryJson>(&json_str) {
@@ -758,6 +807,7 @@ Respond in this exact JSON format:
                     organizations: e.organizations.unwrap_or_default(),
                     locations: e.locations.unwrap_or_default(),
                     technologies: e.technologies.unwrap_or_default(),
+                    dates: e.dates.unwrap_or_default(),
                 });
 
                 Ok(DocumentSummary {
@@ -841,15 +891,6 @@ pub struct DocumentSummary {
     pub document_type: Option<String>,
     pub sentiment: Option<String>,
     pub complexity: Option<String>,
-}
-
-/// Extracted entities from text
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExtractedEntities {
-    pub people: Vec<String>,
-    pub organizations: Vec<String>,
-    pub locations: Vec<String>,
-    pub technologies: Vec<String>,
 }
 
 /// Code analysis summary
@@ -1238,6 +1279,27 @@ impl UnifiedAiClient {
         self.ollama.chat(&chat_messages).await
     }
 
+    /// Stream chat with conversation history (yields chunks as they arrive)
+    pub async fn stream_chat<F>(
+        &self,
+        messages: Vec<(String, String)>,
+        cancellation_token: CancellationToken,
+        on_chunk: F,
+    ) -> Result<String>
+    where
+        F: FnMut(String) + Send,
+    {
+        let chat_messages: Vec<ChatMessage> = messages
+            .into_iter()
+            .map(|(role, content)| ChatMessage::new(&role, &content))
+            .collect();
+
+        // For now, streaming is only supported via Ollama
+        self.ollama
+            .stream_chat(&chat_messages, cancellation_token, on_chunk)
+            .await
+    }
+
     /// Get organization suggestions
     pub async fn suggest_organization(
         &self,
@@ -1282,6 +1344,314 @@ impl UnifiedAiClient {
                     .collect())
             }
         }
+    }
+
+    /// Suggest tags for a memory (smart tag suggestions)
+    pub async fn suggest_tags_for_memory(&self, memory: &Memory) -> Result<Vec<TagSuggestion>> {
+        // Use the existing analyze_file method but only return tags
+        let analysis = self.analyze_file(memory).await?;
+        Ok(analysis.tags)
+    }
+
+    /// Find similar files using various heuristics (name, type, tags, content)
+    pub fn suggest_similar_files(
+        &self,
+        target: &Memory,
+        all_memories: &[Memory],
+        limit: usize,
+    ) -> Vec<SimilarFile> {
+        let mut scored: Vec<(Memory, f32, Vec<String>)> = Vec::new();
+
+        let target_type = std::mem::discriminant(&target.kind);
+        let target_ext = target
+            .path
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        let target_name = target
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+
+        for memory in all_memories {
+            if memory.id == target.id {
+                continue;
+            }
+
+            let mut score: f32 = 0.0;
+            let mut reasons: Vec<String> = Vec::new();
+
+            // Same type (30 points)
+            if std::mem::discriminant(&memory.kind) == target_type {
+                score += 0.3;
+                reasons.push("same type".to_string());
+            }
+
+            // Same extension (20 points)
+            let ext = memory
+                .path
+                .extension()
+                .map(|e| e.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            if ext == target_ext && !target_ext.is_empty() {
+                score += 0.2;
+            }
+
+            // Similar name (up to 25 points)
+            let name = memory
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            let target_words: std::collections::HashSet<&str> = target_name
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|s| s.len() > 2)
+                .collect();
+            let name_words: std::collections::HashSet<&str> = name
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|s| s.len() > 2)
+                .collect();
+            let common_words = target_words.intersection(&name_words).count();
+            if common_words > 0 {
+                score += (common_words as f32 * 0.1).min(0.25);
+                reasons.push(format!("{} shared keywords", common_words));
+            }
+
+            // Same folder (10 points)
+            if memory.path.parent() == target.path.parent() {
+                score += 0.1;
+                reasons.push("same folder".to_string());
+            }
+
+            // Shared tags (up to 20 points)
+            let shared_tags: Vec<String> = memory
+                .tags
+                .iter()
+                .filter(|t| target.tags.iter().any(|tt| tt.name == t.name))
+                .map(|t| t.name.clone())
+                .collect();
+            if !shared_tags.is_empty() {
+                score += (shared_tags.len() as f32 * 0.1).min(0.2);
+                reasons.push(format!("{} shared tags", shared_tags.len()));
+            }
+
+            // Similar file size (5 points)
+            if target.metadata.file_size > 0 {
+                let size_ratio =
+                    memory.metadata.file_size as f64 / target.metadata.file_size as f64;
+                if (0.7..1.3).contains(&size_ratio) {
+                    score += 0.05;
+                }
+            }
+
+            // Similar dimensions for images (15 points)
+            if let (
+                crate::MemoryKind::Image {
+                    width: tw,
+                    height: th,
+                    ..
+                },
+                crate::MemoryKind::Image {
+                    width: mw,
+                    height: mh,
+                    ..
+                },
+            ) = (&target.kind, &memory.kind)
+            {
+                let w_ratio = *mw as f64 / *tw as f64;
+                let h_ratio = *mh as f64 / *th as f64;
+                if (0.8..1.2).contains(&w_ratio) && (0.8..1.2).contains(&h_ratio) {
+                    score += 0.15;
+                    reasons.push("similar dimensions".to_string());
+                }
+            }
+
+            // Only include if score is significant
+            if score >= 0.25 {
+                scored.push((memory.clone(), score, reasons));
+            }
+        }
+
+        // Sort by score descending
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Take top results
+        scored
+            .into_iter()
+            .take(limit)
+            .map(|(memory, score, reasons)| SimilarFile {
+                memory,
+                similarity_score: score,
+                reasons,
+            })
+            .collect()
+    }
+
+    /// Suggest duplicate files with confidence scoring
+    pub fn suggest_duplicates(
+        &self,
+        target: &Memory,
+        all_memories: &[Memory],
+    ) -> Vec<DuplicateMatch> {
+        let mut duplicates: Vec<DuplicateMatch> = Vec::new();
+
+        for memory in all_memories {
+            if memory.id == target.id {
+                continue;
+            }
+
+            // Check for exact hash match
+            if let (Some(target_hash), Some(memory_hash)) =
+                (&target.metadata.hash, &memory.metadata.hash)
+            {
+                if target_hash == memory_hash {
+                    duplicates.push(DuplicateMatch {
+                        memory_id: memory.id,
+                        path: memory.path.clone(),
+                        similarity_type: DuplicateType::ExactHash,
+                        confidence: 100,
+                        reason: "Identical file content (hash match)".to_string(),
+                    });
+                    continue;
+                }
+            }
+
+            // Check for very similar names
+            let target_name = target
+                .path
+                .file_stem()
+                .map(|n| n.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            let memory_name = memory
+                .path
+                .file_stem()
+                .map(|n| n.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+
+            // Remove common suffixes like (1), _copy, etc.
+            let clean_target = target_name
+                .replace(" (1)", "")
+                .replace("_copy", "")
+                .replace("-copy", "")
+                .trim()
+                .to_string();
+            let clean_memory = memory_name
+                .replace(" (1)", "")
+                .replace("_copy", "")
+                .replace("-copy", "")
+                .trim()
+                .to_string();
+
+            if clean_target == clean_memory && !clean_target.is_empty() {
+                duplicates.push(DuplicateMatch {
+                    memory_id: memory.id,
+                    path: memory.path.clone(),
+                    similarity_type: DuplicateType::SimilarName,
+                    confidence: 85,
+                    reason: "Very similar name (possible copy)".to_string(),
+                });
+                continue;
+            }
+
+            // Check for similar dimensions in images
+            if let (
+                crate::MemoryKind::Image {
+                    width: tw,
+                    height: th,
+                    ..
+                },
+                crate::MemoryKind::Image {
+                    width: mw,
+                    height: mh,
+                    ..
+                },
+            ) = (&target.kind, &memory.kind)
+            {
+                if tw == mw && th == mh && target.metadata.file_size == memory.metadata.file_size {
+                    duplicates.push(DuplicateMatch {
+                        memory_id: memory.id,
+                        path: memory.path.clone(),
+                        similarity_type: DuplicateType::SimilarDimensions,
+                        confidence: 70,
+                        reason: "Same dimensions and size".to_string(),
+                    });
+                }
+            }
+        }
+
+        // Sort by confidence descending
+        duplicates.sort_by_key(|d| std::cmp::Reverse(d.confidence));
+        duplicates.into_iter().take(5).collect()
+    }
+
+    /// Suggest organization groupings based on file patterns
+    pub async fn suggest_groupings(
+        &self,
+        memories: &[Memory],
+    ) -> Result<Vec<CollectionSuggestion>> {
+        let mut suggestions: Vec<CollectionSuggestion> = Vec::new();
+
+        // Group by common tags
+        let mut tag_groups: std::collections::HashMap<String, Vec<crate::MemoryId>> =
+            std::collections::HashMap::new();
+
+        for memory in memories {
+            for tag in &memory.tags {
+                tag_groups
+                    .entry(tag.name.clone())
+                    .or_default()
+                    .push(memory.id);
+            }
+        }
+
+        // Create suggestions for tag groups with 3+ files
+        for (tag_name, ids) in tag_groups {
+            if ids.len() >= 3 {
+                suggestions.push(CollectionSuggestion {
+                    name: format!("{} Collection", tag_name),
+                    description: format!("Files tagged with '{}'", tag_name),
+                    memory_ids: ids,
+                    confidence: 80,
+                    reason: "Common tag".to_string(),
+                });
+            }
+        }
+
+        // Group by file type
+        let mut type_groups: std::collections::HashMap<String, Vec<crate::MemoryId>> =
+            std::collections::HashMap::new();
+
+        for memory in memories {
+            let type_name = match &memory.kind {
+                crate::MemoryKind::Image { .. } => "Images",
+                crate::MemoryKind::Video { .. } => "Videos",
+                crate::MemoryKind::Audio { .. } => "Audio",
+                crate::MemoryKind::Code { .. } => "Code",
+                crate::MemoryKind::Document { .. } => "Documents",
+                _ => continue,
+            };
+            type_groups
+                .entry(type_name.to_string())
+                .or_default()
+                .push(memory.id);
+        }
+
+        for (type_name, ids) in type_groups {
+            if ids.len() >= 5 {
+                suggestions.push(CollectionSuggestion {
+                    name: type_name.clone(),
+                    description: format!("All {} files", type_name.to_lowercase()),
+                    memory_ids: ids,
+                    confidence: 90,
+                    reason: "Same file type".to_string(),
+                });
+            }
+        }
+
+        // Sort by confidence
+        suggestions.sort_by_key(|s| std::cmp::Reverse(s.confidence));
+        Ok(suggestions.into_iter().take(5).collect())
     }
 }
 

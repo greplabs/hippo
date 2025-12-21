@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+
+# Build artifacts
+target/
+dist/
+build/
+
+# Tauri specific (not needed for CLI/Web Docker build)
+hippo-tauri/target/
+hippo-tauri/ui/node_modules/
+hippo-tauri/
+
+# Development data
+dev-data/
+dev-qdrant-data/
+storage/
+snapshots/
+
+# Docker artifacts
+docker-compose.dev.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Test files
+tests/fixtures/
+*.test
+
+# Misc
+*.bak
+*.tmp
+.env
+.env.local

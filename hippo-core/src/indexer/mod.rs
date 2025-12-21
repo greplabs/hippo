@@ -13,19 +13,129 @@ use crate::{
 };
 
 use rayon::prelude::*;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc,
+};
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, info, instrument, warn};
 use walkdir::WalkDir;
 
 pub mod code_parser;
 pub mod extractors;
+
+/// Progress stage during indexing
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum IndexingStage {
+    Scanning,
+    Embedding,
+    Tagging,
+    Complete,
+}
+
+/// Indexing progress information
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct IndexingProgress {
+    pub total: usize,
+    pub processed: usize,
+    pub current_file: Option<String>,
+    pub stage: IndexingStage,
+    pub is_paused: bool,
+    pub files_per_second: f64,
+    pub estimated_seconds_remaining: Option<u64>,
+}
+
+impl Default for IndexingProgress {
+    fn default() -> Self {
+        Self {
+            total: 0,
+            processed: 0,
+            current_file: None,
+            stage: IndexingStage::Scanning,
+            is_paused: false,
+            files_per_second: 0.0,
+            estimated_seconds_remaining: None,
+        }
+    }
+}
+
+impl IndexingProgress {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn percentage(&self) -> f64 {
+        if self.total == 0 {
+            0.0
+        } else {
+            (self.processed as f64 / self.total as f64) * 100.0
+        }
+    }
+}
+
+/// File with priority for indexing
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct PrioritizedFile {
+    path: PathBuf,
+    source: Source,
+    priority: u8, // Higher is more urgent (0-255)
+}
+
+/// Shared indexing state
+struct IndexingState {
+    progress: RwLock<IndexingProgress>,
+    is_paused: AtomicBool,
+    priority_queue: RwLock<VecDeque<PrioritizedFile>>,
+    start_time: RwLock<Option<std::time::Instant>>,
+    files_processed_count: AtomicUsize,
+}
+
+impl IndexingState {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            progress: RwLock::new(IndexingProgress::new()),
+            is_paused: AtomicBool::new(false),
+            priority_queue: RwLock::new(VecDeque::new()),
+            start_time: RwLock::new(None),
+            files_processed_count: AtomicUsize::new(0),
+        })
+    }
+
+    async fn update_progress(&self, update_fn: impl FnOnce(&mut IndexingProgress)) {
+        let mut progress = self.progress.write().await;
+        update_fn(&mut progress);
+
+        // Update ETA
+        if progress.processed > 0 {
+            let start_time = self.start_time.read().await;
+            if let Some(start) = *start_time {
+                let elapsed = start.elapsed().as_secs_f64();
+                progress.files_per_second = progress.processed as f64 / elapsed;
+
+                let remaining = progress.total.saturating_sub(progress.processed);
+                if progress.files_per_second > 0.0 {
+                    progress.estimated_seconds_remaining =
+                        Some((remaining as f64 / progress.files_per_second) as u64);
+                }
+            }
+        }
+    }
+
+    async fn reset_progress(&self) {
+        let mut progress = self.progress.write().await;
+        *progress = IndexingProgress::new();
+        self.files_processed_count.store(0, Ordering::SeqCst);
+        *self.start_time.write().await = None;
+    }
+}
 
 /// The main indexer that orchestrates file discovery and processing
 #[allow(dead_code)]
@@ -34,6 +144,8 @@ pub struct Indexer {
     embedder: Arc<Embedder>,
     config: IndexerConfig,
     task_tx: mpsc::Sender<IndexTask>,
+    state: Arc<IndexingState>,
+    progress_tx: tokio::sync::broadcast::Sender<IndexingProgress>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,6 +198,7 @@ impl Indexer {
         config: &HippoConfig,
     ) -> Result<Self> {
         let (task_tx, task_rx) = mpsc::channel(1000);
+        let (progress_tx, _) = tokio::sync::broadcast::channel(100);
 
         let indexer_config = IndexerConfig {
             parallelism: config.indexing_parallelism,
@@ -93,13 +206,25 @@ impl Indexer {
             ..Default::default()
         };
 
+        let state = IndexingState::new();
+
         // Spawn background worker
         let storage_clone = storage.clone();
         let embedder_clone = embedder.clone();
         let config_clone = indexer_config.clone();
+        let state_clone = state.clone();
+        let progress_tx_clone = progress_tx.clone();
 
         tokio::spawn(async move {
-            Self::background_worker(task_rx, storage_clone, embedder_clone, config_clone).await;
+            Self::background_worker(
+                task_rx,
+                storage_clone,
+                embedder_clone,
+                config_clone,
+                state_clone,
+                progress_tx_clone,
+            )
+            .await;
         });
 
         Ok(Self {
@@ -107,7 +232,61 @@ impl Indexer {
             embedder,
             config: indexer_config,
             task_tx,
+            state,
+            progress_tx,
         })
+    }
+
+    /// Get current indexing progress
+    pub async fn get_progress(&self) -> IndexingProgress {
+        let progress = self.state.progress.read().await;
+        progress.clone()
+    }
+
+    /// Subscribe to indexing progress updates
+    pub fn subscribe_progress(&self) -> tokio::sync::broadcast::Receiver<IndexingProgress> {
+        self.progress_tx.subscribe()
+    }
+
+    /// Pause indexing
+    pub async fn pause(&self) -> Result<()> {
+        self.state.is_paused.store(true, Ordering::SeqCst);
+        self.state
+            .update_progress(|p| {
+                p.is_paused = true;
+            })
+            .await;
+        info!("Indexing paused");
+        Ok(())
+    }
+
+    /// Resume indexing
+    pub async fn resume(&self) -> Result<()> {
+        self.state.is_paused.store(false, Ordering::SeqCst);
+        self.state
+            .update_progress(|p| {
+                p.is_paused = false;
+            })
+            .await;
+        info!("Indexing resumed");
+        Ok(())
+    }
+
+    /// Check if indexing is paused
+    pub fn is_paused(&self) -> bool {
+        self.state.is_paused.load(Ordering::SeqCst)
+    }
+
+    /// Set priority for a specific file path
+    pub async fn set_priority(&self, path: &Path, source: Source) -> Result<()> {
+        let mut queue = self.state.priority_queue.write().await;
+        queue.push_front(PrioritizedFile {
+            path: path.to_path_buf(),
+            source,
+            priority: 255, // Highest priority
+        });
+        info!("Added high-priority file to queue: {:?}", path);
+        Ok(())
     }
 
     /// Get a reference to the embedder
@@ -209,6 +388,8 @@ impl Indexer {
         storage: Arc<Storage>,
         embedder: Arc<Embedder>,
         config: IndexerConfig,
+        state: Arc<IndexingState>,
+        progress_tx: tokio::sync::broadcast::Sender<IndexingProgress>,
     ) {
         println!("[Indexer] Background worker started");
         info!("Indexer background worker started");
@@ -218,14 +399,34 @@ impl Indexer {
             match task {
                 IndexTask::IndexPath(path, source) => {
                     println!("[Indexer] Starting to index: {:?}", path);
-                    if let Err(e) =
-                        Self::index_path(&path, &source, &storage, &embedder, &config).await
+                    // Reset progress for new indexing task
+                    state.reset_progress().await;
+                    *state.start_time.write().await = Some(std::time::Instant::now());
+
+                    if let Err(e) = Self::index_path_with_progress(
+                        &path,
+                        &source,
+                        &storage,
+                        &embedder,
+                        &config,
+                        &state,
+                        &progress_tx,
+                    )
+                    .await
                     {
                         println!("[Indexer] Failed to index {:?}: {}", path, e);
                         warn!("Failed to index path {:?}: {}", path, e);
                     } else {
                         println!("[Indexer] Finished indexing: {:?}", path);
                     }
+
+                    // Mark as complete
+                    state
+                        .update_progress(|p| {
+                            p.stage = IndexingStage::Complete;
+                        })
+                        .await;
+                    let _ = progress_tx.send(state.progress.read().await.clone());
                 }
                 IndexTask::Reindex(id) => {
                     debug!("Reindexing memory: {}", id);
@@ -240,14 +441,15 @@ impl Indexer {
         println!("[Indexer] Background worker stopped");
     }
 
-    /// Index all files in a path
-    #[instrument(skip(storage, embedder, config))]
-    async fn index_path(
+    /// Index all files in a path with progress tracking
+    async fn index_path_with_progress(
         path: &Path,
         source: &Source,
         storage: &Storage,
         embedder: &Embedder,
         config: &IndexerConfig,
+        state: &Arc<IndexingState>,
+        progress_tx: &tokio::sync::broadcast::Sender<IndexingProgress>,
     ) -> Result<()> {
         println!("[Indexer] Starting index of path: {:?}", path);
         info!("Starting index of path: {:?}", path);
@@ -259,6 +461,15 @@ impl Indexer {
                 path
             )));
         }
+
+        // STAGE 1: Scanning
+        state
+            .update_progress(|p| {
+                p.stage = IndexingStage::Scanning;
+                p.current_file = Some("Scanning directory...".to_string());
+            })
+            .await;
+        let _ = progress_tx.send(state.progress.read().await.clone());
 
         // Collect all files
         let files: Vec<PathBuf> = WalkDir::new(path)
@@ -279,39 +490,91 @@ impl Indexer {
         println!("[Indexer] Found {} files to index", files.len());
         info!("Found {} files to index", files.len());
 
-        // Process in batches
+        // Set total count
+        state
+            .update_progress(|p| {
+                p.total = files.len();
+                p.stage = IndexingStage::Embedding;
+            })
+            .await;
+        let _ = progress_tx.send(state.progress.read().await.clone());
+
+        // STAGE 2: Process in batches with pause support
         for (batch_idx, batch) in files.chunks(config.batch_size).enumerate() {
+            // Check for pause
+            while state.is_paused.load(Ordering::SeqCst) {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+
             println!(
                 "[Indexer] Processing batch {} ({} files)",
                 batch_idx + 1,
                 batch.len()
             );
+
             let memories: Vec<Memory> = batch
                 .par_iter()
-                .filter_map(|file_path| match Self::process_file(file_path, source) {
-                    Ok(memory) => Some(memory),
-                    Err(e) => {
-                        debug!("Failed to process file {:?}: {}", file_path, e);
-                        None
+                .filter_map(|file_path| {
+                    // Update current file (note: may be overwritten by parallel processing)
+                    let _file_name = file_path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+
+                    match Self::process_file(file_path, source) {
+                        Ok(memory) => Some(memory),
+                        Err(e) => {
+                            debug!("Failed to process file {:?}: {}", file_path, e);
+                            None
+                        }
                     }
                 })
                 .collect();
 
             println!("[Indexer] Processed {} memories from batch", memories.len());
 
-            // Store memories
+            // Store memories and track progress
             for memory in &memories {
+                state
+                    .update_progress(|p| {
+                        p.current_file = Some(
+                            memory
+                                .path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_default(),
+                        );
+                        p.stage = IndexingStage::Embedding;
+                    })
+                    .await;
+
                 if let Err(e) = storage.upsert_memory(memory).await {
                     println!("[Indexer] Failed to store memory: {}", e);
                     warn!("Failed to store memory: {}", e);
+                }
+
+                // Check for pause
+                while state.is_paused.load(Ordering::SeqCst) {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 }
             }
 
             // Generate and store embeddings
             for memory in &memories {
+                state
+                    .update_progress(|p| {
+                        p.current_file = Some(
+                            memory
+                                .path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_default(),
+                        );
+                    })
+                    .await;
+
                 match embedder.embed_memory(memory).await {
                     Ok(embedding) => {
-                        // Store embedding in SQLite and Qdrant
                         let model_name = match &memory.kind {
                             MemoryKind::Image { .. } => "image_embedding",
                             MemoryKind::Code { .. } => "code_embedding",
@@ -333,11 +596,37 @@ impl Indexer {
                         debug!("Failed to embed memory {}: {}", memory.id, e);
                     }
                 }
+
+                // Update progress counter
+                state.files_processed_count.fetch_add(1, Ordering::SeqCst);
+                state
+                    .update_progress(|p| {
+                        p.processed += 1;
+                    })
+                    .await;
+                let _ = progress_tx.send(state.progress.read().await.clone());
+
+                // Check for pause
+                while state.is_paused.load(Ordering::SeqCst) {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
             }
 
-            // Auto-tagging with Ollama (if enabled)
-            if config.auto_tag_enabled {
+            // STAGE 3: Auto-tagging (if enabled)
+            if config.auto_tag_enabled && !memories.is_empty() {
+                state
+                    .update_progress(|p| {
+                        p.stage = IndexingStage::Tagging;
+                    })
+                    .await;
+                let _ = progress_tx.send(state.progress.read().await.clone());
+
                 Self::auto_tag_batch(&memories, storage).await;
+
+                // Check for pause
+                while state.is_paused.load(Ordering::SeqCst) {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
             }
 
             println!("[Indexer] Stored batch of {} files", memories.len());
@@ -347,6 +636,32 @@ impl Indexer {
         println!("[Indexer] Completed indexing path: {:?}", path);
         info!("Completed indexing path: {:?}", path);
         Ok(())
+    }
+
+    /// Index all files in a path (backward compatibility wrapper)
+    #[allow(dead_code)]
+    #[instrument(skip(storage, embedder, config))]
+    async fn index_path(
+        path: &Path,
+        source: &Source,
+        storage: &Storage,
+        embedder: &Embedder,
+        config: &IndexerConfig,
+    ) -> Result<()> {
+        // Create minimal state for compatibility
+        let state = IndexingState::new();
+        let (progress_tx, _) = tokio::sync::broadcast::channel(1);
+
+        Self::index_path_with_progress(
+            path,
+            source,
+            storage,
+            embedder,
+            config,
+            &state,
+            &progress_tx,
+        )
+        .await
     }
 
     /// Auto-tag a batch of memories using Ollama
@@ -359,7 +674,10 @@ impl Indexer {
             return;
         }
 
-        println!("[Indexer] Auto-tagging {} files with Ollama", memories.len());
+        println!(
+            "[Indexer] Auto-tagging {} files with Ollama",
+            memories.len()
+        );
 
         for memory in memories {
             // Create a prompt based on file information
@@ -394,7 +712,6 @@ impl Indexer {
                         .map(|s| s.trim().to_lowercase())
                         .filter(|s| !s.is_empty() && s.len() <= 30)
                         .take(5)
-                        .map(String::from)
                         .collect();
 
                     // Add AI tags to the memory

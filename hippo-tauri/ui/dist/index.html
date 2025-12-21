@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hippo</title>
+  <!-- Prism.js for syntax highlighting -->
+  <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -13,13 +16,18 @@
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
       background: #f8f8f7;
-      transition: background 0.3s ease, color 0.3s ease;
+      transition: background 0.2s ease, color 0.2s ease;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       letter-spacing: -0.01em;
       line-height: 1.5;
     }
     body.dark { background: #0f0e0d; }
+
+    /* Smooth transitions for all theme-aware elements */
+    * {
+      transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+    }
 
     /* Global animation keyframes */
     @keyframes fadeIn {
@@ -45,6 +53,10 @@
     @keyframes scaleIn {
       from { transform: scale(0.9); opacity: 0; }
       to { transform: scale(1); opacity: 1; }
+    }
+    @keyframes rotateIcon {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
 
     /* Skeleton loader base */
@@ -207,6 +219,47 @@
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     body.dark .search-bar { background: #1a1918; border-color: rgba(255,255,255,0.05); }
+
+    /* Theme toggle button in header */
+    .theme-toggle-btn {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.04);
+      color: #57534e;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      flex-shrink: 0;
+      margin-left: 12px;
+    }
+    .theme-toggle-btn:hover {
+      background: rgba(0,0,0,0.08);
+      color: #1c1917;
+      transform: translateY(-1px);
+    }
+    .theme-toggle-btn:active {
+      transform: translateY(0) scale(0.95);
+    }
+    .theme-toggle-btn .icon {
+      transition: transform 0.2s ease;
+    }
+    .theme-toggle-btn.rotating .icon {
+      animation: rotateIcon 0.5s ease;
+    }
+    body.dark .theme-toggle-btn {
+      background: rgba(255,255,255,0.06);
+      color: #d6d3d1;
+    }
+    body.dark .theme-toggle-btn:hover {
+      background: rgba(255,255,255,0.1);
+      color: #fafaf9;
+    }
+
     .search-container {
       display: flex;
       align-items: center;
@@ -297,6 +350,35 @@
     body.dark .recent-search-item { color: #a8a29e; }
     body.dark .recent-search-item:hover { background: #292524; color: #fafaf9; }
     .recent-search-icon { opacity: 0.5; }
+    .recent-search-text { flex: 1; font-weight: 500; }
+    .recent-search-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #a8a29e; }
+    body.dark .recent-search-meta { color: #78716c; }
+    .recent-search-count { padding: 2px 6px; background: rgba(0,0,0,0.04); border-radius: 4px; }
+    body.dark .recent-search-count { background: rgba(255,255,255,0.06); }
+    .recent-search-time { opacity: 0.7; }
+    .recent-search-remove { padding: 4px; background: none; border: none; color: #a8a29e; cursor: pointer; border-radius: 4px; transition: all 0.15s; opacity: 0; flex-shrink: 0; }
+    .recent-search-item:hover .recent-search-remove { opacity: 1; }
+    .recent-search-remove:hover { background: rgba(0,0,0,0.06); color: #dc2626; }
+    body.dark .recent-search-remove:hover { background: rgba(255,255,255,0.08); color: #f87171; }
+    .search-dropdown-section { padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06); }
+    .search-dropdown-section:last-child { border-bottom: none; }
+    body.dark .search-dropdown-section { border-color: rgba(255,255,255,0.06); }
+    .search-dropdown-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; font-size: 10px; font-weight: 600; color: #a8a29e; text-transform: uppercase; letter-spacing: 0.08em; }
+    .search-dropdown-clear { padding: 4px 8px; background: none; border: none; color: #78716c; font-size: 11px; font-weight: 500; cursor: pointer; border-radius: 4px; transition: all 0.15s; text-transform: none; letter-spacing: 0; }
+    .search-dropdown-clear:hover { background: rgba(0,0,0,0.04); color: #dc2626; }
+    body.dark .search-dropdown-clear:hover { background: rgba(255,255,255,0.06); color: #f87171; }
+    .save-search-btn { padding: 6px 12px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 8px; color: #6366f1; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .save-search-btn:hover { background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.3); transform: translateY(-1px); }
+    .save-search-btn:active { transform: translateY(0) scale(0.98); }
+    body.dark .save-search-btn { background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.3); }
+    body.dark .save-search-btn:hover { background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.4); }
+    .saved-search-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: #57534e; transition: all 0.15s; border: 1px solid rgba(99, 102, 241, 0.1); background: rgba(99, 102, 241, 0.02); margin-bottom: 4px; }
+    .saved-search-item:hover { background: rgba(99, 102, 241, 0.08); border-color: rgba(99, 102, 241, 0.2); color: #1c1917; }
+    body.dark .saved-search-item { color: #a8a29e; background: rgba(99, 102, 241, 0.05); border-color: rgba(99, 102, 241, 0.15); }
+    body.dark .saved-search-item:hover { background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.25); color: #fafaf9; }
+    .saved-search-icon { color: #6366f1; flex-shrink: 0; }
+    .saved-search-name { flex: 1; font-weight: 600; }
+    .saved-search-query { font-size: 11px; color: #a8a29e; opacity: 0.8; }
 
     /* Date filter pills */
     .date-filters {
@@ -422,6 +504,13 @@
     /* Grid */
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 20px; }
     .list { display: flex; flex-direction: column; gap: 6px; max-width: 900px; }
+
+    /* Virtual scrolling */
+    .virtual-scroll-container { position: relative; width: 100%; }
+    .virtual-scroll-spacer { width: 100%; }
+    .virtual-scroll-content { position: absolute; top: 0; left: 0; right: 0; }
+    .virtual-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 20px; }
+    .virtual-list { display: flex; flex-direction: column; gap: 6px; max-width: 900px; }
 
     .card {
       background: white;
@@ -1313,6 +1402,8 @@
         </div>
         <button class="sidebar-btn ai-chat-btn" id="chatBtn"><span class="icon icon-sm" id="chatBtnIcon"></span> Ask Hippo</button>
         <button class="sidebar-btn" id="settingsBtn"><span class="icon icon-sm" id="settingsIcon"></span> AI Settings</button>
+        <button class="sidebar-btn" id="exportBtn"><span class="icon icon-sm" id="exportIcon"></span> Export Index</button>
+        <button class="sidebar-btn" id="importBtn"><span class="icon icon-sm" id="importIcon"></span> Import Index</button>
         <button class="sidebar-btn" id="darkModeBtn"><span class="icon icon-sm" id="themeIcon"></span> <span id="themeText">Dark Mode</span></button>
         <button class="sidebar-btn danger" id="resetBtn"><span class="icon icon-sm" id="resetIcon"></span> Reset Index</button>
       </div>
@@ -1320,18 +1411,25 @@
 
     <main class="main">
       <div class="search-bar">
-        <div style="display:flex;align-items:center;gap:0;">
-          <div class="search-container" style="flex:1;">
-            <span class="icon icon-md" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
-            <div class="active-tags" id="activeTags"></div>
-            <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)">
-            <div class="ai-badge" id="nlBadge" style="display:none;"><span class="icon">&#10024;</span> AI</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="search-wrapper" style="flex:1;position:relative;">
+            <div class="search-container">
+              <span class="icon icon-md" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
+              <div class="active-tags" id="activeTags"></div>
+              <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)">
+              <div class="ai-badge" id="nlBadge" style="display:none;"><span class="icon">&#10024;</span> AI</div>
+            </div>
+            <div class="recent-searches" id="recentSearchesDropdown"></div>
           </div>
+          <button class="save-search-btn" id="saveSearchBtn" style="display:none;" title="Save this search">
+            <span class="icon icon-sm">&#128190;</span> Save
+          </button>
           <div class="search-mode">
             <button class="search-mode-btn active" id="searchModeText" data-mode="text"><span class="icon icon-sm" id="searchModeTextIcon"></span> Text</button>
             <button class="search-mode-btn" id="searchModeSemantic" data-mode="semantic"><span class="icon icon-sm" id="searchModeSemanticIcon"></span> AI</button>
             <button class="search-mode-btn" id="searchModeSymbol" data-mode="symbol"><span class="icon icon-sm" id="searchModeSymbolIcon"></span> Code</button>
           </div>
+          <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle theme"><span class="icon" id="themeToggleIcon"></span></button>
         </div>
         <div class="tag-bar" id="tagBar"></div>
         <div class="nl-interpretation" id="nlInterpretation"></div>
@@ -1353,6 +1451,9 @@
           <button class="date-filter-btn" data-date="month">This Month</button>
         </div>
         <span class="result-count" id="resultCount">0 files</span>
+        <button class="filter-btn" id="multiSelectToggle" title="Toggle multi-select mode">
+          <span class="icon icon-sm" id="multiSelectIcon"></span> Multi-Select
+        </button>
         <div class="view-toggle">
           <button class="view-btn active" id="gridViewBtn" title="Grid view"><span class="icon icon-sm" id="gridIcon"></span></button>
           <button class="view-btn" id="listViewBtn" title="List view"><span class="icon icon-sm" id="listIcon"></span></button>
@@ -1447,7 +1548,9 @@
     <div class="bulk-divider"></div>
     <button class="bulk-btn" id="bulkFavorite"><span class="icon icon-sm" id="bulkStarIcon"></span> Favorite</button>
     <button class="bulk-btn" id="bulkTag"><span class="icon icon-sm" id="bulkTagIcon"></span> Add Tag</button>
-    <button class="bulk-btn" id="bulkSelectAll"><span class="icon icon-sm" id="bulkSelectIcon"></span> Select All</button>
+    <button class="bulk-btn danger" id="bulkDelete"><span class="icon icon-sm" id="bulkDeleteIcon"></span> Delete</button>
+    <div class="bulk-divider"></div>
+    <button class="bulk-btn" id="bulkSelectAll"><span class="icon icon-sm" id="bulkSelectIcon"></span> <span id="bulkSelectText">Select All</span></button>
     <button class="bulk-close" id="bulkClose"><span class="icon icon-sm" id="bulkCloseIcon"></span></button>
   </div>
 
@@ -2464,7 +2567,15 @@
         // Memory/elephant brain icon
         memory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.08"/><circle cx="12" cy="12" r="9"/><path d="M12 6v2"/><path d="M12 16v2"/><path d="M6 12h2"/><path d="M16 12h2"/><circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.2"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>',
         // Organize/magic wand icon
-        organize: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 4-1 1 4 4 1-1a2.83 2.83 0 1 0-4-4Z"/><path d="m13 6-8.5 8.5a2.12 2.12 0 1 0 3 3L16 9"/><path d="m8 15 2 2"/><path d="M3 21h4"/><path d="M17 21h4"/><path d="M19 17v4"/><path d="M5 17v4"/></svg>'
+        organize: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 4-1 1 4 4 1-1a2.83 2.83 0 1 0-4-4Z"/><path d="m13 6-8.5 8.5a2.12 2.12 0 1 0 3 3L16 9"/><path d="m8 15 2 2"/><path d="M3 21h4"/><path d="M17 21h4"/><path d="M19 17v4"/><path d="M5 17v4"/></svg>',
+        // Watch/eye-scan icon
+        watch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M12 9v6" stroke-width="1" opacity="0.5"/></svg>',
+        // Play icon (for watching)
+        play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+        // Pause icon
+        pause: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
+        // Stop icon
+        stop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>'
       };
 
       // State
@@ -2475,13 +2586,22 @@
       var filterType = 'all';
       var activeTags = [];
       var viewMode = 'grid';
-      var darkMode = localStorage.getItem('hippo-dark') === 'true';
+      // Initialize dark mode from localStorage or system preference
+      var darkMode = (function() {
+        var stored = localStorage.getItem('hippo-theme');
+        if (stored !== null) {
+          return stored === 'dark';
+        }
+        // Check system preference
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      })();
       var convertFileSrc = null;
       var invoke = null;
 
       // Bulk selection state
       var selectedIds = [];
       var lastSelectedIdx = -1;
+      var isMultiSelectMode = false;
 
       // Thumbnail cache: path -> thumbnail path
       var thumbnailCache = {};
@@ -2507,9 +2627,24 @@
       // UX enhancements state
       var keyboardFocusIndex = -1;
       var recentSearches = JSON.parse(localStorage.getItem('hippo-recent-searches') || '[]');
+      var savedSearches = JSON.parse(localStorage.getItem('hippo-saved-searches') || '[]');
       var dateFilter = 'all'; // 'all', 'today', 'week', 'month'
       var autoTagEnabled = localStorage.getItem('hippo-auto-tag') === 'true';
+
+      // File watcher state
+      var watcherStats = {
+        total_watched_paths: 0,
+        events_processed: 0,
+        files_created: 0,
+        files_modified: 0,
+        files_deleted: 0,
+        files_renamed: 0,
+        is_watching: false,
+        is_paused: false
+      };
+      var watcherEnabled = localStorage.getItem('hippo-watcher-enabled') === 'true';
       var showRecentSearches = false;
+      var searchDropdownBlurTimeout = null;
 
       // Apply dark mode on load
       if (darkMode) document.body.classList.add('dark');
@@ -2519,15 +2654,139 @@
       var cmdItems = [];
       var cmdMode = 'commands'; // 'commands' or 'files'
 
+      // Virtual scrolling state
+      var virtualScroller = {
+        items: [],
+        viewMode: 'grid',
+        container: null,
+        scrollParent: null,
+        overscan: 5,
+        rafId: null,
+        resizeObserver: null,
+        gridItemWidth: 190,
+        gridItemHeight: 260,
+        gridGap: 20,
+        listItemHeight: 48,
+        listGap: 6,
+        init: function(container, scrollParent) {
+          this.container = container;
+          this.scrollParent = scrollParent;
+          this.setupScrollListener();
+          this.setupResizeObserver();
+        },
+        setupScrollListener: function() {
+          var self = this;
+          if (this.scrollParent) {
+            this.scrollParent.addEventListener('scroll', function() {
+              if (self.rafId) return;
+              self.rafId = requestAnimationFrame(function() {
+                self.render();
+                self.rafId = null;
+              });
+            }, { passive: true });
+          }
+        },
+        setupResizeObserver: function() {
+          var self = this;
+          if (typeof ResizeObserver !== 'undefined') {
+            this.resizeObserver = new ResizeObserver(function() {
+              self.render();
+            });
+            if (this.scrollParent) {
+              this.resizeObserver.observe(this.scrollParent);
+            }
+          }
+        },
+        setItems: function(items, mode) {
+          this.items = items;
+          this.viewMode = mode;
+          this.render();
+        },
+        getVisibleRange: function() {
+          if (!this.scrollParent || this.items.length === 0) {
+            return { start: 0, end: 0, offsetY: 0 };
+          }
+          var scrollTop = this.scrollParent.scrollTop;
+          var containerHeight = this.scrollParent.clientHeight;
+          var containerWidth = this.container ? this.container.clientWidth : this.scrollParent.clientWidth;
+          if (this.viewMode === 'grid') {
+            var cols = Math.floor((containerWidth + this.gridGap) / (this.gridItemWidth + this.gridGap)) || 1;
+            var rowHeight = this.gridItemHeight + this.gridGap;
+            var startRow = Math.floor(scrollTop / rowHeight);
+            var endRow = Math.ceil((scrollTop + containerHeight) / rowHeight);
+            startRow = Math.max(0, startRow - this.overscan);
+            endRow = Math.min(Math.ceil(this.items.length / cols), endRow + this.overscan);
+            var start = startRow * cols;
+            var end = Math.min(this.items.length, endRow * cols);
+            var offsetY = startRow * rowHeight;
+            return { start: start, end: end, offsetY: offsetY, cols: cols };
+          } else {
+            var itemHeight = this.listItemHeight + this.listGap;
+            var startIdx = Math.floor(scrollTop / itemHeight);
+            var endIdx = Math.ceil((scrollTop + containerHeight) / itemHeight);
+            startIdx = Math.max(0, startIdx - this.overscan);
+            endIdx = Math.min(this.items.length, endIdx + this.overscan);
+            var offsetY = startIdx * itemHeight;
+            return { start: startIdx, end: endIdx, offsetY: offsetY };
+          }
+        },
+        getTotalHeight: function() {
+          if (this.items.length === 0) return 0;
+          if (this.viewMode === 'grid') {
+            var containerWidth = this.container ? this.container.clientWidth : 800;
+            var cols = Math.floor((containerWidth + this.gridGap) / (this.gridItemWidth + this.gridGap)) || 1;
+            var rows = Math.ceil(this.items.length / cols);
+            return rows * (this.gridItemHeight + this.gridGap);
+          } else {
+            return this.items.length * (this.listItemHeight + this.listGap);
+          }
+        },
+        render: function() {
+          if (!this.container || this.items.length === 0) return;
+          var range = this.getVisibleRange();
+          var visibleItems = this.items.slice(range.start, range.end);
+          var html = '';
+          var containerClass = this.viewMode === 'grid' ? 'virtual-grid' : 'virtual-list';
+          html += '<div class="virtual-scroll-container">';
+          html += '<div class="virtual-scroll-spacer" style="height:' + this.getTotalHeight() + 'px;"></div>';
+          html += '<div class="virtual-scroll-content" style="transform:translateY(' + range.offsetY + 'px);">';
+          html += '<div class="' + containerClass + '">';
+          for (var i = 0; i < visibleItems.length; i++) {
+            var actualIdx = range.start + i;
+            var mem = visibleItems[i];
+            if (this.viewMode === 'grid') {
+              html += renderCard(mem, actualIdx);
+            } else {
+              html += renderListItem(mem, actualIdx);
+            }
+          }
+          html += '</div></div></div>';
+          this.container.innerHTML = html;
+          bindCardEvents();
+        },
+        destroy: function() {
+          if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+          }
+          if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+          }
+        }
+      };
+
       // Initialize static icons
       function initIcons() {
         document.getElementById('logoIcon').innerHTML = icons.hippo;
         document.getElementById('themeIcon').innerHTML = darkMode ? icons.sun : icons.moon;
         document.getElementById('themeText').textContent = darkMode ? 'Light Mode' : 'Dark Mode';
+        document.getElementById('themeToggleIcon').innerHTML = darkMode ? icons.sun : icons.moon;
         document.getElementById('resetIcon').innerHTML = icons.trash;
         document.getElementById('searchIcon').innerHTML = icons.search;
         document.getElementById('gridIcon').innerHTML = icons.grid;
         document.getElementById('listIcon').innerHTML = icons.list;
+        document.getElementById('multiSelectIcon').innerHTML = icons.checkSquare;
         document.getElementById('closeIcon').innerHTML = icons.close;
         document.getElementById('starIcon').innerHTML = icons.star;
         document.getElementById('previewIcon').innerHTML = icons.file;
@@ -2535,6 +2794,7 @@
         // Bulk bar icons
         document.getElementById('bulkStarIcon').innerHTML = icons.star;
         document.getElementById('bulkTagIcon').innerHTML = icons.tag;
+        document.getElementById('bulkDeleteIcon').innerHTML = icons.trash;
         document.getElementById('bulkSelectIcon').innerHTML = icons.checkSquare;
         document.getElementById('bulkCloseIcon').innerHTML = icons.close;
         // AI icons
@@ -2545,6 +2805,9 @@
         document.getElementById('searchModeTextIcon').innerHTML = icons.search;
         document.getElementById('searchModeSemanticIcon').innerHTML = icons.brain;
         document.getElementById('searchModeSymbolIcon').innerHTML = icons.terminal;
+        // Export/Import icons
+        document.getElementById('exportIcon').innerHTML = icons.download;
+        document.getElementById('importIcon').innerHTML = icons.upload;
         // Chat icons
         document.getElementById('chatBtnIcon').innerHTML = icons.hippoAI;
         // Chat window icons
@@ -2844,6 +3107,13 @@
         invoke = window.__TAURI__.core.invoke;
         convertFileSrc = window.__TAURI__.core.convertFileSrc;
 
+        // Initialize virtual scroller
+        var filesContainer = document.getElementById('filesContainer');
+        var scrollParent = document.querySelector('.content');
+        if (filesContainer && scrollParent) {
+          virtualScroller.init(filesContainer, scrollParent);
+        }
+
         invoke('initialize').then(function() {
           loadData();
         }).catch(function(e) {
@@ -2892,7 +3162,111 @@
           invoke('search', { query: query || '', tags: activeTags }).then(function(r) {
             memories = (r.memories || []).map(function(x) { return x.memory; });
             renderFiles();
+            if (query && query.trim()) { addToHistory(query, memories.length); }
+            var saveBtn = document.getElementById('saveSearchBtn');
+            if (saveBtn) { saveBtn.style.display = (query && query.trim()) ? 'flex' : 'none'; }
           });
+        }
+
+        function addToHistory(query, count) {
+          if (!query || query.trim() === '') return;
+          var timestamp = new Date().toISOString();
+          var entry = { query: query.trim(), count: count, timestamp: timestamp };
+          recentSearches = recentSearches.filter(function(item) { return item.query !== entry.query; });
+          recentSearches.unshift(entry);
+          if (recentSearches.length > 20) recentSearches = recentSearches.slice(0, 20);
+          localStorage.setItem('hippo-recent-searches', JSON.stringify(recentSearches));
+        }
+        function removeFromHistory(index) {
+          recentSearches.splice(index, 1);
+          localStorage.setItem('hippo-recent-searches', JSON.stringify(recentSearches));
+          renderSearchDropdown();
+        }
+        function clearHistory() {
+          recentSearches = [];
+          localStorage.setItem('hippo-recent-searches', JSON.stringify(recentSearches));
+          renderSearchDropdown();
+        }
+        function saveSearch(name, query) {
+          if (!name || !query) return;
+          var count = getFiltered().length;
+          var entry = { name: name.trim(), query: query.trim(), count: count };
+          savedSearches = savedSearches.filter(function(item) { return item.name !== entry.name; });
+          savedSearches.push(entry);
+          localStorage.setItem('hippo-saved-searches', JSON.stringify(savedSearches));
+          renderSearchDropdown();
+          showToast('Search saved as "' + name + '"', 'success');
+        }
+        function removeSavedSearch(index) {
+          var name = savedSearches[index].name;
+          savedSearches.splice(index, 1);
+          localStorage.setItem('hippo-saved-searches', JSON.stringify(savedSearches));
+          renderSearchDropdown();
+          showToast('Removed "' + name + '"', 'info');
+        }
+        function runSavedSearch(query) {
+          document.getElementById('searchInput').value = query;
+          search(query);
+          hideSearchDropdown();
+        }
+        function showSearchDropdown() {
+          showRecentSearches = true;
+          renderSearchDropdown();
+        }
+        function hideSearchDropdown() {
+          showRecentSearches = false;
+          document.getElementById('recentSearchesDropdown').classList.remove('show');
+        }
+        function renderSearchDropdown() {
+          var dropdown = document.getElementById('recentSearchesDropdown');
+          if (!dropdown) return;
+          if (!showRecentSearches || (recentSearches.length === 0 && savedSearches.length === 0)) { dropdown.classList.remove('show'); return; }
+          var html = '';
+          if (savedSearches.length > 0) {
+            html += '<div class="search-dropdown-section"><div class="search-dropdown-header">Saved Searches</div>';
+            savedSearches.forEach(function(item, idx) {
+              html += '<div class="saved-search-item" onclick="runSavedSearch(\'' + escapeHtml(item.query) + '\')">';
+              html += '<span class="icon icon-sm saved-search-icon">&#128278;</span>';
+              html += '<div style="flex:1;min-width:0;"><div class="saved-search-name">' + escapeHtml(item.name) + '</div>';
+              html += '<div class="saved-search-query">' + escapeHtml(item.query) + ' (' + item.count + ' files)</div></div>';
+              html += '<button class="recent-search-remove" onclick="event.stopPropagation();removeSavedSearch(' + idx + ')" title="Remove"><span class="icon icon-sm">&#10005;</span></button></div>';
+            });
+            html += '</div>';
+          }
+          if (recentSearches.length > 0) {
+            html += '<div class="search-dropdown-section"><div class="search-dropdown-header">Recent Searches<button class="search-dropdown-clear" onclick="clearHistory()">Clear All</button></div>';
+            recentSearches.forEach(function(item, idx) {
+              var timeAgo = getTimeAgo(item.timestamp);
+              html += '<div class="recent-search-item" onclick="runSavedSearch(\'' + escapeHtml(item.query) + '\')">';
+              html += '<span class="icon icon-sm recent-search-icon">&#128336;</span><div class="recent-search-text">' + escapeHtml(item.query) + '</div>';
+              html += '<div class="recent-search-meta"><span class="recent-search-count">' + item.count + '</span><span class="recent-search-time">' + timeAgo + '</span></div>';
+              html += '<button class="recent-search-remove" onclick="event.stopPropagation();removeFromHistory(' + idx + ')" title="Remove"><span class="icon icon-sm">&#10005;</span></button></div>';
+            });
+            html += '</div>';
+          }
+          dropdown.innerHTML = html;
+          dropdown.classList.add('show');
+        }
+        function getTimeAgo(timestamp) {
+          var now = new Date();
+          var then = new Date(timestamp);
+          var seconds = Math.floor((now - then) / 1000);
+          if (seconds < 60) return 'just now';
+          if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+          if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+          if (seconds < 604800) return Math.floor(seconds / 86400) + 'd ago';
+          return Math.floor(seconds / 604800) + 'w ago';
+        }
+        function escapeHtml(text) {
+          var div = document.createElement('div');
+          div.textContent = text;
+          return div.innerHTML;
+        }
+        function promptSaveSearch() {
+          var query = document.getElementById('searchInput').value.trim();
+          if (!query) { showToast('Enter a search query first', 'info'); return; }
+          var name = prompt('Name this search:', query);
+          if (name) saveSearch(name, query);
         }
 
         function updateStatusIndicators() {
@@ -3211,23 +3585,29 @@
             return;
           }
 
-          var html = '';
-          if (viewMode === 'grid') {
-            html = '<div class="grid">';
-            filtered.slice(0, 100).forEach(function(mem, i) {
-              html += renderCard(mem, i);
-            });
-            html += '</div>';
+          // Use virtual scrolling for large lists (>100 items)
+          if (filtered.length > 100) {
+            virtualScroller.setItems(filtered, viewMode);
           } else {
-            html = '<div class="list">';
-            filtered.slice(0, 100).forEach(function(mem, i) {
-              html += renderListItem(mem, i);
-            });
-            html += '</div>';
-          }
+            // For small lists, render normally for simplicity
+            var html = '';
+            if (viewMode === 'grid') {
+              html = '<div class="grid">';
+              filtered.forEach(function(mem, i) {
+                html += renderCard(mem, i);
+              });
+              html += '</div>';
+            } else {
+              html = '<div class="list">';
+              filtered.forEach(function(mem, i) {
+                html += renderListItem(mem, i);
+              });
+              html += '</div>';
+            }
 
-          document.getElementById('filesContainer').innerHTML = html;
-          bindCardEvents();
+            document.getElementById('filesContainer').innerHTML = html;
+            bindCardEvents();
+          }
         }
 
         function renderCard(mem, idx) {
@@ -3238,7 +3618,7 @@
           var isSelected = selectedIds.indexOf(mem.id) !== -1;
 
           var html = '<div class="card' + (isSelected ? ' selected' : '') + '" data-idx="' + idx + '" data-id="' + mem.id + '">';
-          html += '<div class="card-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
+          html += '<div class="card-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 || isMultiSelectMode ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
           html += '<span class="icon icon-sm">' + icons.check + '</span>';
           html += '</div>';
           html += '<div class="card-preview" style="background:' + color + '">';
@@ -3269,7 +3649,7 @@
           var isSelected = selectedIds.indexOf(mem.id) !== -1;
 
           var html = '<div class="list-item' + (isSelected ? ' selected' : '') + '" data-idx="' + idx + '" data-id="' + mem.id + '">';
-          html += '<div class="list-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
+          html += '<div class="list-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 || isMultiSelectMode ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
           html += '<span class="icon icon-sm">' + icons.check + '</span>';
           html += '</div>';
           html += '<div class="list-thumb" style="background:' + color + '">';
@@ -3401,9 +3781,19 @@
         function updateBulkBar() {
           var bulkBar = document.getElementById('bulkBar');
           var bulkCount = document.getElementById('bulkCount');
+          var bulkSelectText = document.getElementById('bulkSelectText');
+          var filtered = getFiltered();
+
           if (selectedIds.length > 0) {
             bulkBar.classList.add('open');
             bulkCount.textContent = selectedIds.length + ' selected';
+
+            // Update Select All button text
+            if (selectedIds.length === filtered.length) {
+              bulkSelectText.textContent = 'Deselect All';
+            } else {
+              bulkSelectText.textContent = 'Select All';
+            }
           } else {
             bulkBar.classList.remove('open');
           }
@@ -3467,38 +3857,46 @@
           var tag = document.getElementById('bulkTagInput').value.trim().toLowerCase();
           if (!tag || selectedIds.length === 0) return;
 
-          var pending = selectedIds.length;
-          var successCount = 0;
-
-          selectedIds.forEach(function(id) {
-            invoke('add_tag', { memoryId: id, tag: tag }).then(function() {
-              memories.forEach(function(m) {
-                if (m.id === id) {
-                  if (!m.tags) m.tags = [];
-                  if (!m.tags.some(function(t) { return t.name === tag; })) {
-                    m.tags.push({ name: tag, source: 'User' });
-                  }
+          invoke('bulk_add_tag', { memoryIds: selectedIds, tag: tag }).then(function(result) {
+            showToast(result, 'success');
+            // Update local memory objects
+            memories.forEach(function(m) {
+              if (selectedIds.indexOf(m.id) !== -1) {
+                if (!m.tags) m.tags = [];
+                if (!m.tags.some(function(t) { return t.name === tag; })) {
+                  m.tags.push({ name: tag, source: 'User' });
                 }
-              });
-              successCount++;
-              pending--;
-              if (pending === 0) {
-                showToast('Tag added to ' + successCount + ' files', 'success');
-                closeTagModal();
-                clearSelection();
-                invoke('get_tags').then(function(tags) {
-                  allTags = tags || [];
-                  renderTagBar();
-                });
-              }
-            }).catch(function() {
-              pending--;
-              if (pending === 0) {
-                showToast('Tag added to ' + successCount + ' files', 'success');
-                closeTagModal();
-                clearSelection();
               }
             });
+            closeTagModal();
+            clearSelection();
+            invoke('get_tags').then(function(tags) {
+              allTags = tags || [];
+              renderTagBar();
+            });
+          }).catch(function(err) {
+            showToast('Failed to add tag: ' + err, 'error');
+          });
+        }
+
+        function bulkDeleteFiles() {
+          if (selectedIds.length === 0) return;
+
+          var count = selectedIds.length;
+          if (!confirm('Are you sure you want to delete ' + count + ' file' + (count === 1 ? '' : 's') + '? This will remove them from the index.')) {
+            return;
+          }
+
+          invoke('bulk_delete', { memoryIds: selectedIds }).then(function(result) {
+            showToast(result, 'success');
+            // Remove deleted memories from local array
+            memories = memories.filter(function(m) {
+              return selectedIds.indexOf(m.id) === -1;
+            });
+            clearSelection();
+            renderFiles();
+          }).catch(function(err) {
+            showToast('Failed to delete files: ' + err, 'error');
           });
         }
 
@@ -4849,14 +5247,33 @@
           }
         };
 
-        document.getElementById('darkModeBtn').onclick = function() {
+        // Theme toggle function
+        function toggleTheme() {
           darkMode = !darkMode;
-          localStorage.setItem('hippo-dark', darkMode);
+          localStorage.setItem('hippo-theme', darkMode ? 'dark' : 'light');
           document.body.classList.toggle('dark', darkMode);
+
+          // Update sidebar button
           document.getElementById('themeIcon').innerHTML = darkMode ? icons.sun : icons.moon;
           document.getElementById('themeText').textContent = darkMode ? 'Light Mode' : 'Dark Mode';
+
+          // Update header button with rotation animation
+          var headerBtn = document.getElementById('themeToggleBtn');
+          var headerIcon = document.getElementById('themeToggleIcon');
+          headerIcon.innerHTML = darkMode ? icons.sun : icons.moon;
+          headerBtn.classList.add('rotating');
+          setTimeout(function() {
+            headerBtn.classList.remove('rotating');
+          }, 500);
+
           showToast(darkMode ? 'Dark mode enabled' : 'Light mode enabled', '');
-        };
+        }
+
+        // Sidebar dark mode button
+        document.getElementById('darkModeBtn').onclick = toggleTheme;
+
+        // Header theme toggle button
+        document.getElementById('themeToggleBtn').onclick = toggleTheme;
 
         document.getElementById('searchInput').oninput = function(e) {
           var query = e.target.value;
@@ -4903,6 +5320,43 @@
           }
         };
 
+        document.getElementById('searchInput').addEventListener('focus', function() {
+          if (searchDropdownBlurTimeout) {
+            clearTimeout(searchDropdownBlurTimeout);
+            searchDropdownBlurTimeout = null;
+          }
+          if (!this.value || this.value.trim() === '') {
+            showSearchDropdown();
+          }
+        });
+
+        document.getElementById('searchInput').addEventListener('blur', function() {
+          searchDropdownBlurTimeout = setTimeout(function() {
+            hideSearchDropdown();
+          }, 200);
+        });
+
+        document.getElementById('searchInput').addEventListener('input', function() {
+          if (this.value && this.value.trim()) {
+            hideSearchDropdown();
+            var saveBtn = document.getElementById('saveSearchBtn');
+            if (saveBtn) saveBtn.style.display = 'flex';
+          } else {
+            showSearchDropdown();
+            var saveBtn = document.getElementById('saveSearchBtn');
+            if (saveBtn) saveBtn.style.display = 'none';
+          }
+        });
+
+        document.getElementById('saveSearchBtn').onclick = promptSaveSearch;
+
+        document.getElementById('recentSearchesDropdown').addEventListener('mousedown', function(e) {
+          if (searchDropdownBlurTimeout) {
+            clearTimeout(searchDropdownBlurTimeout);
+            searchDropdownBlurTimeout = null;
+          }
+        });
+
         document.querySelectorAll('.filter-btn').forEach(function(btn) {
           btn.onclick = function() {
             document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -4935,6 +5389,17 @@
           viewMode = 'list';
           document.getElementById('listViewBtn').classList.add('active');
           document.getElementById('gridViewBtn').classList.remove('active');
+          renderFiles();
+        };
+
+        document.getElementById('multiSelectToggle').onclick = function() {
+          isMultiSelectMode = !isMultiSelectMode;
+          if (isMultiSelectMode) {
+            document.getElementById('multiSelectToggle').classList.add('active');
+          } else {
+            document.getElementById('multiSelectToggle').classList.remove('active');
+            clearSelection();
+          }
           renderFiles();
         };
 
@@ -4998,6 +5463,10 @@
 
         document.getElementById('bulkTag').onclick = function() {
           openTagModal();
+        };
+
+        document.getElementById('bulkDelete').onclick = function() {
+          bulkDeleteFiles();
         };
 
         document.getElementById('bulkSelectAll').onclick = function() {
@@ -5258,5 +5727,19 @@
       }
     })();
   </script>
+  <!-- Prism.js scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-typescript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-rust.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-go.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markup.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-css.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markdown.min.js"></script>
 </body>
 </html>

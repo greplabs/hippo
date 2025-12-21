@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # Hippo Web Service
+  hippo-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: hippo-web
+    restart: unless-stopped
+    ports:
+      - "${HIPPO_PORT:-3000}:3000"
+    environment:
+      # Server configuration
+      HIPPO_HOST: ${HIPPO_HOST:-0.0.0.0}
+      HIPPO_PORT: ${HIPPO_PORT:-3000}
+
+      # Database
+      HIPPO_DB_PATH: ${HIPPO_DB_PATH:-/data/hippo.db}
+
+      # Qdrant vector database (optional)
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6334}
+      QDRANT_ENABLED: ${QDRANT_ENABLED:-true}
+
+      # Logging
+      RUST_LOG: ${RUST_LOG:-info}
+      RUST_BACKTRACE: ${RUST_BACKTRACE:-0}
+
+      # AI Features (optional - Ollama must be running on host)
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+
+      # Performance tuning
+      TOKIO_WORKER_THREADS: ${TOKIO_WORKER_THREADS:-4}
+    volumes:
+      # Database persistence
+      - hippo-data:/data
+
+      # User files to index (customize these paths)
+      - ${HIPPO_INDEX_PATH_1:-./storage}:/mnt/index/storage:ro
+      - ${HIPPO_INDEX_PATH_2:-./snapshots}:/mnt/index/snapshots:ro
+      # Add more paths as needed:
+      # - /path/to/your/documents:/mnt/index/documents:ro
+      # - /path/to/your/photos:/mnt/index/photos:ro
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    networks:
+      - hippo-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '${HIPPO_CPU_LIMIT:-2.0}'
+          memory: ${HIPPO_MEM_LIMIT:-2G}
+        reservations:
+          cpus: '${HIPPO_CPU_RESERVE:-0.5}'
+          memory: ${HIPPO_MEM_RESERVE:-512M}
+
+  # Qdrant Vector Database (optional but recommended for semantic search)
+  qdrant:
+    image: qdrant/qdrant:v1.12.2
+    container_name: hippo-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"  # HTTP API
+      - "${QDRANT_GRPC_PORT:-6334}:6334"  # gRPC API
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+      QDRANT__LOG_LEVEL: ${QDRANT_LOG_LEVEL:-INFO}
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - hippo-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '${QDRANT_CPU_LIMIT:-1.0}'
+          memory: ${QDRANT_MEM_LIMIT:-1G}
+        reservations:
+          cpus: '${QDRANT_CPU_RESERVE:-0.25}'
+          memory: ${QDRANT_MEM_RESERVE:-256M}
+
+networks:
+  hippo-network:
+    driver: bridge
+    name: hippo-network
+
+volumes:
+  # Persisted data
+  hippo-data:
+    name: hippo-data
+    driver: local
+  qdrant-data:
+    name: qdrant-data
+    driver: local

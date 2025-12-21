@@ -1,0 +1,42 @@
+[package]
+name = "hippo-web"
+version.workspace = true
+edition = "2021"
+description = "REST API server for Hippo - intelligent file memory system"
+
+[features]
+default = []
+test-server = []
+
+[dependencies]
+# Core library
+hippo-core = { path = "../hippo-core" }
+
+# Web framework
+axum = { version = "0.7", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+
+# Utils
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }
+tempfile = "3"
+tokio-test = "0.4"
