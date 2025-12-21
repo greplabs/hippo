@@ -45,9 +45,5 @@
       "versionCode": 1
     }
   },
-  "plugins": {
-    "fs": {
-      "scope": ["$APPDATA/*", "$APPDATA/**", "$DOCUMENT/*", "$DOCUMENT/**", "$PICTURE/*", "$PICTURE/**", "$VIDEO/*", "$VIDEO/**"]
-    }
-  }
+  "plugins": {}
 }
