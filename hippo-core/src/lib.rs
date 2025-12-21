@@ -620,6 +620,11 @@ impl Hippo {
         self.searcher.hybrid_search(query, limit).await
     }
 
+    /// Perform pure semantic search using embeddings
+    pub async fn semantic_search(&self, query: &str, limit: usize) -> Result<SearchResults> {
+        self.searcher.semantic_search(query, limit).await
+    }
+
     /// Get Qdrant statistics
     pub async fn qdrant_stats(&self) -> Result<qdrant::QdrantStats> {
         self.storage.qdrant_stats().await

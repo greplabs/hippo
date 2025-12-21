@@ -168,10 +168,12 @@ async fn get_stats(State(state): State<AppState>) -> Result<Json<IndexStats>, Ap
 /// - `sort` (optional): Sort order (Relevance, DateNewest, DateOldest, NameAsc, NameDesc, SizeAsc, SizeDesc)
 /// - `limit` (optional): Maximum results to return (default: 50)
 /// - `offset` (optional): Offset for pagination (default: 0)
+/// - `mode` (optional): Search mode - "keyword" (default), "semantic", or "hybrid"
 ///
 /// ## Example
 /// ```
 /// GET /api/search?q=sunset&tags=vacation,-private&type=Image&sort=DateNewest&limit=20
+/// GET /api/search?q=beautiful landscape&mode=hybrid&limit=20
 /// ```
 ///
 /// ## Response
@@ -184,8 +186,36 @@ async fn search_memories(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
 ) -> Result<Json<SearchResults>, ApiError> {
-    let query = params.into_search_query()?;
-    let results = state.hippo.search_advanced(query).await?;
+    let mode = params.mode.as_deref().unwrap_or("keyword");
+    let limit = params.limit.unwrap_or(50);
+
+    // Use different search methods based on mode
+    let results = match mode {
+        "hybrid" => {
+            // Hybrid search: 70% semantic + 30% keyword
+            if let Some(ref q) = params.q {
+                state.hippo.hybrid_search(q, limit).await?
+            } else {
+                let query = params.into_search_query()?;
+                state.hippo.search_advanced(query).await?
+            }
+        }
+        "semantic" => {
+            // Pure semantic/embedding search
+            if let Some(ref q) = params.q {
+                state.hippo.semantic_search(q, limit).await?
+            } else {
+                let query = params.into_search_query()?;
+                state.hippo.search_advanced(query).await?
+            }
+        }
+        _ => {
+            // Default: keyword-based search with filters
+            let query = params.into_search_query()?;
+            state.hippo.search_advanced(query).await?
+        }
+    };
+
     Ok(Json(results))
 }
 
@@ -423,6 +453,8 @@ struct SearchParams {
     sort: Option<String>,
     limit: Option<usize>,
     offset: Option<usize>,
+    /// Search mode: "keyword" (default), "semantic", or "hybrid"
+    mode: Option<String>,
 }
 
 impl SearchParams {
