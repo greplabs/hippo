@@ -4963,40 +4963,50 @@
             return;
           }
 
-          // Get file paths for analysis
-          var filePaths = filesToAnalyze.map(function(id) {
+          // Get memory info for display
+          var fileInfos = filesToAnalyze.map(function(id) {
             var mem = memories.find(function(m) { return m.id === id; });
-            return mem ? mem.path : null;
+            return mem ? { id: id, name: mem.path.split('/').pop() } : null;
           }).filter(Boolean);
 
-          if (filePaths.length === 0) return;
+          if (fileInfos.length === 0) return;
 
           // Open chat if not open
           if (!chatOpen) openChat();
 
-          var fileNames = filePaths.map(function(p) { return p.split('/').pop(); });
-          var query = 'Analyze ' + (filePaths.length === 1 ? fileNames[0] : filePaths.length + ' files: ' + fileNames.slice(0, 3).join(', ') + (fileNames.length > 3 ? '...' : ''));
+          var fileNames = fileInfos.map(function(f) { return f.name; });
+          var query = 'Analyze ' + (fileInfos.length === 1 ? fileNames[0] : fileInfos.length + ' files: ' + fileNames.slice(0, 3).join(', ') + (fileNames.length > 3 ? '...' : ''));
           addChatMessage('user', query);
 
           document.getElementById('chatInput').disabled = true;
           document.getElementById('chatSendBtn').disabled = true;
-          showAiProgress('Analyzing ' + filePaths.length + ' file' + (filePaths.length > 1 ? 's' : '') + '...');
+          showAiProgress('Analyzing ' + fileInfos.length + ' file' + (fileInfos.length > 1 ? 's' : '') + '...');
           addChatLoading();
 
-          // Use ollama_analyze for file analysis
-          invoke('ollama_analyze', { filePaths: filePaths }).then(function(response) {
-            hideAiProgress();
-            removeChatLoading();
-            addChatMessage('assistant', response);
-            document.getElementById('chatInput').disabled = false;
-            document.getElementById('chatSendBtn').disabled = false;
-          }).catch(function(e) {
-            hideAiProgress();
-            removeChatLoading();
-            addChatMessage('assistant', 'Analysis failed: ' + e);
-            document.getElementById('chatInput').disabled = false;
-            document.getElementById('chatSendBtn').disabled = false;
-          });
+          // Analyze files sequentially, collecting results
+          var results = [];
+          var analyzeNext = function(index) {
+            if (index >= fileInfos.length) {
+              // All done, show combined results
+              hideAiProgress();
+              removeChatLoading();
+              var combined = results.map(function(r, i) {
+                return '**' + fileInfos[i].name + '**\n' + (r.summary || r.description || JSON.stringify(r, null, 2));
+              }).join('\n\n---\n\n');
+              addChatMessage('assistant', combined || 'Analysis complete.');
+              document.getElementById('chatInput').disabled = false;
+              document.getElementById('chatSendBtn').disabled = false;
+              return;
+            }
+            invoke('ollama_analyze', { memoryId: fileInfos[index].id }).then(function(response) {
+              results.push(response);
+              analyzeNext(index + 1);
+            }).catch(function(e) {
+              results.push({ error: e });
+              analyzeNext(index + 1);
+            });
+          };
+          analyzeNext(0);
         }
 
         function summarizeSelectedFiles() {
@@ -5006,37 +5016,49 @@
             return;
           }
 
-          var filePaths = filesToSummarize.map(function(id) {
+          // Get memory info for display
+          var fileInfos = filesToSummarize.map(function(id) {
             var mem = memories.find(function(m) { return m.id === id; });
-            return mem ? mem.path : null;
+            return mem ? { id: id, name: mem.path.split('/').pop() } : null;
           }).filter(Boolean);
 
-          if (filePaths.length === 0) return;
+          if (fileInfos.length === 0) return;
 
           if (!chatOpen) openChat();
 
-          var fileNames = filePaths.map(function(p) { return p.split('/').pop(); });
-          var query = 'Summarize ' + (filePaths.length === 1 ? fileNames[0] : filePaths.length + ' files');
+          var fileNames = fileInfos.map(function(f) { return f.name; });
+          var query = 'Summarize ' + (fileInfos.length === 1 ? fileNames[0] : fileInfos.length + ' files');
           addChatMessage('user', query);
 
           document.getElementById('chatInput').disabled = true;
           document.getElementById('chatSendBtn').disabled = true;
-          showAiProgress('Summarizing ' + filePaths.length + ' file' + (filePaths.length > 1 ? 's' : '') + '...');
+          showAiProgress('Summarizing ' + fileInfos.length + ' file' + (fileInfos.length > 1 ? 's' : '') + '...');
           addChatLoading();
 
-          invoke('ollama_summarize', { filePaths: filePaths }).then(function(response) {
-            hideAiProgress();
-            removeChatLoading();
-            addChatMessage('assistant', response);
-            document.getElementById('chatInput').disabled = false;
-            document.getElementById('chatSendBtn').disabled = false;
-          }).catch(function(e) {
-            hideAiProgress();
-            removeChatLoading();
-            addChatMessage('assistant', 'Summarization failed: ' + e);
-            document.getElementById('chatInput').disabled = false;
-            document.getElementById('chatSendBtn').disabled = false;
-          });
+          // Summarize files sequentially, collecting results
+          var results = [];
+          var summarizeNext = function(index) {
+            if (index >= fileInfos.length) {
+              // All done, show combined results
+              hideAiProgress();
+              removeChatLoading();
+              var combined = results.map(function(r, i) {
+                return '**' + fileInfos[i].name + '**\n' + (typeof r === 'string' ? r : (r.summary || JSON.stringify(r, null, 2)));
+              }).join('\n\n---\n\n');
+              addChatMessage('assistant', combined || 'Summarization complete.');
+              document.getElementById('chatInput').disabled = false;
+              document.getElementById('chatSendBtn').disabled = false;
+              return;
+            }
+            invoke('ollama_summarize', { memoryId: fileInfos[index].id }).then(function(response) {
+              results.push(response);
+              summarizeNext(index + 1);
+            }).catch(function(e) {
+              results.push({ error: e });
+              summarizeNext(index + 1);
+            });
+          };
+          summarizeNext(0);
         }
 
         // AI Progress Indicator Functions

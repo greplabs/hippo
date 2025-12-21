@@ -427,9 +427,31 @@ async fn open_file(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn pick_folder() -> Result<Option<String>, String> {
+async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
     println!("[Hippo] Opening folder picker...");
-    Ok(None)
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+
+    app.dialog()
+        .file()
+        .pick_folder(move |folder_path| {
+            let result = folder_path.map(|p| p.to_string());
+            let _ = sender.send(result);
+        });
+
+    // Wait for the dialog result
+    match receiver.recv() {
+        Ok(Some(path)) => {
+            println!("[Hippo] Folder selected: {}", path);
+            Ok(Some(path))
+        }
+        Ok(None) => {
+            println!("[Hippo] Folder picker cancelled");
+            Ok(None)
+        }
+        Err(_) => Err("Failed to receive folder path".to_string()),
+    }
 }
 
 #[tauri::command]
