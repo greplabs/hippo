@@ -327,7 +327,7 @@ impl Organizer {
         // Find the highest confidence virtual path
         virtual_paths
             .iter()
-            .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap())
+            .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal))
             .map(|vp| vp.path.clone())
     }
 

@@ -9,6 +9,41 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
+/// Helper to parse JSON from database, converting errors to rusqlite errors
+fn parse_json<T: serde::de::DeserializeOwned>(s: &str) -> std::result::Result<T, rusqlite::Error> {
+    serde_json::from_str(s).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Text,
+            Box::new(e),
+        )
+    })
+}
+
+/// Helper to parse UUID from database, converting errors to rusqlite errors
+fn parse_uuid(s: &str) -> std::result::Result<uuid::Uuid, rusqlite::Error> {
+    uuid::Uuid::parse_str(s).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Text,
+            Box::new(e),
+        )
+    })
+}
+
+/// Helper to parse datetime from database, converting errors to rusqlite errors
+fn parse_datetime(s: &str) -> std::result::Result<chrono::DateTime<chrono::Utc>, rusqlite::Error> {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(
+                0,
+                rusqlite::types::Type::Text,
+                Box::new(e),
+            )
+        })
+}
+
 #[allow(dead_code)]
 pub struct Storage {
     db: Mutex<Connection>,
@@ -251,22 +286,16 @@ impl Storage {
             Ok(Memory {
                 id,
                 path: PathBuf::from(row.get::<_, String>(0)?),
-                source: serde_json::from_str(&row.get::<_, String>(1)?).unwrap(),
-                kind: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                metadata: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-                tags: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+                source: parse_json(&row.get::<_, String>(1)?)?,
+                kind: parse_json(&row.get::<_, String>(2)?)?,
+                metadata: parse_json(&row.get::<_, String>(3)?)?,
+                tags: parse_json(&row.get::<_, String>(4)?)?,
                 embedding_id: row.get(5)?,
-                connections: serde_json::from_str(&row.get::<_, String>(6)?).unwrap(),
+                connections: parse_json(&row.get::<_, String>(6)?)?,
                 is_favorite: row.get::<_, i32>(7).unwrap_or(0) == 1,
-                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(8)?)
-                    .unwrap()
-                    .with_timezone(&chrono::Utc),
-                modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                    .unwrap()
-                    .with_timezone(&chrono::Utc),
-                indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                    .unwrap()
-                    .with_timezone(&chrono::Utc),
+                created_at: parse_datetime(&row.get::<_, String>(8)?)?,
+                modified_at: parse_datetime(&row.get::<_, String>(9)?)?,
+                indexed_at: parse_datetime(&row.get::<_, String>(10)?)?,
             })
         });
 
@@ -358,24 +387,18 @@ impl Storage {
 
         let result = stmt.query_row(params![path_str.as_ref()], |row| {
             Ok(Memory {
-                id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                id: parse_uuid(&row.get::<_, String>(0)?)?,
                 path: PathBuf::from(row.get::<_, String>(1)?),
-                source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-                metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
-                tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+                source: parse_json(&row.get::<_, String>(2)?)?,
+                kind: parse_json(&row.get::<_, String>(3)?)?,
+                metadata: parse_json(&row.get::<_, String>(4)?)?,
+                tags: parse_json(&row.get::<_, String>(5)?)?,
                 embedding_id: row.get(6)?,
-                connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+                connections: parse_json(&row.get::<_, String>(7)?)?,
                 is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                    .unwrap()
-                    .with_timezone(&chrono::Utc),
-                modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                    .unwrap()
-                    .with_timezone(&chrono::Utc),
-                indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
-                    .unwrap()
-                    .with_timezone(&chrono::Utc),
+                created_at: parse_datetime(&row.get::<_, String>(9)?)?,
+                modified_at: parse_datetime(&row.get::<_, String>(10)?)?,
+                indexed_at: parse_datetime(&row.get::<_, String>(11)?)?,
             })
         });
 
@@ -402,24 +425,18 @@ impl Storage {
         let memories = stmt
             .query_map(params![pattern], |row| {
                 Ok(Memory {
-                    id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                    id: parse_uuid(&row.get::<_, String>(0)?)?,
                     path: PathBuf::from(row.get::<_, String>(1)?),
-                    source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                    kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-                    metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
-                    tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+                    source: parse_json(&row.get::<_, String>(2)?)?,
+                    kind: parse_json(&row.get::<_, String>(3)?)?,
+                    metadata: parse_json(&row.get::<_, String>(4)?)?,
+                    tags: parse_json(&row.get::<_, String>(5)?)?,
                     embedding_id: row.get(6)?,
-                    connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+                    connections: parse_json(&row.get::<_, String>(7)?)?,
                     is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-                    created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
+                    created_at: parse_datetime(&row.get::<_, String>(9)?)?,
+                    modified_at: parse_datetime(&row.get::<_, String>(10)?)?,
+                    indexed_at: parse_datetime(&row.get::<_, String>(11)?)?,
                 })
             })?
             .filter_map(|r| r.ok())
