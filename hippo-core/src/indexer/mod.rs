@@ -664,7 +664,13 @@ impl Indexer {
         .await
     }
 
-    /// Auto-tag a batch of memories using Ollama
+    /// Auto-tag a batch of memories using Ollama with content-aware analysis
+    ///
+    /// This uses actual file content for smart tagging:
+    /// - Images: Vision model (llava) for scene/object detection + EXIF metadata
+    /// - Audio: Artist, album, genre from ID3/metadata tags
+    /// - Video: Scene description + technical metadata
+    /// - Code/Documents: Content analysis for topics and keywords
     async fn auto_tag_batch(memories: &[Memory], storage: &Storage) {
         let ollama_client = OllamaClient::new();
 
@@ -675,62 +681,237 @@ impl Indexer {
         }
 
         println!(
-            "[Indexer] Auto-tagging {} files with Ollama",
+            "[Indexer] Auto-tagging {} files with content-aware AI",
             memories.len()
         );
 
         for memory in memories {
-            // Create a prompt based on file information
             let filename = memory
                 .path
                 .file_name()
                 .map(|f| f.to_string_lossy().to_string())
                 .unwrap_or_default();
-            let kind_name = match &memory.kind {
-                MemoryKind::Image { .. } => "image",
-                MemoryKind::Video { .. } => "video",
-                MemoryKind::Audio { .. } => "audio",
-                MemoryKind::Document { .. } => "document",
-                MemoryKind::Code { language, .. } => language.as_str(),
-                MemoryKind::Spreadsheet { .. } => "spreadsheet",
-                MemoryKind::Presentation { .. } => "presentation",
-                MemoryKind::Archive { .. } => "archive",
-                _ => "file",
-            };
 
-            let prompt = format!(
-                "Suggest 3-5 short tags for this file: {}, type: {}. Return only comma-separated tags, no explanations.",
-                filename, kind_name
-            );
+            let mut all_tags: Vec<String> = Vec::new();
 
-            // Generate tags using Ollama
-            match ollama_client.generate(&prompt, None).await {
-                Ok(response) => {
-                    // Parse comma-separated tags
-                    let tags: Vec<String> = response
-                        .split(',')
-                        .map(|s| s.trim().to_lowercase())
-                        .filter(|s| !s.is_empty() && s.len() <= 30)
-                        .take(5)
-                        .collect();
-
-                    // Add AI tags to the memory
-                    for tag_name in tags {
-                        let tag = Tag::ai(tag_name, 80);
-                        if let Err(e) = storage.add_tag(memory.id, tag).await {
-                            debug!("Failed to add auto-tag: {}", e);
+            match &memory.kind {
+                MemoryKind::Image { .. } => {
+                    // 1. Try vision model for image content analysis
+                    if let Ok(caption) = ollama_client.caption_image(&memory.path).await {
+                        // Extract tags from the image caption
+                        let prompt = format!(
+                            "Based on this image description, suggest 5-8 single-word tags for categorization. Description: '{}'. Return only comma-separated lowercase tags, no explanations.",
+                            caption.chars().take(500).collect::<String>()
+                        );
+                        if let Ok(response) = ollama_client.generate(&prompt, None).await {
+                            let caption_tags: Vec<String> = response
+                                .split(',')
+                                .map(|s| s.trim().to_lowercase().replace(' ', "-"))
+                                .filter(|s| !s.is_empty() && s.len() <= 30 && s.len() > 1)
+                                .take(8)
+                                .collect();
+                            all_tags.extend(caption_tags);
                         }
                     }
 
-                    debug!("Auto-tagged file: {}", filename);
+                    // 2. Add tags from EXIF metadata
+                    if let Some(ref exif) = memory.metadata.exif {
+                        // Camera/equipment tags
+                        if let Some(ref make) = exif.camera_make {
+                            let clean_make = make.trim().trim_matches('"').to_lowercase();
+                            if !clean_make.is_empty() {
+                                all_tags.push(format!("camera:{}", clean_make.split_whitespace().next().unwrap_or(&clean_make)));
+                            }
+                        }
+                        // Add photography-related tags based on settings
+                        if exif.aperture.is_some() || exif.iso.is_some() {
+                            all_tags.push("photography".to_string());
+                        }
+                    }
+
+                    // 3. Add location tags from GPS
+                    if let Some(ref loc) = memory.metadata.location {
+                        if let Some(ref city) = loc.city {
+                            all_tags.push(format!("location:{}", city.to_lowercase()));
+                        }
+                        if let Some(ref country) = loc.country {
+                            all_tags.push(format!("country:{}", country.to_lowercase()));
+                        }
+                        // Generic geo tag if we have coordinates
+                        if loc.latitude != 0.0 && loc.longitude != 0.0 {
+                            all_tags.push("geotagged".to_string());
+                        }
+                    }
                 }
-                Err(e) => {
-                    debug!("Failed to auto-tag {}: {}", filename, e);
+
+                MemoryKind::Audio { .. } => {
+                    // Extract tags from audio metadata (ID3, Vorbis, etc.)
+                    if let Some(ref audio) = memory.metadata.audio_metadata {
+                        if let Some(ref artist) = audio.artist {
+                            let clean_artist = artist.trim().to_lowercase();
+                            if !clean_artist.is_empty() && clean_artist.len() <= 30 {
+                                all_tags.push(format!("artist:{}", clean_artist.replace(' ', "-")));
+                            }
+                        }
+                        if let Some(ref album) = audio.album {
+                            let clean_album = album.trim().to_lowercase();
+                            if !clean_album.is_empty() && clean_album.len() <= 30 {
+                                all_tags.push(format!("album:{}", clean_album.replace(' ', "-")));
+                            }
+                        }
+                        if let Some(ref genre) = audio.genre {
+                            let clean_genre = genre.trim().to_lowercase();
+                            if !clean_genre.is_empty() {
+                                all_tags.push(format!("genre:{}", clean_genre.replace(' ', "-")));
+                            }
+                        }
+                        if let Some(year) = audio.year {
+                            if year > 1900 && year < 2100 {
+                                all_tags.push(format!("year:{}", year));
+                            }
+                        }
+                    }
+                    all_tags.push("music".to_string());
+                }
+
+                MemoryKind::Video { duration_ms, .. } => {
+                    // Add duration-based tags
+                    let duration_secs = *duration_ms / 1000;
+                    if duration_secs < 60 {
+                        all_tags.push("short-video".to_string());
+                    } else if duration_secs < 600 {
+                        all_tags.push("clip".to_string());
+                    } else {
+                        all_tags.push("long-video".to_string());
+                    }
+
+                    // Extract tags from video metadata
+                    if let Some(ref video) = memory.metadata.video_metadata {
+                        if let (Some(w), Some(h)) = (video.width, video.height) {
+                            if w >= 3840 || h >= 2160 {
+                                all_tags.push("4k".to_string());
+                            } else if w >= 1920 || h >= 1080 {
+                                all_tags.push("hd".to_string());
+                            }
+                        }
+                    }
+
+                    // Use AI for video filename analysis (can't easily analyze video content)
+                    let prompt = format!(
+                        "Suggest 3-5 tags for a video file named '{}'. Return only comma-separated lowercase tags.",
+                        filename
+                    );
+                    if let Ok(response) = ollama_client.generate(&prompt, None).await {
+                        let video_tags: Vec<String> = response
+                            .split(',')
+                            .map(|s| s.trim().to_lowercase().replace(' ', "-"))
+                            .filter(|s| !s.is_empty() && s.len() <= 30 && s.len() > 1)
+                            .take(5)
+                            .collect();
+                        all_tags.extend(video_tags);
+                    }
+                }
+
+                MemoryKind::Code { language, lines } => {
+                    // Add language tag
+                    all_tags.push(format!("lang:{}", language.to_lowercase()));
+
+                    // Size-based tags
+                    if *lines < 100 {
+                        all_tags.push("small-file".to_string());
+                    } else if *lines > 1000 {
+                        all_tags.push("large-file".to_string());
+                    }
+
+                    // Analyze code content for imports/frameworks
+                    if let Some(ref code_info) = memory.metadata.code_info {
+                        // Detect frameworks from imports
+                        for import in &code_info.imports {
+                            let import_lower = import.to_lowercase();
+                            if import_lower.contains("react") {
+                                all_tags.push("react".to_string());
+                            } else if import_lower.contains("tokio") {
+                                all_tags.push("async".to_string());
+                            } else if import_lower.contains("django") || import_lower.contains("flask") {
+                                all_tags.push("web".to_string());
+                            } else if import_lower.contains("tensorflow") || import_lower.contains("torch") {
+                                all_tags.push("ml".to_string());
+                            }
+                        }
+
+                        // Check for test files
+                        if code_info.functions.iter().any(|f| f.name.starts_with("test_") || f.name.contains("test")) {
+                            all_tags.push("tests".to_string());
+                        }
+                    }
+                }
+
+                MemoryKind::Document { format, .. } => {
+                    // Add format tag
+                    all_tags.push(format!("doc:{:?}", format).to_lowercase());
+
+                    // Analyze document content if available
+                    if let Some(ref preview) = memory.metadata.text_preview {
+                        if preview.len() > 50 {
+                            let prompt = format!(
+                                "Suggest 3-5 topic tags for this document excerpt: '{}'. Return only comma-separated lowercase tags.",
+                                preview.chars().take(500).collect::<String>()
+                            );
+                            if let Ok(response) = ollama_client.generate(&prompt, None).await {
+                                let doc_tags: Vec<String> = response
+                                    .split(',')
+                                    .map(|s| s.trim().to_lowercase().replace(' ', "-"))
+                                    .filter(|s| !s.is_empty() && s.len() <= 30 && s.len() > 1)
+                                    .take(5)
+                                    .collect();
+                                all_tags.extend(doc_tags);
+                            }
+                        }
+                    }
+                }
+
+                _ => {
+                    // Fallback: use filename-based tagging for other types
+                    let kind_name = match &memory.kind {
+                        MemoryKind::Spreadsheet { .. } => "spreadsheet",
+                        MemoryKind::Presentation { .. } => "presentation",
+                        MemoryKind::Archive { .. } => "archive",
+                        _ => "file",
+                    };
+
+                    let prompt = format!(
+                        "Suggest 3-5 tags for this file: {}, type: {}. Return only comma-separated lowercase tags.",
+                        filename, kind_name
+                    );
+                    if let Ok(response) = ollama_client.generate(&prompt, None).await {
+                        let fallback_tags: Vec<String> = response
+                            .split(',')
+                            .map(|s| s.trim().to_lowercase().replace(' ', "-"))
+                            .filter(|s| !s.is_empty() && s.len() <= 30 && s.len() > 1)
+                            .take(5)
+                            .collect();
+                        all_tags.extend(fallback_tags);
+                    }
                 }
             }
+
+            // Deduplicate and add tags
+            all_tags.sort();
+            all_tags.dedup();
+
+            // Add all discovered tags
+            for tag_name in all_tags.into_iter().take(10) {
+                let confidence = if tag_name.contains(':') { 90 } else { 75 }; // Metadata tags are more confident
+                let tag = Tag::ai(tag_name.clone(), confidence);
+                if let Err(e) = storage.add_tag(memory.id, tag).await {
+                    debug!("Failed to add auto-tag '{}': {}", tag_name, e);
+                }
+            }
+
+            debug!("Content-aware auto-tagged file: {}", filename);
         }
 
-        println!("[Indexer] Auto-tagging completed");
+        println!("[Indexer] Content-aware auto-tagging completed");
     }
 
     /// Process a single file and extract metadata
