@@ -250,7 +250,8 @@ fn extract_video_metadata(path: &Path, metadata: &mut MemoryMetadata) -> Result<
                         match codec_type {
                             "video" => {
                                 // Video codec
-                                if let Some(codec) = stream.get("codec_name").and_then(|v| v.as_str())
+                                if let Some(codec) =
+                                    stream.get("codec_name").and_then(|v| v.as_str())
                                 {
                                     video_meta.codec = Some(codec.to_string());
                                 }
@@ -259,7 +260,8 @@ fn extract_video_metadata(path: &Path, metadata: &mut MemoryMetadata) -> Result<
                                 if let Some(width) = stream.get("width").and_then(|v| v.as_u64()) {
                                     video_meta.width = Some(width as u32);
                                 }
-                                if let Some(height) = stream.get("height").and_then(|v| v.as_u64()) {
+                                if let Some(height) = stream.get("height").and_then(|v| v.as_u64())
+                                {
                                     video_meta.height = Some(height as u32);
                                 }
 
@@ -291,7 +293,8 @@ fn extract_video_metadata(path: &Path, metadata: &mut MemoryMetadata) -> Result<
                             }
                             "audio" => {
                                 // Audio codec
-                                if let Some(codec) = stream.get("codec_name").and_then(|v| v.as_str())
+                                if let Some(codec) =
+                                    stream.get("codec_name").and_then(|v| v.as_str())
                                 {
                                     video_meta.audio_codec = Some(codec.to_string());
                                 }
@@ -306,7 +309,8 @@ fn extract_video_metadata(path: &Path, metadata: &mut MemoryMetadata) -> Result<
                                 }
 
                                 // Channels
-                                if let Some(channels) = stream.get("channels").and_then(|v| v.as_u64())
+                                if let Some(channels) =
+                                    stream.get("channels").and_then(|v| v.as_u64())
                                 {
                                     video_meta.audio_channels = Some(channels as u32);
                                 }
@@ -456,7 +460,9 @@ fn extract_audio_metadata(path: &Path, metadata: &mut MemoryMetadata) -> Result<
     let format_opts = FormatOptions::default();
     let metadata_opts = MetadataOptions::default();
 
-    if let Ok(mut probed) = symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts) {
+    if let Ok(mut probed) =
+        symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts)
+    {
         let mut audio_meta = AudioMetadata {
             codec: None,
             bitrate: None,
@@ -501,9 +507,8 @@ fn extract_audio_metadata(path: &Path, metadata: &mut MemoryMetadata) -> Result<
                             // Calculate approximate bitrate
                             let duration_secs = n_frames as f64 / sample_rate as f64;
                             if duration_secs > 0.0 {
-                                let file_size = std::fs::metadata(path)
-                                    .map(|m| m.len())
-                                    .unwrap_or(0);
+                                let file_size =
+                                    std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
                                 audio_meta.bitrate = Some((file_size * 8) / duration_secs as u64);
                             }
                         }
@@ -556,13 +561,19 @@ fn extract_audio_metadata(path: &Path, metadata: &mut MemoryMetadata) -> Result<
                 for tag in current.tags() {
                     // Fill in any missing fields
                     match tag.std_key {
-                        Some(symphonia::core::meta::StandardTagKey::Artist) if audio_meta.artist.is_none() => {
+                        Some(symphonia::core::meta::StandardTagKey::Artist)
+                            if audio_meta.artist.is_none() =>
+                        {
                             audio_meta.artist = Some(tag.value.to_string());
                         }
-                        Some(symphonia::core::meta::StandardTagKey::Album) if audio_meta.album.is_none() => {
+                        Some(symphonia::core::meta::StandardTagKey::Album)
+                            if audio_meta.album.is_none() =>
+                        {
                             audio_meta.album = Some(tag.value.to_string());
                         }
-                        Some(symphonia::core::meta::StandardTagKey::TrackTitle) if audio_meta.title.is_none() => {
+                        Some(symphonia::core::meta::StandardTagKey::TrackTitle)
+                            if audio_meta.title.is_none() =>
+                        {
                             audio_meta.title = Some(tag.value.to_string());
                         }
                         _ => {}

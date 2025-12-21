@@ -28,11 +28,7 @@ COPY Cargo.lock ./
 COPY Cargo.toml Cargo.toml.orig
 RUN sed -e '/hippo-tauri/d' -e '/hippo-wasm/d' -e '/hippo-web/d' Cargo.toml.orig > Cargo.toml && rm Cargo.toml.orig
 
-# Update dependencies and generate new lock file after modifying workspace
-# Use cargo update to get latest compatible versions (avoiding zune-jpeg bugs)
-RUN cargo update && cargo generate-lockfile
-
-# Build release binary (CLI only - Tauri requires desktop environment)
+# Build release binary (CLI only - Tauri requires desktop environment, use existing Cargo.lock)
 RUN cargo build --release --package hippo-cli
 
 # Runtime stage
