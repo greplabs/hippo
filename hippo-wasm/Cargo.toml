@@ -24,7 +24,9 @@ serde-wasm-bindgen = "0.6"
 
 # Core types and utilities
 chrono = { workspace = true }
-uuid = { workspace = true }
+# Need js feature for WASM random number generation
+uuid = { version = "1", features = ["v4", "serde", "js"] }
+getrandom = { version = "0.2", features = ["js"] }
 
 # Logging for WASM
 tracing = { workspace = true }

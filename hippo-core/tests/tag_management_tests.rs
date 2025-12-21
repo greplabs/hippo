@@ -460,7 +460,7 @@ async fn test_ai_tag_confidence_levels() {
     for tag in &retrieved.tags {
         assert!(tag.confidence.is_some());
         let conf = tag.confidence.unwrap();
-        assert!(conf >= 0 && conf <= 100);
+        assert!((0..=100).contains(&conf));
     }
 }
 
@@ -475,7 +475,7 @@ async fn test_tag_operations_on_many_memories() {
     // Create many memories with tags
     for i in 0..20 {
         let mut memory = create_test_memory(&format!("file{}.txt", i));
-        memory.tags = vec![Tag::user("common"), Tag::user(&format!("unique_{}", i))];
+        memory.tags = vec![Tag::user("common"), Tag::user(format!("unique_{}", i))];
         storage.upsert_memory(&memory).await.unwrap();
     }
 
