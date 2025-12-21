@@ -113,6 +113,8 @@ mod helpers {
         loop {
             let stats = hippo.stats().await?;
             if stats.total_memories >= expected_count as u64 {
+                // Give a bit more time for search index to be ready
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 return Ok(());
             }
             if start.elapsed().as_secs() > max_wait_secs {
@@ -251,13 +253,14 @@ mod integration_tests {
             root_path: test_path,
         };
         hippo.add_source(source).await?;
-        helpers::wait_for_indexing(&hippo, 1, 10).await?;
+        // Wait for all 8 files to be indexed (CI can be slow)
+        helpers::wait_for_indexing(&hippo, 8, 30).await?;
 
-        // Test: Search for files (sniff)
-        let results = hippo.search("vacation").await?;
+        // Test: Search for files (sniff) - search by filename since Hippo searches paths/names, not content
+        let results = hippo.search("document").await?;
         assert!(
             !results.memories.is_empty(),
-            "Should find files matching 'vacation'"
+            "Should find files matching 'document'"
         );
 
         // Search for code files
@@ -667,14 +670,15 @@ mod workflow_tests {
             root_path: test_path,
         };
         hippo.add_source(source.clone()).await?;
-        helpers::wait_for_indexing(&hippo, 1, 10).await?;
+        // Wait for all 8 files to be indexed (CI can be slow)
+        helpers::wait_for_indexing(&hippo, 8, 30).await?;
 
         // 3. Verify files were indexed
         let stats = hippo.stats().await?;
         assert!(stats.total_memories > 0, "Should have indexed files");
 
-        // 4. Search for files (sniff)
-        let results = hippo.search("vacation").await?;
+        // 4. Search for files (sniff) - search by filename since Hippo searches paths/names, not content
+        let results = hippo.search("document").await?;
         assert!(!results.memories.is_empty(), "Should find files");
 
         // 5. Add tags to a file (mark)
@@ -737,14 +741,15 @@ mod workflow_tests {
         hippo.add_source(source1.clone()).await?;
         hippo.add_source(source2.clone()).await?;
 
-        helpers::wait_for_indexing(&hippo, 5, 15).await?;
+        // Wait for all 12 files to be indexed (8 from source1 + 4 from source2, CI can be slow)
+        helpers::wait_for_indexing(&hippo, 12, 45).await?;
 
         // Verify multiple sources
         let sources = hippo.list_sources().await?;
         assert_eq!(sources.len(), 2, "Should have two sources");
 
-        // Search across all sources
-        let results = hippo.search("vacation").await?;
+        // Search across all sources (search by filename since Hippo searches paths/names, not content)
+        let results = hippo.search("document").await?;
         assert!(
             !results.memories.is_empty(),
             "Should find files from any source"
