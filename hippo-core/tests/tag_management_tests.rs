@@ -5,6 +5,7 @@
 use hippo_core::*;
 use std::path::PathBuf;
 use tempfile::TempDir;
+use uuid::Uuid;
 
 // ============================================================================
 // Tag Creation and Structure Tests
@@ -29,11 +30,11 @@ fn test_tag_ai_creation() {
 }
 
 #[test]
-fn test_tag_auto_creation() {
-    let tag = Tag::auto("image");
+fn test_tag_system_creation() {
+    let tag = Tag::system("image");
 
     assert_eq!(tag.name, "image");
-    assert_eq!(tag.source, TagSource::Auto);
+    assert_eq!(tag.source, TagSource::System);
     assert!(tag.confidence.is_none());
 }
 
@@ -41,11 +42,11 @@ fn test_tag_auto_creation() {
 fn test_tag_source_variants() {
     let user_tag = Tag::user("test");
     let ai_tag = Tag::ai("test", 90);
-    let auto_tag = Tag::auto("test");
+    let system_tag = Tag::system("test");
 
     assert!(matches!(user_tag.source, TagSource::User));
     assert!(matches!(ai_tag.source, TagSource::Ai));
-    assert!(matches!(auto_tag.source, TagSource::Auto));
+    assert!(matches!(system_tag.source, TagSource::System));
 }
 
 #[test]
@@ -132,7 +133,7 @@ async fn create_test_storage() -> (hippo_core::storage::Storage, TempDir) {
 
 fn create_test_memory(name: &str) -> Memory {
     Memory {
-        id: uuid::Uuid::new_v4(),
+        id: Uuid::new_v4(),
         path: PathBuf::from(format!("/test/{}", name)),
         source: Source::Local {
             root_path: PathBuf::from("/test"),
@@ -410,7 +411,7 @@ async fn test_tag_sources_preserved() {
     memory.tags = vec![
         Tag::user("user_tag"),
         Tag::ai("ai_tag", 90),
-        Tag::auto("auto_tag"),
+        Tag::system("system_tag"),
     ];
     storage.upsert_memory(&memory).await.unwrap();
 
@@ -421,11 +422,11 @@ async fn test_tag_sources_preserved() {
     // Verify sources
     let user_tag = retrieved.tags.iter().find(|t| t.name == "user_tag");
     let ai_tag = retrieved.tags.iter().find(|t| t.name == "ai_tag");
-    let auto_tag = retrieved.tags.iter().find(|t| t.name == "auto_tag");
+    let system_tag = retrieved.tags.iter().find(|t| t.name == "system_tag");
 
     assert!(user_tag.is_some());
     assert!(ai_tag.is_some());
-    assert!(auto_tag.is_some());
+    assert!(system_tag.is_some());
 
     if let Some(tag) = user_tag {
         assert!(matches!(tag.source, TagSource::User));
@@ -434,8 +435,8 @@ async fn test_tag_sources_preserved() {
         assert!(matches!(tag.source, TagSource::Ai));
         assert_eq!(tag.confidence, Some(90));
     }
-    if let Some(tag) = auto_tag {
-        assert!(matches!(tag.source, TagSource::Auto));
+    if let Some(tag) = system_tag {
+        assert!(matches!(tag.source, TagSource::System));
     }
 }
 

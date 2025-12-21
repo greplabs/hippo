@@ -2058,6 +2058,7 @@ dependencies = [
  "tabled",
  "tempfile",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

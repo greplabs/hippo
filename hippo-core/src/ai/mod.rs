@@ -110,7 +110,7 @@ pub struct DuplicateMatch {
     pub reason: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DuplicateType {
     ExactHash,
     SimilarName,
