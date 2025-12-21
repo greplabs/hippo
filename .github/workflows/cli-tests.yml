@@ -105,10 +105,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run AI tests
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: cargo test --package hippo-cli -- --ignored --nocapture
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            cargo test --package hippo-cli -- --ignored --nocapture
+          else
+            echo "Skipping AI tests - no API key configured"
+          fi
         continue-on-error: true
 
   coverage:
