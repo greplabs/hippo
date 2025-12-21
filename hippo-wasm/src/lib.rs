@@ -394,7 +394,8 @@ mod tests {
     #[test]
     fn test_semantic_score_identical() {
         let vec = vec![1.0, 2.0, 3.0];
-        assert_eq!(semantic_score(&vec, &vec), 1.0);
+        let score = semantic_score(&vec, &vec);
+        assert!((score - 1.0).abs() < 1e-6, "Expected ~1.0, got {}", score);
     }
 
     #[test]
