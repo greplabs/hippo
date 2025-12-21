@@ -508,7 +508,6 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      align-items: center;
       gap: 6px;
     }
     .filter-btn.active {
@@ -910,6 +909,17 @@
       color: #a8a29e;
       text-align: center;
       animation: fadeIn 0.4s ease;
+      padding: 40px 20px;
+    }
+    .empty-mascot {
+      font-size: 64px;
+      margin-bottom: 16px;
+      filter: grayscale(0.3);
+      animation: gentleBounce 2s ease-in-out infinite;
+    }
+    @keyframes gentleBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
     }
     .empty-icon { font-size: 56px; margin-bottom: 20px; opacity: 0.6; }
     .empty-title { font-size: 18px; font-weight: 600; color: #57534e; margin-bottom: 6px; letter-spacing: -0.01em; }
@@ -3945,9 +3955,9 @@
 
           if (filtered.length === 0) {
             var emptyHtml = '<div class="empty">';
-            emptyHtml += '<div class="empty-icon"><span class="icon icon-2xl" style="color:#a8a29e;">' + icons.folderEmpty + '</span></div>';
-            emptyHtml += '<div class="empty-title">' + (sources.length === 0 ? 'Add a folder to get started' : 'No files found') + '</div>';
-            emptyHtml += '<div class="empty-text">' + (sources.length === 0 ? 'Click the button below to index your files' : 'Try a different search or filter') + '</div>';
+            emptyHtml += '<div class="empty-mascot">🦛</div>';
+            emptyHtml += '<div class="empty-title">' + (sources.length === 0 ? 'Welcome to Hippo!' : 'No files found') + '</div>';
+            emptyHtml += '<div class="empty-text">' + (sources.length === 0 ? 'Add a folder and I\\'ll remember every file for you!' : 'Try a different search or filter') + '</div>';
             if (sources.length === 0) {
               emptyHtml += '<div class="empty-action"><button class="empty-action-btn" onclick="addSource()"><span class="icon icon-sm">' + icons.plus + '</span> Add Folder</button></div>';
             }
