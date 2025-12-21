@@ -2,25 +2,24 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
-  workflow_dispatch: # Allow manual trigger
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
-  RUSTFLAGS: -D warnings
 
 jobs:
   check:
-    name: Check
+    name: Check & Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Install Linux dependencies
         run: |
@@ -39,69 +38,19 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo/registry/
+            ~/.cargo/git/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Check
-        run: cargo check --all-targets
-
-  fmt:
-    name: Format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Check formatting
+      - name: Format check
         run: cargo fmt --all -- --check
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            librsvg2-dev \
-            patchelf \
-            libssl-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
 
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+
+      - name: Check
+        run: cargo check --all-targets
 
   test:
     name: Test
@@ -134,19 +83,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo/registry/
+            ~/.cargo/git/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
 
       - name: Run tests
         run: cargo test --workspace
 
   build:
     name: Build
+    needs: [check, test]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -154,8 +101,6 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-          - os: macos-latest
-            target: x86_64-apple-darwin
           - os: macos-latest
             target: aarch64-apple-darwin
           - os: windows-latest
@@ -186,87 +131,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo/registry/
+            ~/.cargo/git/
             target/
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-
 
-      - name: Build
+      - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Prepare artifacts (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p artifacts
-          cp target/${{ matrix.target }}/release/hippo-tauri artifacts/hippo-tauri-${{ matrix.target }} || true
-          cp target/${{ matrix.target }}/release/hippo artifacts/hippo-cli-${{ matrix.target }} || true
-
-      - name: Prepare artifacts (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          mkdir artifacts
-          copy target\${{ matrix.target }}\release\hippo-tauri.exe artifacts\hippo-tauri-${{ matrix.target }}.exe
-          copy target\${{ matrix.target }}\release\hippo.exe artifacts\hippo-cli-${{ matrix.target }}.exe
-        shell: cmd
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: hippo-${{ matrix.target }}
-          path: artifacts/*
-          retention-days: 30
-
-  # Verify artifact integrity
-  verify-artifacts:
-    name: Verify Build Artifacts
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: List all artifacts
-        run: |
-          echo "=== Build Artifacts ==="
-          find artifacts -type f -exec ls -lh {} \;
-
-      - name: Verify binaries exist
-        run: |
-          # Check that we have artifacts for all platforms
-          test -f artifacts/hippo-x86_64-unknown-linux-gnu/hippo-tauri-x86_64-unknown-linux-gnu || echo "Warning: Linux GUI binary not found"
-          test -f artifacts/hippo-x86_64-unknown-linux-gnu/hippo-cli-x86_64-unknown-linux-gnu || echo "Warning: Linux CLI binary not found"
-          test -f artifacts/hippo-x86_64-pc-windows-msvc/hippo-tauri-x86_64-pc-windows-msvc.exe || echo "Warning: Windows GUI binary not found"
-          test -f artifacts/hippo-x86_64-pc-windows-msvc/hippo-cli-x86_64-pc-windows-msvc.exe || echo "Warning: Windows CLI binary not found"
-          echo "Artifact verification complete"
-
-  # Generate build summary
-  ci-summary:
-    name: CI Summary
-    runs-on: ubuntu-latest
-    needs: [check, fmt, clippy, test, build, verify-artifacts]
-    if: always()
-    steps:
-      - name: Check CI status
-        run: |
-          echo "=== CI Pipeline Summary ==="
-          echo "Check: ${{ needs.check.result }}"
-          echo "Format: ${{ needs.fmt.result }}"
-          echo "Clippy: ${{ needs.clippy.result }}"
-          echo "Test: ${{ needs.test.result }}"
-          echo "Build: ${{ needs.build.result }}"
-          echo "Verify: ${{ needs.verify-artifacts.result }}"
-
-          if [ "${{ needs.check.result }}" == "failure" ] || \
-             [ "${{ needs.fmt.result }}" == "failure" ] || \
-             [ "${{ needs.clippy.result }}" == "failure" ] || \
-             [ "${{ needs.test.result }}" == "failure" ] || \
-             [ "${{ needs.build.result }}" == "failure" ]; then
-            echo "❌ CI pipeline failed"
-            exit 1
-          fi
-          echo "✅ CI pipeline passed"
+          path: |
+            target/${{ matrix.target }}/release/hippo-tauri*
+            target/${{ matrix.target }}/release/hippo*
+            !target/${{ matrix.target }}/release/*.d
+          retention-days: 7

@@ -1,12 +1,9 @@
-name: Docker Build
+name: Docker
 
 on:
   push:
     branches: [main]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 env:
@@ -14,13 +11,19 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Build CLI Docker image
-  build-docker-cli:
-    name: Build Docker CLI Image
+  build:
+    name: Build & Push
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        include:
+          - dockerfile: Dockerfile
+            suffix: ''
+          - dockerfile: Dockerfile.web
+            suffix: '-web'
     steps:
       - uses: actions/checkout@v4
 
@@ -28,7 +31,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -39,178 +41,20 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}${{ matrix.suffix }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push Docker CLI image
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          file: ./${{ matrix.dockerfile }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
-
-      - name: Run Trivy vulnerability scanner
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: Upload Trivy results to GitHub Security
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-  # Build Web Docker image
-  build-docker-web:
-    name: Build Docker Web Image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta-web
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker Web image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile.web
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta-web.outputs.tags }}
-          labels: ${{ steps.meta-web.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
-
-      - name: Run Trivy vulnerability scanner
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:${{ steps.meta-web.outputs.version }}
-          format: 'sarif'
-          output: 'trivy-results-web.sarif'
-
-      - name: Upload Trivy results to GitHub Security
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results-web.sarif'
-
-  # Test Docker CLI image
-  test-docker-cli:
-    name: Test Docker CLI Image
-    needs: build-docker-cli
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build test image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          load: true
-          tags: hippo:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Test Docker CLI image
-        run: |
-          # Run basic smoke test
-          docker run --rm hippo:test --version || echo "Version command not available"
-          docker run --rm hippo:test --help
-
-      - name: Scan for vulnerabilities
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: hippo:test
-          format: 'table'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH'
-
-  # Test Docker Compose
-  test-docker-compose:
-    name: Test Docker Compose
-    needs: build-docker-web
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Create .env file
-        run: cp .env.example .env
-
-      - name: Start services
-        run: |
-          docker-compose up -d
-          sleep 10  # Wait for services to start
-
-      - name: Check service health
-        run: |
-          docker-compose ps
-          # Check hippo-web health
-          curl -f http://localhost:3000/health || exit 1
-          # Check qdrant health
-          curl -f http://localhost:6333/ || exit 1
-
-      - name: Test API endpoints
-        run: |
-          # Test stats endpoint
-          curl -f http://localhost:3000/api/stats || echo "Stats endpoint not yet implemented"
-          # Test sources endpoint
-          curl -f http://localhost:3000/api/sources || echo "Sources endpoint not yet implemented"
-
-      - name: View logs
-        if: always()
-        run: docker-compose logs
-
-      - name: Stop services
-        if: always()
-        run: docker-compose down -v
