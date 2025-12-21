@@ -843,37 +843,37 @@ pub struct ParsedQuery {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_string_similarity_identical() {
-        let searcher = create_mock_searcher();
+    #[tokio::test]
+    async fn test_string_similarity_identical() {
+        let searcher = create_mock_searcher().await;
         let similarity = searcher.string_similarity("hello", "hello");
         assert_eq!(similarity, 1.0);
     }
 
-    #[test]
-    fn test_string_similarity_different() {
-        let searcher = create_mock_searcher();
+    #[tokio::test]
+    async fn test_string_similarity_different() {
+        let searcher = create_mock_searcher().await;
         let similarity = searcher.string_similarity("abc", "xyz");
         assert!(similarity < 0.5);
     }
 
-    #[test]
-    fn test_string_similarity_similar() {
-        let searcher = create_mock_searcher();
+    #[tokio::test]
+    async fn test_string_similarity_similar() {
+        let searcher = create_mock_searcher().await;
         let similarity = searcher.string_similarity("hello", "helo");
         assert!(similarity > 0.5);
     }
 
-    #[test]
-    fn test_string_similarity_empty() {
-        let searcher = create_mock_searcher();
+    #[tokio::test]
+    async fn test_string_similarity_empty() {
+        let searcher = create_mock_searcher().await;
         let similarity = searcher.string_similarity("", "test");
         assert_eq!(similarity, 0.0);
     }
 
-    #[test]
-    fn test_generate_fuzzy_variations() {
-        let searcher = create_mock_searcher();
+    #[tokio::test]
+    async fn test_generate_fuzzy_variations() {
+        let searcher = create_mock_searcher().await;
         let variations = searcher.generate_fuzzy_variations("hello");
         assert!(!variations.is_empty());
         // Should include character skips
@@ -923,7 +923,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_natural_query_audio() {
-        let searcher = create_mock_searcher();
+        let searcher = create_mock_searcher().await;
         let parsed = searcher.parse_natural_query("find music files").unwrap();
         assert!(!parsed.file_types.is_empty());
         assert!(matches!(parsed.file_types[0], MemoryKind::Audio { .. }));
@@ -931,7 +931,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_natural_query_document() {
-        let searcher = create_mock_searcher();
+        let searcher = create_mock_searcher().await;
         let parsed = searcher.parse_natural_query("show me documents").unwrap();
         assert!(!parsed.file_types.is_empty());
         assert!(matches!(parsed.file_types[0], MemoryKind::Document { .. }));
@@ -939,7 +939,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_natural_query_this_year() {
-        let searcher = create_mock_searcher();
+        let searcher = create_mock_searcher().await;
         let parsed = searcher
             .parse_natural_query("files from this year")
             .unwrap();
@@ -948,13 +948,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_natural_query_this_month() {
-        let searcher = create_mock_searcher();
+        let searcher = create_mock_searcher().await;
         let parsed = searcher.parse_natural_query("this month photos").unwrap();
         assert!(parsed.date_range.is_some());
     }
 
     // Helper function to create a mock searcher for tests
-    fn create_mock_searcher() -> Searcher {
+    async fn create_mock_searcher() -> Searcher {
         use std::sync::Arc;
         use tempfile::TempDir;
 
@@ -967,12 +967,8 @@ mod tests {
         };
 
         // Create minimal components for testing
-        // Note: This will fail in some tests that need actual storage
-        // but works for pure function tests like string_similarity
-        tokio::runtime::Runtime::new().unwrap().block_on(async {
-            let storage = Arc::new(crate::storage::Storage::new(&config).await.unwrap());
-            let embedder = Arc::new(crate::embeddings::Embedder::new(&config).await.unwrap());
-            Searcher::new(storage, embedder, &config).await.unwrap()
-        })
+        let storage = Arc::new(crate::storage::Storage::new(&config).await.unwrap());
+        let embedder = Arc::new(crate::embeddings::Embedder::new(&config).await.unwrap());
+        Searcher::new(storage, embedder, &config).await.unwrap()
     }
 }
