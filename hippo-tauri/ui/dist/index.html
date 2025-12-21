@@ -7,6 +7,8 @@
   <!-- Prism.js for syntax highlighting -->
   <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
+  <!-- D3.js for graph visualization -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1372,6 +1374,306 @@
     }
 
     /* ===== END UX ENHANCEMENTS ===== */
+
+    /* ===== GRAPH VISUALIZATION ===== */
+    #graphContainer {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background: #fafaf9;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    body.dark #graphContainer {
+      background: #1c1917;
+    }
+
+    #graphSvg {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+    #graphSvg:active {
+      cursor: grabbing;
+    }
+
+    /* Graph nodes */
+    .graph-node {
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .graph-node:hover {
+      filter: brightness(1.1);
+    }
+    .graph-node.center {
+      filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.5));
+    }
+
+    .node-circle {
+      stroke: #fff;
+      stroke-width: 2px;
+    }
+    body.dark .node-circle {
+      stroke: #1c1917;
+    }
+
+    .node-label {
+      font-size: 11px;
+      font-weight: 500;
+      fill: #292524;
+      text-anchor: middle;
+      pointer-events: none;
+      user-select: none;
+    }
+    body.dark .node-label {
+      fill: #e7e5e4;
+    }
+
+    /* Graph edges */
+    .graph-edge {
+      stroke: #d6d3d1;
+      stroke-width: 1.5px;
+      fill: none;
+      opacity: 0.6;
+    }
+    body.dark .graph-edge {
+      stroke: #57534e;
+    }
+    .graph-edge.similar {
+      stroke: #8b5cf6;
+      stroke-dasharray: 4 2;
+    }
+    .graph-edge.imports {
+      stroke: #3b82f6;
+      marker-end: url(#arrowhead);
+    }
+    .graph-edge.same_folder {
+      stroke: #10b981;
+      stroke-dasharray: 2 2;
+    }
+
+    .edge-label {
+      font-size: 9px;
+      fill: #78716c;
+      text-anchor: middle;
+      pointer-events: none;
+      user-select: none;
+    }
+    body.dark .edge-label {
+      fill: #a8a29e;
+    }
+
+    /* Graph toolbar */
+    .graph-toolbar {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .graph-toolbar-btn {
+      padding: 8px 12px;
+      background: #fff;
+      border: 1px solid #e7e5e4;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .graph-toolbar-btn:hover {
+      background: #fafaf9;
+      border-color: #d6d3d1;
+    }
+    .graph-toolbar-btn.active {
+      background: #8b5cf6;
+      color: #fff;
+      border-color: #8b5cf6;
+    }
+    body.dark .graph-toolbar-btn {
+      background: #292524;
+      border-color: #44403c;
+      color: #e7e5e4;
+    }
+    body.dark .graph-toolbar-btn:hover {
+      background: #3c3836;
+    }
+    body.dark .graph-toolbar-btn.active {
+      background: #8b5cf6;
+      border-color: #8b5cf6;
+    }
+
+    /* Graph legend */
+    .graph-legend {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      background: #fff;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 11px;
+      z-index: 10;
+    }
+    body.dark .graph-legend {
+      background: #292524;
+      border-color: #44403c;
+      color: #e7e5e4;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .legend-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .legend-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1px solid #e7e5e4;
+    }
+    body.dark .legend-color {
+      border-color: #44403c;
+    }
+
+    .legend-line {
+      width: 20px;
+      height: 2px;
+      border-radius: 1px;
+    }
+
+    /* Graph controls */
+    .graph-controls {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: #fff;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 10;
+    }
+    body.dark .graph-controls {
+      background: #292524;
+      border-color: #44403c;
+    }
+
+    .graph-control-btn {
+      width: 32px;
+      height: 32px;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s ease;
+      color: #57534e;
+    }
+    .graph-control-btn:hover {
+      background: #fafaf9;
+    }
+    body.dark .graph-control-btn {
+      color: #a8a29e;
+    }
+    body.dark .graph-control-btn:hover {
+      background: #3c3836;
+    }
+
+    /* Graph info panel */
+    .graph-info {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      background: #fff;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 12px;
+      z-index: 10;
+      min-width: 200px;
+      max-width: 300px;
+      display: none;
+    }
+    .graph-info.visible {
+      display: block;
+      animation: fadeInUp 0.2s ease;
+    }
+    body.dark .graph-info {
+      background: #292524;
+      border-color: #44403c;
+      color: #e7e5e4;
+    }
+
+    .graph-info-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #292524;
+    }
+    body.dark .graph-info-title {
+      color: #e7e5e4;
+    }
+
+    .graph-info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: 11px;
+    }
+
+    .graph-info-label {
+      color: #78716c;
+    }
+    body.dark .graph-info-label {
+      color: #a8a29e;
+    }
+
+    /* Empty graph state */
+    .graph-empty {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #a8a29e;
+    }
+
+    .graph-empty-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+
+    .graph-empty-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #57534e;
+    }
+    body.dark .graph-empty-title {
+      color: #a8a29e;
+    }
+
+    .graph-empty-text {
+      font-size: 13px;
+      text-align: center;
+      max-width: 400px;
+    }
+    /* ===== END GRAPH VISUALIZATION ===== */
   </style>
 </head>
 <body>
@@ -1457,6 +1759,7 @@
         <div class="view-toggle">
           <button class="view-btn active" id="gridViewBtn" title="Grid view"><span class="icon icon-sm" id="gridIcon"></span></button>
           <button class="view-btn" id="listViewBtn" title="List view"><span class="icon icon-sm" id="listIcon"></span></button>
+          <button class="view-btn" id="graphViewBtn" title="Graph view"><span class="icon icon-sm" id="graphIcon"></span></button>
         </div>
       </div>
       <div class="content">
@@ -2540,6 +2843,7 @@
         folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
         grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
         list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+        graph: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
         close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
         folderEmpty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>',
         folderPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>',
@@ -2622,6 +2926,11 @@
       var virtualPaths = [];
       var similarMemories = [];
       var qdrantAvailable = false;
+
+      // Graph visualization state
+      var graphMode = 'mindmap'; // 'mindmap' or 'code'
+      var graphData = null;
+      var graphSimulation = null;
       var showCollections = false;
 
       // UX enhancements state
@@ -2786,6 +3095,7 @@
         document.getElementById('searchIcon').innerHTML = icons.search;
         document.getElementById('gridIcon').innerHTML = icons.grid;
         document.getElementById('listIcon').innerHTML = icons.list;
+        document.getElementById('graphIcon').innerHTML = icons.graph;
         document.getElementById('multiSelectIcon').innerHTML = icons.checkSquare;
         document.getElementById('closeIcon').innerHTML = icons.close;
         document.getElementById('starIcon').innerHTML = icons.star;
@@ -2852,6 +3162,7 @@
         { id: 'toggle-dark', title: 'Toggle Dark Mode', desc: 'Switch between light and dark themes', icon: 'moon', shortcut: ['⌘', 'D'], action: 'toggleDark' },
         { id: 'grid-view', title: 'Grid View', desc: 'Display files as grid', icon: 'grid', action: 'gridView' },
         { id: 'list-view', title: 'List View', desc: 'Display files as list', icon: 'list', action: 'listView' },
+        { id: 'graph-view', title: 'Graph View', desc: 'Visualize connections between files', icon: 'graph', shortcut: ['⌘', 'G'], action: 'graphView' },
         { id: 'show-all', title: 'Show All Files', desc: 'Clear filters and show all', icon: 'eye', action: 'showAll' },
         { id: 'show-images', title: 'Show Images', desc: 'Filter to images only', icon: 'image', action: 'filterImages' },
         { id: 'show-videos', title: 'Show Videos', desc: 'Filter to videos only', icon: 'video', action: 'filterVideos' },
@@ -3010,6 +3321,9 @@
             break;
           case 'listView':
             document.getElementById('listViewBtn').click();
+            break;
+          case 'graphView':
+            document.getElementById('graphViewBtn').click();
             break;
           case 'showAll':
             setFilter('all');
@@ -3585,6 +3899,12 @@
             return;
           }
 
+          // Handle graph view
+          if (viewMode === 'graph') {
+            renderGraphView(filtered);
+            return;
+          }
+
           // Use virtual scrolling for large lists (>100 items)
           if (filtered.length > 100) {
             virtualScroller.setItems(filtered, viewMode);
@@ -3816,6 +4136,451 @@
           updateBulkBar();
           renderFiles();
         }
+
+        // ===== GRAPH VISUALIZATION FUNCTIONS =====
+        function renderGraphView(memories) {
+          var container = document.getElementById('filesContainer');
+
+          // Create graph container HTML
+          var html = '<div id="graphContainer">';
+          html += '<div class="graph-toolbar">';
+          html += '<button class="graph-toolbar-btn' + (graphMode === 'mindmap' ? ' active' : '') + '" onclick="switchGraphMode(\'mindmap\')">Mind Map</button>';
+          html += '<button class="graph-toolbar-btn' + (graphMode === 'code' ? ' active' : '') + '" onclick="switchGraphMode(\'code\')">Code Graph</button>';
+          html += '</div>';
+          html += '<div class="graph-controls">';
+          html += '<button class="graph-control-btn" onclick="zoomIn()" title="Zoom In"><span class="icon icon-sm">+</span></button>';
+          html += '<button class="graph-control-btn" onclick="zoomOut()" title="Zoom Out"><span class="icon icon-sm">-</span></button>';
+          html += '<button class="graph-control-btn" onclick="resetZoom()" title="Reset"><span class="icon icon-sm">' + icons.refresh + '</span></button>';
+          html += '</div>';
+          html += '<div id="graphSvg"></div>';
+          html += '</div>';
+
+          container.innerHTML = html;
+
+          // If we have a selected memory and it's still in the filtered results, build mind map around it
+          if (selectedMemory && memories.find(function(m) { return m.id === selectedMemory.id; })) {
+            if (graphMode === 'mindmap') {
+              buildMindMap(selectedMemory.id);
+            } else {
+              buildCodeGraph(memories);
+            }
+          } else if (memories.length > 0) {
+            // Otherwise, build graph from available memories
+            if (graphMode === 'code') {
+              buildCodeGraph(memories);
+            } else {
+              // For mindmap, show a message to select a file
+              showGraphEmptyState('Select a file to view its connections');
+            }
+          } else {
+            showGraphEmptyState('No files to visualize');
+          }
+        }
+
+        function showGraphEmptyState(message) {
+          document.getElementById('graphSvg').innerHTML =
+            '<div class="graph-empty">' +
+            '<div class="graph-empty-icon">' + icons.graph + '</div>' +
+            '<div class="graph-empty-title">Graph View</div>' +
+            '<div class="graph-empty-text">' + message + '</div>' +
+            '</div>';
+        }
+
+        function switchGraphMode(mode) {
+          graphMode = mode;
+          renderFiles();
+        }
+
+        function buildMindMap(memoryId) {
+          // Call backend to get mind map data
+          invoke('get_mind_map', { memoryId: memoryId, depth: 2 })
+            .then(function(mindMap) {
+              graphData = mindMap;
+              renderMindMapD3(mindMap);
+            })
+            .catch(function(err) {
+              console.error('Failed to build mind map:', err);
+              showGraphEmptyState('Failed to load mind map: ' + err);
+            });
+        }
+
+        function buildCodeGraph(memories) {
+          // Filter code files only
+          var codeFiles = memories.filter(function(m) {
+            return m.kind && m.kind.Code;
+          });
+
+          if (codeFiles.length === 0) {
+            showGraphEmptyState('No code files found. Switch to Mind Map mode or filter for code files.');
+            return;
+          }
+
+          // Build a simple graph from code files
+          // Create nodes from code files
+          var nodes = codeFiles.map(function(mem) {
+            var fileName = mem.path.split('/').pop();
+            var lang = mem.kind.Code ? mem.kind.Code.language : 'unknown';
+            return {
+              id: mem.id,
+              label: fileName,
+              language: lang,
+              lines: mem.kind.Code ? mem.kind.Code.lines : 0,
+              path: mem.path,
+              color: getCodeColor(lang)
+            };
+          });
+
+          // Create edges based on imports (if available in metadata)
+          var edges = [];
+          codeFiles.forEach(function(mem) {
+            if (mem.metadata && mem.metadata.code_info && mem.metadata.code_info.imports) {
+              var sourceId = mem.id;
+              mem.metadata.code_info.imports.forEach(function(imp) {
+                // Try to find matching file
+                var target = codeFiles.find(function(m) {
+                  return m.path.includes(imp) || imp.includes(m.path.split('/').pop().replace(/\.\w+$/, ''));
+                });
+                if (target) {
+                  edges.push({
+                    source: sourceId,
+                    target: target.id,
+                    kind: 'imports'
+                  });
+                }
+              });
+            }
+          });
+
+          // Group by folder
+          var folders = {};
+          codeFiles.forEach(function(mem) {
+            var parts = mem.path.split('/');
+            var folder = parts.length > 1 ? parts[parts.length - 2] : 'root';
+            if (!folders[folder]) folders[folder] = [];
+            folders[folder].push(mem.id);
+          });
+
+          // Add same-folder edges
+          Object.values(folders).forEach(function(fileIds) {
+            if (fileIds.length > 1 && fileIds.length <= 5) {
+              for (var i = 0; i < fileIds.length; i++) {
+                for (var j = i + 1; j < fileIds.length; j++) {
+                  edges.push({
+                    source: fileIds[i],
+                    target: fileIds[j],
+                    kind: 'same_folder'
+                  });
+                }
+              }
+            }
+          });
+
+          var codeGraph = { nodes: nodes, edges: edges };
+          renderCodeGraphD3(codeGraph);
+        }
+
+        function getCodeColor(language) {
+          var colors = {
+            'rust': '#CE412B',
+            'python': '#3776AB',
+            'javascript': '#F7DF1E',
+            'typescript': '#3178C6',
+            'go': '#00ADD8',
+            'java': '#007396',
+            'cpp': '#00599C',
+            'c': '#A8B9CC'
+          };
+          return colors[language.toLowerCase()] || '#78716c';
+        }
+
+        function renderMindMapD3(mindMap) {
+          if (!window.d3) {
+            showGraphEmptyState('D3.js library not loaded');
+            return;
+          }
+
+          var container = document.getElementById('graphSvg');
+          var width = container.clientWidth || 800;
+          var height = container.clientHeight || 600;
+
+          // Clear previous content
+          container.innerHTML = '';
+
+          // Create SVG
+          var svg = d3.select('#graphSvg')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .attr('viewBox', [0, 0, width, height]);
+
+          // Add zoom behavior
+          var g = svg.append('g');
+          var zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on('zoom', function(event) {
+              g.attr('transform', event.transform);
+            });
+          svg.call(zoom);
+
+          // Define arrowhead marker
+          svg.append('defs').append('marker')
+            .attr('id', 'arrowhead')
+            .attr('viewBox', '-0 -5 10 10')
+            .attr('refX', 20)
+            .attr('refY', 0)
+            .attr('orient', 'auto')
+            .attr('markerWidth', 8)
+            .attr('markerHeight', 8)
+            .append('path')
+            .attr('d', 'M 0,-5 L 10,0 L 0,5')
+            .attr('fill', '#3b82f6');
+
+          // Use pre-computed positions if available, otherwise use force simulation
+          if (mindMap.nodes.every(function(n) { return n.position; })) {
+            renderWithPositions(g, mindMap, width, height);
+          } else {
+            renderWithForce(g, mindMap, width, height);
+          }
+
+          // Store simulation reference
+          graphSimulation = { svg: svg, zoom: zoom, g: g };
+        }
+
+        function renderWithPositions(g, mindMap, width, height) {
+          // Render edges
+          var link = g.append('g')
+            .selectAll('line')
+            .data(mindMap.edges)
+            .join('line')
+            .attr('class', function(d) { return 'graph-edge ' + d.kind; })
+            .attr('x1', function(d) {
+              var source = mindMap.nodes.find(function(n) { return n.id === d.source; });
+              return source ? source.position.x : 0;
+            })
+            .attr('y1', function(d) {
+              var source = mindMap.nodes.find(function(n) { return n.id === d.source; });
+              return source ? source.position.y : 0;
+            })
+            .attr('x2', function(d) {
+              var target = mindMap.nodes.find(function(n) { return n.id === d.target; });
+              return target ? target.position.x : 0;
+            })
+            .attr('y2', function(d) {
+              var target = mindMap.nodes.find(function(n) { return n.id === d.target; });
+              return target ? target.position.y : 0;
+            });
+
+          // Render nodes
+          var node = g.append('g')
+            .selectAll('g')
+            .data(mindMap.nodes)
+            .join('g')
+            .attr('class', function(d) { return 'graph-node' + (d.is_center ? ' center' : ''); })
+            .attr('transform', function(d) {
+              return 'translate(' + (d.position ? d.position.x : 0) + ',' + (d.position ? d.position.y : 0) + ')';
+            })
+            .on('click', function(event, d) {
+              // Find and select the memory
+              var mem = memories.find(function(m) { return m.id === d.id; });
+              if (mem) selectMemory(mem);
+            });
+
+          node.append('circle')
+            .attr('class', 'node-circle')
+            .attr('r', function(d) { return d.size * 20 + 10; })
+            .attr('fill', function(d) { return d.color; });
+
+          node.append('text')
+            .attr('class', 'node-label')
+            .attr('dy', function(d) { return d.size * 20 + 25; })
+            .text(function(d) { return d.label.length > 20 ? d.label.substring(0, 18) + '...' : d.label; });
+        }
+
+        function renderWithForce(g, mindMap, width, height) {
+          var simulation = d3.forceSimulation(mindMap.nodes)
+            .force('link', d3.forceLink(mindMap.edges).id(function(d) { return d.id; }).distance(100))
+            .force('charge', d3.forceManyBody().strength(-300))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(40));
+
+          // Render edges
+          var link = g.append('g')
+            .selectAll('line')
+            .data(mindMap.edges)
+            .join('line')
+            .attr('class', function(d) { return 'graph-edge ' + d.kind; });
+
+          // Render nodes
+          var node = g.append('g')
+            .selectAll('g')
+            .data(mindMap.nodes)
+            .join('g')
+            .attr('class', function(d) { return 'graph-node' + (d.is_center ? ' center' : ''); })
+            .on('click', function(event, d) {
+              var mem = memories.find(function(m) { return m.id === d.id; });
+              if (mem) selectMemory(mem);
+            })
+            .call(d3.drag()
+              .on('start', function(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+              })
+              .on('drag', function(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+              })
+              .on('end', function(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+              }));
+
+          node.append('circle')
+            .attr('class', 'node-circle')
+            .attr('r', function(d) { return d.size * 20 + 10; })
+            .attr('fill', function(d) { return d.color; });
+
+          node.append('text')
+            .attr('class', 'node-label')
+            .attr('dy', function(d) { return d.size * 20 + 25; })
+            .text(function(d) { return d.label.length > 20 ? d.label.substring(0, 18) + '...' : d.label; });
+
+          simulation.on('tick', function() {
+            link
+              .attr('x1', function(d) { return d.source.x; })
+              .attr('y1', function(d) { return d.source.y; })
+              .attr('x2', function(d) { return d.target.x; })
+              .attr('y2', function(d) { return d.target.y; });
+
+            node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+          });
+        }
+
+        function renderCodeGraphD3(codeGraph) {
+          if (!window.d3) {
+            showGraphEmptyState('D3.js library not loaded');
+            return;
+          }
+
+          var container = document.getElementById('graphSvg');
+          var width = container.clientWidth || 800;
+          var height = container.clientHeight || 600;
+
+          container.innerHTML = '';
+
+          var svg = d3.select('#graphSvg')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .attr('viewBox', [0, 0, width, height]);
+
+          var g = svg.append('g');
+          var zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on('zoom', function(event) {
+              g.attr('transform', event.transform);
+            });
+          svg.call(zoom);
+
+          // Define arrowhead marker
+          svg.append('defs').append('marker')
+            .attr('id', 'arrowhead')
+            .attr('viewBox', '-0 -5 10 10')
+            .attr('refX', 20)
+            .attr('refY', 0)
+            .attr('orient', 'auto')
+            .attr('markerWidth', 8)
+            .attr('markerHeight', 8)
+            .append('path')
+            .attr('d', 'M 0,-5 L 10,0 L 0,5')
+            .attr('fill', '#3b82f6');
+
+          var simulation = d3.forceSimulation(codeGraph.nodes)
+            .force('link', d3.forceLink(codeGraph.edges).id(function(d) { return d.id; }).distance(120))
+            .force('charge', d3.forceManyBody().strength(-400))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(50));
+
+          var link = g.append('g')
+            .selectAll('line')
+            .data(codeGraph.edges)
+            .join('line')
+            .attr('class', function(d) { return 'graph-edge ' + d.kind; });
+
+          var node = g.append('g')
+            .selectAll('g')
+            .data(codeGraph.nodes)
+            .join('g')
+            .attr('class', 'graph-node')
+            .on('click', function(event, d) {
+              var mem = memories.find(function(m) { return m.id === d.id; });
+              if (mem) selectMemory(mem);
+            })
+            .call(d3.drag()
+              .on('start', function(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+              })
+              .on('drag', function(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+              })
+              .on('end', function(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+              }));
+
+          node.append('circle')
+            .attr('class', 'node-circle')
+            .attr('r', 25)
+            .attr('fill', function(d) { return d.color; });
+
+          node.append('text')
+            .attr('class', 'node-label')
+            .attr('dy', 40)
+            .text(function(d) { return d.label.length > 15 ? d.label.substring(0, 13) + '...' : d.label; });
+
+          simulation.on('tick', function() {
+            link
+              .attr('x1', function(d) { return d.source.x; })
+              .attr('y1', function(d) { return d.source.y; })
+              .attr('x2', function(d) { return d.target.x; })
+              .attr('y2', function(d) { return d.target.y; });
+
+            node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+          });
+
+          graphSimulation = { svg: svg, zoom: zoom, simulation: simulation };
+        }
+
+        function zoomIn() {
+          if (graphSimulation && graphSimulation.svg) {
+            graphSimulation.svg.transition().call(
+              graphSimulation.zoom.scaleBy, 1.3
+            );
+          }
+        }
+
+        function zoomOut() {
+          if (graphSimulation && graphSimulation.svg) {
+            graphSimulation.svg.transition().call(
+              graphSimulation.zoom.scaleBy, 0.7
+            );
+          }
+        }
+
+        function resetZoom() {
+          if (graphSimulation && graphSimulation.svg) {
+            graphSimulation.svg.transition().call(
+              graphSimulation.zoom.transform,
+              d3.zoomIdentity
+            );
+          }
+        }
+        // ===== END GRAPH VISUALIZATION FUNCTIONS =====
 
         function bulkToggleFavorite() {
           if (selectedIds.length === 0) return;
@@ -5382,6 +6147,7 @@
           viewMode = 'grid';
           document.getElementById('gridViewBtn').classList.add('active');
           document.getElementById('listViewBtn').classList.remove('active');
+          document.getElementById('graphViewBtn').classList.remove('active');
           renderFiles();
         };
 
@@ -5389,6 +6155,15 @@
           viewMode = 'list';
           document.getElementById('listViewBtn').classList.add('active');
           document.getElementById('gridViewBtn').classList.remove('active');
+          document.getElementById('graphViewBtn').classList.remove('active');
+          renderFiles();
+        };
+
+        document.getElementById('graphViewBtn').onclick = function() {
+          viewMode = 'graph';
+          document.getElementById('graphViewBtn').classList.add('active');
+          document.getElementById('gridViewBtn').classList.remove('active');
+          document.getElementById('listViewBtn').classList.remove('active');
           renderFiles();
         };
 

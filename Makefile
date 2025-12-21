@@ -183,3 +183,70 @@ inspect-db: ## Show database info
 tunnel: ## Create SSH tunnel for remote access (use PORT=3000 REMOTE_PORT=8080 REMOTE_HOST=example.com)
 	@echo "$(BLUE)Creating SSH tunnel...$(NC)"
 	@ssh -N -L $(PORT):localhost:$(REMOTE_PORT) $(REMOTE_HOST)
+
+# Mobile Build Commands
+.PHONY: mobile-init mobile-android mobile-ios mobile-android-build mobile-ios-build mobile-clean
+
+mobile-init: ## Initialize mobile targets (iOS and Android)
+	@echo "$(BLUE)Initializing mobile targets...$(NC)"
+	cd hippo-tauri && cargo tauri android init
+	cd hippo-tauri && cargo tauri ios init
+	@echo "$(GREEN)Mobile targets initialized!$(NC)"
+	@echo "$(YELLOW)Note: For iOS, update developmentTeam in tauri.conf.json$(NC)"
+
+mobile-android: ## Run Android app in development mode
+	@echo "$(BLUE)Starting Android development build...$(NC)"
+	cd hippo-tauri && cargo tauri android dev
+
+mobile-android-build: ## Build Android APK/AAB for release
+	@echo "$(BLUE)Building Android release...$(NC)"
+	cd hippo-tauri && cargo tauri android build --release
+	@echo "$(GREEN)Android build complete!$(NC)"
+	@echo "APK/AAB location: hippo-tauri/gen/android/app/build/outputs/"
+
+mobile-ios: ## Run iOS app in development mode (requires macOS + Xcode)
+	@echo "$(BLUE)Starting iOS development build...$(NC)"
+	cd hippo-tauri && cargo tauri ios dev
+
+mobile-ios-build: ## Build iOS IPA for release (requires macOS + Xcode)
+	@echo "$(BLUE)Building iOS release...$(NC)"
+	cd hippo-tauri && cargo tauri ios build --release
+	@echo "$(GREEN)iOS build complete!$(NC)"
+	@echo "IPA location: hippo-tauri/gen/ios/build/Release-iphoneos/"
+
+mobile-clean: ## Clean mobile build artifacts
+	@echo "$(BLUE)Cleaning mobile builds...$(NC)"
+	rm -rf hippo-tauri/gen/android
+	rm -rf hippo-tauri/gen/ios
+	@echo "$(GREEN)Mobile build artifacts cleaned$(NC)"
+
+mobile-help: ## Show mobile build requirements and setup instructions
+	@echo "$(BLUE)Hippo Mobile Build Requirements$(NC)"
+	@echo ""
+	@echo "$(GREEN)Prerequisites:$(NC)"
+	@echo "  1. Rust mobile targets:"
+	@echo "     rustup target add aarch64-linux-android armv7-linux-androideabi"
+	@echo "     rustup target add aarch64-apple-ios aarch64-apple-ios-sim"
+	@echo ""
+	@echo "  2. Android (all platforms):"
+	@echo "     - Android Studio with NDK and SDK"
+	@echo "     - Java 17+ (JDK)"
+	@echo "     - ANDROID_HOME and NDK_HOME environment variables"
+	@echo ""
+	@echo "  3. iOS (macOS only):"
+	@echo "     - Xcode 13.0+"
+	@echo "     - iOS development certificate and provisioning profile"
+	@echo "     - Update developmentTeam in hippo-tauri/tauri.conf.json"
+	@echo ""
+	@echo "$(GREEN)Build Commands:$(NC)"
+	@echo "  make mobile-init          - Initialize mobile targets"
+	@echo "  make mobile-android       - Run Android in dev mode"
+	@echo "  make mobile-android-build - Build Android release"
+	@echo "  make mobile-ios           - Run iOS in dev mode (macOS)"
+	@echo "  make mobile-ios-build     - Build iOS release (macOS)"
+	@echo ""
+	@echo "$(YELLOW)First Time Setup:$(NC)"
+	@echo "  1. Run 'make mobile-init'"
+	@echo "  2. Configure signing (iOS) or keystore (Android)"
+	@echo "  3. Run 'make mobile-android' or 'make mobile-ios'"
+	@echo ""

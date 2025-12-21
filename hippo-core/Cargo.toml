@@ -27,6 +27,8 @@ mime_guess = { workspace = true }
 image = { workspace = true }
 kamadak-exif = { workspace = true }
 symphonia = { workspace = true }
+pdfium-render = { workspace = true }
+zip = { workspace = true }
 
 # Code parsing
 tree-sitter = { workspace = true }
@@ -64,7 +66,6 @@ parking_lot = { workspace = true }
 # Archive extraction (for Qdrant auto-install)
 flate2 = { workspace = true }
 tar = { workspace = true }
-zip = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

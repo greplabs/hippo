@@ -1,0 +1,352 @@
+Hippo Mobile Apps - Complete File Structure
+==============================================
+
+Branch: feature/mobile-apps (to be created)
+Date: 2025-12-20
+
+MODIFIED FILES (5 files)
+========================
+
+1. /.gitignore
+   - Added mobile build artifacts exclusions
+   - Added: hippo-tauri/gen/, *.apk, *.aab, *.ipa, etc.
+
+2. /Makefile
+   - Added mobile build commands section
+   - New targets: mobile-init, mobile-android, mobile-ios, mobile-*-build, mobile-clean, mobile-help
+   - Added comprehensive prerequisites documentation
+
+3. /hippo-tauri/tauri.conf.json
+   - Changed identifier: com.hippo.app → com.greplabs.hippo
+   - Added bundle.iOS section (minimum iOS 13.0, developmentTeam placeholder)
+   - Added bundle.android section (minSdkVersion 24, versionCode 1)
+   - Added plugins.fs configuration with mobile-friendly scopes
+
+4. /hippo-tauri/Cargo.toml
+   - Added mobile-specific conditional dependencies
+   - Added tauri-plugin-barcode-scanner for iOS and Android
+
+5. /hippo-tauri/ui/package.json
+   - Added mobile development scripts
+   - Added @tauri-apps/cli as devDependency
+   - New scripts: tauri:android, tauri:ios, mobile:init, etc.
+
+
+NEW CONFIGURATION FILES (4 files)
+==================================
+
+1. /hippo-tauri/Info.plist.additions
+   Purpose: iOS app metadata and permissions
+   Contents:
+   - App display name and description
+   - Privacy permission descriptions (NSPhotoLibraryUsageDescription, etc.)
+   - Supported file types and UTIs
+   - Background modes for indexing
+   - Interface orientations
+   - Launch screen configuration
+
+   Usage: Manually merge into gen/ios/Hippo/Info.plist after initialization
+
+2. /hippo-tauri/AndroidManifest.xml.additions
+   Purpose: Android app permissions and configuration
+   Contents:
+   - Permissions (storage, camera, microphone, network)
+   - Scoped storage configuration (Android 11+)
+   - FileProvider configuration for file sharing
+   - Hardware acceleration
+   - Feature declarations
+   - Large heap setting
+
+   Usage: Manually merge into gen/android/app/src/main/AndroidManifest.xml
+
+3. /hippo-tauri/android-file-paths.xml
+   Purpose: Android FileProvider paths
+   Contents:
+   - Internal storage paths (files, cache)
+   - External storage paths (SD card)
+   - Media storage paths
+
+   Usage: Copy to gen/android/app/src/main/res/xml/file_paths.xml
+
+4. /hippo-tauri/capabilities/mobile.json
+   Purpose: Tauri mobile-specific permissions
+   Contents:
+   - Core window/app permissions
+   - Dialog permissions (file picker)
+   - Shell permissions (open files)
+   - File system permissions with scopes
+   - Platform targeting (iOS, Android)
+
+
+NEW DOCUMENTATION FILES (5 files)
+==================================
+
+1. /hippo-tauri/MOBILE_SETUP.md (Comprehensive - 400+ lines)
+   Sections:
+   - Prerequisites (all platforms, Android-specific, iOS-specific)
+   - Initial setup walkthrough
+   - iOS development guide
+   - Android development guide
+   - Building for production
+   - Troubleshooting guide
+   - Platform differences
+   - Resources
+
+2. /hippo-tauri/MOBILE_ICONS.md (Icon Generation - 150+ lines)
+   Sections:
+   - iOS icon requirements (all sizes)
+   - Android icon requirements (all densities)
+   - Adaptive icons for modern Android
+   - ImageMagick commands
+   - Tauri CLI automation
+   - Testing icons
+
+3. /hippo-tauri/MOBILE_README.md (Quick Reference - 150+ lines)
+   Sections:
+   - Quick commands cheat sheet
+   - Requirements summary
+   - Configuration files overview
+   - Platform differences
+   - Build outputs
+   - Development workflow
+   - Troubleshooting
+
+4. /MOBILE_CONFIGURATION_SUMMARY.md (Complete Summary - 500+ lines)
+   Sections:
+   - All file modifications detailed
+   - All new files documented
+   - Prerequisites summary
+   - First-time setup guide
+   - Build outputs
+   - Testing checklist
+   - Platform comparison table
+   - Next steps
+
+5. /MOBILE_QUICKSTART.md (Checklist Format - 250+ lines)
+   Sections:
+   - Prerequisites checklist
+   - Step-by-step setup
+   - Troubleshooting
+   - Common commands
+   - Success indicators
+   - Time estimates
+
+
+NEW CI/CD FILE (1 file)
+=======================
+
+1. /.github/workflows/mobile-build.yml.disabled
+   Purpose: Automated mobile builds (optional)
+   Contents:
+   - Android build job (Ubuntu)
+   - iOS build job (macOS)
+   - Release automation
+   - Code signing setup (commented)
+   - Artifact uploads
+
+   Usage: Rename to .yml and configure secrets to enable
+
+
+DIRECTORY STRUCTURE AFTER INITIALIZATION
+=========================================
+
+hippo-tauri/
+├── Cargo.toml ........................... [MODIFIED] Mobile dependencies
+├── tauri.conf.json ...................... [MODIFIED] Mobile configuration
+├── build.rs
+├── src/
+│   └── main.rs
+├── ui/
+│   ├── package.json ..................... [MODIFIED] Mobile scripts
+│   └── dist/
+│       └── index.html
+├── icons/
+│   ├── icon.png
+│   ├── 32x32.png
+│   └── 128x128.png
+├── capabilities/
+│   ├── default.json
+│   └── mobile.json ...................... [NEW] Mobile permissions
+├── Info.plist.additions ................. [NEW] iOS config reference
+├── AndroidManifest.xml.additions ........ [NEW] Android config reference
+├── android-file-paths.xml ............... [NEW] Android FileProvider
+├── MOBILE_SETUP.md ...................... [NEW] Comprehensive guide
+├── MOBILE_ICONS.md ...................... [NEW] Icon generation
+├── MOBILE_README.md ..................... [NEW] Quick reference
+└── gen/ ................................. [CREATED BY make mobile-init]
+    ├── android/
+    │   ├── app/
+    │   │   ├── src/main/
+    │   │   │   ├── AndroidManifest.xml ... [MERGE AndroidManifest.xml.additions]
+    │   │   │   └── res/
+    │   │   │       └── xml/
+    │   │   │           └── file_paths.xml . [COPY android-file-paths.xml]
+    │   │   └── build.gradle
+    │   └── gradle.properties
+    └── ios/
+        ├── Hippo/
+        │   ├── Info.plist ................. [MERGE Info.plist.additions]
+        │   └── Hippo.entitlements
+        ├── Hippo.xcodeproj
+        └── Podfile
+
+
+SUMMARY STATISTICS
+==================
+
+Modified Files: 5
+New Config Files: 4
+New Documentation: 5
+New CI/CD: 1
+Total New Files: 10
+Total Changed Files: 15
+
+Lines Added: ~2,500 (approximate)
+- Configuration: ~300 lines
+- Documentation: ~2,000 lines
+- Build scripts: ~200 lines
+
+
+QUICK START COMMANDS
+====================
+
+# 1. Initialize mobile targets (one time)
+make mobile-init
+
+# 2. Configure iOS signing
+# Edit hippo-tauri/tauri.conf.json and add your Team ID
+
+# 3. Merge permissions
+# iOS: Merge Info.plist.additions → gen/ios/Hippo/Info.plist
+# Android: Merge AndroidManifest.xml.additions → gen/android/app/src/main/AndroidManifest.xml
+
+# 4. Run on Android
+make mobile-android
+
+# 5. Run on iOS (macOS only)
+make mobile-ios
+
+# 6. Build for production
+make mobile-android-build
+make mobile-ios-build
+
+
+NEXT STEPS FOR DEVELOPER
+=========================
+
+1. Create feature branch:
+   git checkout -b feature/mobile-apps
+
+2. Review and commit changes:
+   git add .
+   git commit -m "Add Tauri 2 mobile app support for iOS and Android"
+
+3. Install prerequisites (see MOBILE_SETUP.md)
+
+4. Initialize mobile targets:
+   make mobile-init
+
+5. Configure signing:
+   - iOS: Add Team ID to tauri.conf.json
+   - Android: Create keystore for release builds
+
+6. First build:
+   make mobile-android  # or make mobile-ios
+
+7. Test and iterate
+
+8. Push and create PR:
+   git push origin feature/mobile-apps
+
+
+KEY FEATURES ENABLED
+====================
+
+✅ Native iOS app support (iOS 13+)
+✅ Native Android app support (Android 7.0+)
+✅ Unified codebase (shared Rust core + UI)
+✅ Platform-specific permissions
+✅ File system access (sandboxed)
+✅ Photo library integration
+✅ Camera/microphone access
+✅ Native file picker
+✅ Background processing
+✅ Development and production builds
+✅ Comprehensive documentation
+✅ Build automation (Makefile + npm scripts)
+✅ CI/CD template (optional)
+
+
+DOCUMENTATION READING ORDER
+============================
+
+1. Start: MOBILE_QUICKSTART.md (checklist)
+2. Setup: MOBILE_SETUP.md (comprehensive guide)
+3. Reference: MOBILE_README.md (quick commands)
+4. Icons: MOBILE_ICONS.md (when generating assets)
+5. Summary: MOBILE_CONFIGURATION_SUMMARY.md (complete overview)
+
+
+ESTIMATED BUILD SIZES
+======================
+
+Android APK (debug): ~50-80 MB
+Android APK (release): ~30-50 MB
+Android AAB (release): ~25-40 MB
+iOS IPA (debug): ~60-100 MB
+iOS IPA (release): ~40-70 MB
+
+Note: Sizes depend on included assets and optimizations
+
+
+SUPPORTED PLATFORMS
+===================
+
+Development:
+- macOS (iOS + Android)
+- Linux (Android only)
+- Windows (Android only)
+
+Deployment:
+- iOS 13.0 and later
+- iPadOS 13.0 and later
+- Android 7.0 (API 24) and later
+
+Architecture Support:
+- iOS: arm64 (iPhone 5s and later)
+- Android: arm64-v8a, armeabi-v7a
+
+
+TESTING CHECKLIST
+=================
+
+Device Testing:
+□ iOS Simulator (various screen sizes)
+□ Android Emulator (various API levels)
+□ Physical iPhone/iPad
+□ Physical Android phone/tablet
+
+Feature Testing:
+□ App launches successfully
+□ File picker works
+□ Photo library access
+□ Search functionality
+□ File indexing
+□ Thumbnail generation
+□ Database persistence
+□ Background processing
+□ App state restoration
+□ Offline functionality
+□ Memory usage
+□ Battery usage
+□ Performance on older devices
+
+Build Testing:
+□ Debug build installs
+□ Release build installs
+□ Signing works correctly
+□ App Store/Play Store requirements met
+
+
+END OF FILE OVERVIEW
+=====================

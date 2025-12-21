@@ -1,0 +1,214 @@
+# Mobile Build Workflow (iOS and Android)
+#
+# This workflow is DISABLED by default (.yml.disabled extension)
+# To enable: rename to .yml and configure secrets
+#
+# Required Secrets:
+# - APPLE_DEVELOPER_ID: Your Apple Developer account email
+# - APPLE_TEAM_ID: Your Apple Team ID
+# - APPLE_CERTIFICATE: Base64-encoded P12 certificate
+# - APPLE_CERTIFICATE_PASSWORD: P12 password
+# - PROVISIONING_PROFILE: Base64-encoded provisioning profile
+# - ANDROID_KEYSTORE: Base64-encoded keystore file
+# - ANDROID_KEYSTORE_PASSWORD: Keystore password
+# - ANDROID_KEY_ALIAS: Key alias
+# - ANDROID_KEY_PASSWORD: Key password
+
+name: Mobile Build
+
+on:
+  push:
+    branches: [ main, mobile/** ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install Android NDK
+      run: |
+        sdkmanager --install "ndk;26.1.10909125"
+        echo "NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-linux-android,armv7-linux-androideabi
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: hippo-tauri/ui/package-lock.json
+
+    - name: Install Tauri CLI
+      run: cargo install tauri-cli
+
+    - name: Install frontend dependencies
+      run: |
+        cd hippo-tauri/ui
+        npm ci
+        npm run build
+
+    - name: Initialize Android
+      run: |
+        cd hippo-tauri
+        cargo tauri android init
+
+    # Uncomment when you have signing configured
+    # - name: Decode Keystore
+    #   env:
+    #     KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE }}
+    #   run: |
+    #     echo $KEYSTORE_BASE64 | base64 -d > hippo-release.keystore
+
+    # - name: Build Android Release
+    #   env:
+    #     KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    #     KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+    #     KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    #   run: |
+    #     cd hippo-tauri
+    #     cargo tauri android build --release --target aab
+
+    - name: Build Android Debug (unsigned)
+      run: |
+        cd hippo-tauri
+        cargo tauri android build
+
+    - name: Upload Android artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-apk
+        path: hippo-tauri/gen/android/app/build/outputs/apk/**/*.apk
+        retention-days: 30
+
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: hippo-tauri/ui/package-lock.json
+
+    - name: Install Tauri CLI
+      run: cargo install tauri-cli
+
+    - name: Install frontend dependencies
+      run: |
+        cd hippo-tauri/ui
+        npm ci
+        npm run build
+
+    - name: Install CocoaPods
+      run: sudo gem install cocoapods
+
+    - name: Initialize iOS
+      run: |
+        cd hippo-tauri
+        cargo tauri ios init
+
+    # Uncomment when you have signing configured
+    # - name: Import Certificates
+    #   env:
+    #     CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE }}
+    #     CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+    #     PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+    #   run: |
+    #     # Create keychain
+    #     security create-keychain -p actions build.keychain
+    #     security default-keychain -s build.keychain
+    #     security unlock-keychain -p actions build.keychain
+    #
+    #     # Import certificate
+    #     echo $CERTIFICATE_BASE64 | base64 -d > certificate.p12
+    #     security import certificate.p12 -k build.keychain -P $CERTIFICATE_PASSWORD -T /usr/bin/codesign
+    #
+    #     # Import provisioning profile
+    #     mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+    #     echo $PROVISIONING_PROFILE | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/hippo.mobileprovision
+
+    # - name: Build iOS Release
+    #   env:
+    #     DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+    #   run: |
+    #     cd hippo-tauri
+    #     # Update tauri.conf.json with team ID
+    #     sed -i '' 's/"developmentTeam": ""/"developmentTeam": "'$DEVELOPMENT_TEAM'"/' tauri.conf.json
+    #     cargo tauri ios build --release
+
+    - name: Build iOS Debug (unsigned)
+      run: |
+        cd hippo-tauri
+        cargo tauri ios build
+
+    # Upload would require signed build
+    # - name: Upload iOS artifacts
+    #   uses: actions/upload-artifact@v4
+    #   with:
+    #     name: ios-ipa
+    #     path: hippo-tauri/gen/ios/build/Release-iphoneos/*.ipa
+    #     retention-days: 30
+
+  # Optional: Release to GitHub
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download Android artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: android-apk
+        path: ./android
+
+    # Uncomment when iOS signing is configured
+    # - name: Download iOS artifacts
+    #   uses: actions/download-artifact@v4
+    #   with:
+    #     name: ios-ipa
+    #     path: ./ios
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          android/**/*.apk
+          android/**/*.aab
+        draft: true
+        generate_release_notes: true

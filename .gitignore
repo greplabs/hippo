@@ -29,3 +29,14 @@ hippo-tauri/binaries/
 # Docker development
 dev-data/
 dev-qdrant-data/
+
+# Mobile build artifacts (Tauri)
+hippo-tauri/gen/
+hippo-tauri/WixTools/
+**/gen/android/
+**/gen/ios/
+*.apk
+*.aab
+*.ipa
+*.xcarchive
+.kotlin/

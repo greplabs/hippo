@@ -1,16 +1,17 @@
-//! Thumbnail generation and caching for fast image and video previews
+//! Thumbnail generation and caching for fast image, video, PDF, and document previews
 //!
 //! Features:
 //! - Disk caching for persistence across restarts
 //! - In-memory LRU cache for hot thumbnails
 //! - Automatic cache eviction when memory limit reached
-//! - Support for images and videos (via ffmpeg)
+//! - Support for images, videos (via ffmpeg), PDFs (via pdfium), and Office documents
 
 use crate::error::{HippoError, Result};
 use image::{DynamicImage, ImageFormat};
 use lru::LruCache;
 use parking_lot::Mutex;
 use std::fs;
+use std::io::Read;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -348,6 +349,193 @@ impl ThumbnailManager {
             video_path
         )))
     }
+
+    /// Generate a thumbnail for a PDF file by rendering the first page
+    /// Returns the path to the thumbnail if successful
+    pub fn generate_pdf_thumbnail(&self, pdf_path: &Path) -> Result<PathBuf> {
+        // Generate a unique filename based on the original path
+        let thumbnail_name = self.get_thumbnail_name(pdf_path);
+        let thumbnail_path = self.cache_dir.join(&thumbnail_name);
+
+        // Check if thumbnail already exists and is newer than source
+        if thumbnail_path.exists() {
+            if let (Ok(src_meta), Ok(thumb_meta)) =
+                (fs::metadata(pdf_path), fs::metadata(&thumbnail_path))
+            {
+                if let (Ok(src_time), Ok(thumb_time)) = (src_meta.modified(), thumb_meta.modified())
+                {
+                    if thumb_time >= src_time {
+                        debug!("Using cached PDF thumbnail: {:?}", thumbnail_path);
+                        return Ok(thumbnail_path);
+                    }
+                }
+            }
+        }
+
+        debug!("Generating PDF thumbnail for: {:?}", pdf_path);
+
+        // Try to render PDF using pdfium
+        match self.render_pdf_with_pdfium(pdf_path, &thumbnail_path) {
+            Ok(_) => {
+                debug!("PDF thumbnail saved: {:?}", thumbnail_path);
+                return Ok(thumbnail_path);
+            }
+            Err(e) => {
+                warn!("Failed to render PDF with pdfium: {}", e);
+            }
+        }
+
+        Err(HippoError::Other(format!(
+            "Failed to generate PDF thumbnail for {:?}",
+            pdf_path
+        )))
+    }
+
+    /// Render PDF first page using pdfium-render
+    fn render_pdf_with_pdfium(&self, pdf_path: &Path, output_path: &Path) -> Result<()> {
+        use pdfium_render::prelude::*;
+
+        // Initialize pdfium
+        let pdfium = Pdfium::new(
+            Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path("./"))
+                .or_else(|_| Pdfium::bind_to_system_library())
+                .map_err(|e| HippoError::Other(format!("Failed to load pdfium library: {}", e)))?,
+        );
+
+        // Load the PDF document
+        let document = pdfium
+            .load_pdf_from_file(pdf_path, None)
+            .map_err(|e| HippoError::Other(format!("Failed to load PDF: {}", e)))?;
+
+        // Get the first page
+        let page = document
+            .pages()
+            .get(0)
+            .map_err(|e| HippoError::Other(format!("Failed to get first page: {}", e)))?;
+
+        // Calculate render dimensions maintaining aspect ratio
+        let page_width = page.width().value;
+        let page_height = page.height().value;
+        let aspect_ratio = page_width / page_height;
+
+        let (render_width, render_height) = if aspect_ratio > 1.0 {
+            // Landscape
+            (self.size, (self.size as f32 / aspect_ratio) as u32)
+        } else {
+            // Portrait or square
+            ((self.size as f32 * aspect_ratio) as u32, self.size)
+        };
+
+        // Render the page to a bitmap
+        let bitmap = page
+            .render_with_config(
+                &PdfRenderConfig::new()
+                    .set_target_width(render_width as i32)
+                    .set_target_height(render_height as i32)
+                    .rotate_if_landscape(PdfPageRenderRotation::None, true),
+            )
+            .map_err(|e| HippoError::Other(format!("Failed to render page: {}", e)))?;
+
+        // Convert to image and save
+        let dynamic_image = bitmap.as_image();
+        let thumbnail = self.create_thumbnail(&dynamic_image);
+
+        let mut output = fs::File::create(output_path)?;
+        thumbnail
+            .write_to(&mut output, ImageFormat::Jpeg)
+            .map_err(|e| HippoError::Other(format!("Failed to save PDF thumbnail: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Extract embedded thumbnail from Office document (docx, xlsx, pptx)
+    /// These are ZIP files that may contain thumbnail images
+    /// Returns the path to the thumbnail if successful
+    pub fn generate_office_thumbnail(&self, doc_path: &Path) -> Result<PathBuf> {
+        // Generate a unique filename based on the original path
+        let thumbnail_name = self.get_thumbnail_name(doc_path);
+        let thumbnail_path = self.cache_dir.join(&thumbnail_name);
+
+        // Check if thumbnail already exists and is newer than source
+        if thumbnail_path.exists() {
+            if let (Ok(src_meta), Ok(thumb_meta)) =
+                (fs::metadata(doc_path), fs::metadata(&thumbnail_path))
+            {
+                if let (Ok(src_time), Ok(thumb_time)) = (src_meta.modified(), thumb_meta.modified())
+                {
+                    if thumb_time >= src_time {
+                        debug!("Using cached Office document thumbnail: {:?}", thumbnail_path);
+                        return Ok(thumbnail_path);
+                    }
+                }
+            }
+        }
+
+        debug!("Extracting Office document thumbnail for: {:?}", doc_path);
+
+        // Try to extract embedded thumbnail from the ZIP archive
+        match self.extract_office_thumbnail_from_zip(doc_path, &thumbnail_path) {
+            Ok(_) => {
+                debug!("Office document thumbnail saved: {:?}", thumbnail_path);
+                return Ok(thumbnail_path);
+            }
+            Err(e) => {
+                warn!("Failed to extract Office thumbnail: {}", e);
+            }
+        }
+
+        Err(HippoError::Other(format!(
+            "Failed to generate Office document thumbnail for {:?}",
+            doc_path
+        )))
+    }
+
+    /// Extract thumbnail from Office Open XML document (ZIP archive)
+    fn extract_office_thumbnail_from_zip(
+        &self,
+        doc_path: &Path,
+        output_path: &Path,
+    ) -> Result<()> {
+        let file = fs::File::open(doc_path)?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|e| HippoError::Other(format!("Failed to open ZIP archive: {}", e)))?;
+
+        // Common thumbnail locations in Office documents
+        let thumbnail_paths = [
+            "docProps/thumbnail.jpeg",
+            "docProps/thumbnail.jpg",
+            "docProps/thumbnail.png",
+            "docProps/thumbnail.emf",
+            "docProps/thumbnail.wmf",
+        ];
+
+        // Try each possible thumbnail path
+        for thumb_path in &thumbnail_paths {
+            if let Ok(mut file) = archive.by_name(thumb_path) {
+                debug!("Found embedded thumbnail at: {}", thumb_path);
+
+                // Read the thumbnail data
+                let mut buffer = Vec::new();
+                file.read_to_end(&mut buffer)?;
+
+                // Try to load as an image
+                if let Ok(img) = image::load_from_memory(&buffer) {
+                    let thumbnail = self.create_thumbnail(&img);
+                    let mut output = fs::File::create(output_path)?;
+                    thumbnail
+                        .write_to(&mut output, ImageFormat::Jpeg)
+                        .map_err(|e| {
+                            HippoError::Other(format!("Failed to save Office thumbnail: {}", e))
+                        })?;
+                    return Ok(());
+                }
+            }
+        }
+
+        Err(HippoError::Other(
+            "No embedded thumbnail found in Office document".to_string(),
+        ))
+    }
 }
 
 impl Default for ThumbnailManager {
@@ -394,6 +582,24 @@ pub fn is_supported_image(path: &Path) -> bool {
 /// Check if a file is a supported video format for thumbnails
 pub fn is_supported_video(path: &Path) -> bool {
     let supported_extensions = ["mp4", "mov", "avi", "mkv", "webm", "m4v"];
+
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| supported_extensions.contains(&ext.to_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// Check if a file is a PDF document
+pub fn is_supported_pdf(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_lowercase() == "pdf")
+        .unwrap_or(false)
+}
+
+/// Check if a file is a supported Office document format for thumbnail extraction
+pub fn is_supported_office_document(path: &Path) -> bool {
+    let supported_extensions = ["docx", "xlsx", "pptx"];
 
     path.extension()
         .and_then(|ext| ext.to_str())
@@ -449,5 +655,24 @@ mod tests {
         assert!(is_supported_video(Path::new("test.webm")));
         assert!(!is_supported_video(Path::new("test.jpg")));
         assert!(!is_supported_video(Path::new("test.txt")));
+    }
+
+    #[test]
+    fn test_is_supported_pdf() {
+        assert!(is_supported_pdf(Path::new("test.pdf")));
+        assert!(is_supported_pdf(Path::new("test.PDF")));
+        assert!(!is_supported_pdf(Path::new("test.docx")));
+        assert!(!is_supported_pdf(Path::new("test.txt")));
+        assert!(!is_supported_pdf(Path::new("test.jpg")));
+    }
+
+    #[test]
+    fn test_is_supported_office_document() {
+        assert!(is_supported_office_document(Path::new("test.docx")));
+        assert!(is_supported_office_document(Path::new("test.XLSX")));
+        assert!(is_supported_office_document(Path::new("test.pptx")));
+        assert!(!is_supported_office_document(Path::new("test.pdf")));
+        assert!(!is_supported_office_document(Path::new("test.doc"))); // Old format not supported
+        assert!(!is_supported_office_document(Path::new("test.txt")));
     }
 }

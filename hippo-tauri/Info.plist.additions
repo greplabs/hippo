@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Display Name -->
+    <key>CFBundleDisplayName</key>
+    <string>Hippo</string>
+
+    <!-- App Description -->
+    <key>CFBundleDescription</key>
+    <string>The memory that never forgets - Local-first file organizer</string>
+
+    <!-- Privacy - Photo Library Usage -->
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Hippo needs access to your photos to index and organize your image files.</string>
+
+    <!-- Privacy - Photo Library Add Usage -->
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Hippo may save thumbnails and processed images to your photo library.</string>
+
+    <!-- Privacy - Camera Usage (for future features) -->
+    <key>NSCameraUsageDescription</key>
+    <string>Hippo can use your camera to capture and organize new photos.</string>
+
+    <!-- Privacy - Microphone Usage (for audio/video files) -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Hippo needs microphone access to record and organize audio files.</string>
+
+    <!-- Privacy - File Access -->
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Hippo needs access to your documents to index and organize files.</string>
+
+    <!-- Privacy - Downloads Folder -->
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Hippo needs access to your downloads folder to index and organize files.</string>
+
+    <!-- Privacy - Desktop Folder -->
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Hippo needs access to your desktop to index and organize files.</string>
+
+    <!-- Supported file types and UTIs -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Image</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.image</string>
+                <string>public.jpeg</string>
+                <string>public.png</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Video</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.movie</string>
+                <string>public.video</string>
+                <string>public.mpeg-4</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Document</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.data</string>
+                <string>public.content</string>
+            </array>
+        </dict>
+    </array>
+
+    <!-- Background Modes (for file indexing) -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
+
+    <!-- Supported Interface Orientations (iPhone) -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+
+    <!-- Supported Interface Orientations (iPad) -->
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+
+    <!-- Status Bar Style -->
+    <key>UIStatusBarStyle</key>
+    <string>UIStatusBarStyleDefault</string>
+
+    <!-- Requires Full Screen -->
+    <key>UIRequiresFullScreen</key>
+    <false/>
+
+    <!-- Launch Screen -->
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+</dict>
+</plist>
