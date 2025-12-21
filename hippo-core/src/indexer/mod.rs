@@ -720,7 +720,10 @@ impl Indexer {
                         if let Some(ref make) = exif.camera_make {
                             let clean_make = make.trim().trim_matches('"').to_lowercase();
                             if !clean_make.is_empty() {
-                                all_tags.push(format!("camera:{}", clean_make.split_whitespace().next().unwrap_or(&clean_make)));
+                                all_tags.push(format!(
+                                    "camera:{}",
+                                    clean_make.split_whitespace().next().unwrap_or(&clean_make)
+                                ));
                             }
                         }
                         // Add photography-related tags based on settings
@@ -832,15 +835,23 @@ impl Indexer {
                                 all_tags.push("react".to_string());
                             } else if import_lower.contains("tokio") {
                                 all_tags.push("async".to_string());
-                            } else if import_lower.contains("django") || import_lower.contains("flask") {
+                            } else if import_lower.contains("django")
+                                || import_lower.contains("flask")
+                            {
                                 all_tags.push("web".to_string());
-                            } else if import_lower.contains("tensorflow") || import_lower.contains("torch") {
+                            } else if import_lower.contains("tensorflow")
+                                || import_lower.contains("torch")
+                            {
                                 all_tags.push("ml".to_string());
                             }
                         }
 
                         // Check for test files
-                        if code_info.functions.iter().any(|f| f.name.starts_with("test_") || f.name.contains("test")) {
+                        if code_info
+                            .functions
+                            .iter()
+                            .any(|f| f.name.starts_with("test_") || f.name.contains("test"))
+                        {
                             all_tags.push("tests".to_string());
                         }
                     }

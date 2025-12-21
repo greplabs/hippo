@@ -1,0 +1,570 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Build CLI binaries for all platforms
+  build-cli:
+    name: Build CLI - ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux builds
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x86_64
+            artifact_name: hippo
+            asset_name: hippo-cli-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            platform: linux-aarch64
+            artifact_name: hippo
+            asset_name: hippo-cli-linux-aarch64
+            use_cross: true
+
+          # macOS builds
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            platform: macos-x86_64
+            artifact_name: hippo
+            asset_name: hippo-cli-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            platform: macos-aarch64
+            artifact_name: hippo
+            asset_name: hippo-cli-macos-aarch64
+
+          # Windows builds
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+            artifact_name: hippo.exe
+            asset_name: hippo-cli-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux' && !matrix.use_cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libssl-dev \
+            pkg-config
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-cli-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-cli-
+
+      - name: Build CLI (cross)
+        if: matrix.use_cross
+        run: cross build --release --target ${{ matrix.target }} -p hippo-cli
+
+      - name: Build CLI (native)
+        if: "!matrix.use_cross"
+        run: cargo build --release --target ${{ matrix.target }} -p hippo-cli
+
+      - name: Prepare artifact (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p release
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} release/${{ matrix.asset_name }}
+          chmod +x release/${{ matrix.asset_name }}
+
+          # Create tarball
+          cd release
+          tar -czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.asset_name }}
+          sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          mkdir release
+          copy target\${{ matrix.target }}\release\${{ matrix.artifact_name }} release\${{ matrix.asset_name }}
+
+          # Create zip
+          cd release
+          Compress-Archive -Path ${{ matrix.asset_name }} -DestinationPath ${{ matrix.asset_name }}.zip
+          (Get-FileHash ${{ matrix.asset_name }}.zip -Algorithm SHA256).Hash | Out-File -FilePath ${{ matrix.asset_name }}.zip.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.platform }}
+          path: release/*
+
+  # Build web server binaries
+  build-web:
+    name: Build Web Server - ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x86_64
+            artifact_name: hippo-web
+            asset_name: hippo-web-linux-x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            platform: macos-x86_64
+            artifact_name: hippo-web
+            asset_name: hippo-web-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            platform: macos-aarch64
+            artifact_name: hippo-web
+            asset_name: hippo-web-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+            artifact_name: hippo-web.exe
+            asset_name: hippo-web-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-web-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-web-
+
+      - name: Build web server
+        run: cargo build --release --target ${{ matrix.target }} -p hippo-web
+
+      - name: Prepare artifact (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p release
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} release/${{ matrix.asset_name }}
+          chmod +x release/${{ matrix.asset_name }}
+
+          # Create tarball
+          cd release
+          tar -czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.asset_name }}
+          sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          mkdir release
+          copy target\${{ matrix.target }}\release\${{ matrix.artifact_name }} release\${{ matrix.asset_name }}
+
+          # Create zip
+          cd release
+          Compress-Archive -Path ${{ matrix.asset_name }} -DestinationPath ${{ matrix.asset_name }}.zip
+          (Get-FileHash ${{ matrix.asset_name }}.zip -Algorithm SHA256).Hash | Out-File -FilePath ${{ matrix.asset_name }}.zip.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-${{ matrix.platform }}
+          path: release/*
+
+  # Build WASM module
+  build-wasm:
+    name: Build WASM Module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: wasm-cargo-
+
+      - name: Build WASM
+        run: |
+          cd hippo-wasm
+          wasm-pack build --target web --release
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p release
+          cd hippo-wasm/pkg
+          tar -czf ../../release/hippo-wasm.tar.gz *
+          cd ../../release
+          sha256sum hippo-wasm.tar.gz > hippo-wasm.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: release/*
+
+  # Build Tauri desktop apps
+  build-tauri:
+    name: Build Tauri - ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            platform: macos
+            target: universal-apple-darwin
+          - os: windows-latest
+            platform: windows
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-tauri-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-tauri-
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: Build Tauri app
+        run: |
+          cd hippo-tauri
+          cargo tauri build
+
+      - name: Prepare Linux artifacts
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p release
+          # AppImage
+          if [ -f hippo-tauri/target/release/bundle/appimage/*.AppImage ]; then
+            cp hippo-tauri/target/release/bundle/appimage/*.AppImage release/
+          fi
+          # Deb package
+          if [ -f hippo-tauri/target/release/bundle/deb/*.deb ]; then
+            cp hippo-tauri/target/release/bundle/deb/*.deb release/
+          fi
+          # Create checksums
+          cd release
+          for file in *; do
+            sha256sum "$file" > "$file.sha256"
+          done
+
+      - name: Prepare macOS artifacts
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p release
+          # DMG
+          if [ -f hippo-tauri/target/release/bundle/dmg/*.dmg ]; then
+            cp hippo-tauri/target/release/bundle/dmg/*.dmg release/
+          fi
+          # App bundle (zipped)
+          if [ -d hippo-tauri/target/release/bundle/macos/*.app ]; then
+            cd hippo-tauri/target/release/bundle/macos
+            zip -r ../../../../../release/Hippo-macos.app.zip *.app
+            cd ../../../../../
+          fi
+          # Create checksums
+          cd release
+          for file in *; do
+            shasum -a 256 "$file" > "$file.sha256"
+          done
+
+      - name: Prepare Windows artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          mkdir release
+          # MSI installer
+          if (Test-Path "hippo-tauri/target/release/bundle/msi/*.msi") {
+            copy hippo-tauri/target/release/bundle/msi/*.msi release/
+          }
+          # NSIS installer
+          if (Test-Path "hippo-tauri/target/release/bundle/nsis/*.exe") {
+            copy hippo-tauri/target/release/bundle/nsis/*.exe release/
+          }
+          # Create checksums
+          cd release
+          Get-ChildItem | ForEach-Object {
+            (Get-FileHash $_.Name -Algorithm SHA256).Hash | Out-File -FilePath "$($_.Name).sha256"
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-${{ matrix.platform }}
+          path: release/*
+
+  # Generate changelog
+  changelog:
+    name: Generate Changelog
+    runs-on: ubuntu-latest
+    outputs:
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get previous tag
+        id: prev-tag
+        run: |
+          PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREV_TAG"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG="${{ steps.prev-tag.outputs.prev_tag }}"
+          CURRENT_TAG="${{ github.ref_name }}"
+
+          echo "## What's Changed" > changelog.md
+          echo "" >> changelog.md
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "Initial release of Hippo - The Memory That Never Forgets" >> changelog.md
+            echo "" >> changelog.md
+            echo "### Components Included" >> changelog.md
+            echo "- **hippo-cli**: Command-line interface for file indexing and search" >> changelog.md
+            echo "- **hippo-tauri**: Desktop application for macOS, Linux, and Windows" >> changelog.md
+            echo "- **hippo-web**: REST API server" >> changelog.md
+            echo "- **hippo-wasm**: WebAssembly module for browser integration" >> changelog.md
+          else
+            # Get commits since last tag
+            echo "### Features" >> changelog.md
+            git log --pretty=format:"- %s (%h)" "$PREV_TAG..$CURRENT_TAG" --grep="feat:" --grep="feature:" --grep="add:" | sed 's/^feat: //i' | sed 's/^feature: //i' | sed 's/^add: //i' >> changelog.md || echo "- No new features" >> changelog.md
+            echo -e "\n" >> changelog.md
+
+            echo "### Bug Fixes" >> changelog.md
+            git log --pretty=format:"- %s (%h)" "$PREV_TAG..$CURRENT_TAG" --grep="fix:" --grep="bug:" | sed 's/^fix: //i' | sed 's/^bug: //i' >> changelog.md || echo "- No bug fixes" >> changelog.md
+            echo -e "\n" >> changelog.md
+
+            echo "### Documentation" >> changelog.md
+            git log --pretty=format:"- %s (%h)" "$PREV_TAG..$CURRENT_TAG" --grep="docs:" --grep="doc:" | sed 's/^docs: //i' | sed 's/^doc: //i' >> changelog.md || echo "- No documentation changes" >> changelog.md
+            echo -e "\n" >> changelog.md
+
+            echo "### Performance" >> changelog.md
+            git log --pretty=format:"- %s (%h)" "$PREV_TAG..$CURRENT_TAG" --grep="perf:" --grep="performance:" | sed 's/^perf: //i' | sed 's/^performance: //i' >> changelog.md || echo "- No performance improvements" >> changelog.md
+            echo -e "\n" >> changelog.md
+
+            echo "### Other Changes" >> changelog.md
+            git log --pretty=format:"- %s (%h)" "$PREV_TAG..$CURRENT_TAG" --invert-grep --grep="feat:" --grep="fix:" --grep="docs:" --grep="perf:" | head -20 >> changelog.md || echo "- No other changes" >> changelog.md
+          fi
+
+          echo "" >> changelog.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...$CURRENT_TAG" >> changelog.md
+
+          cat changelog.md
+          {
+            echo 'changelog<<EOF'
+            cat changelog.md
+            echo EOF
+          } >> $GITHUB_OUTPUT
+
+      - name: Upload changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: changelog.md
+
+  # Create GitHub release
+  release:
+    name: Create Release
+    needs: [build-cli, build-web, build-wasm, build-tauri, changelog]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Download changelog
+        uses: actions/download-artifact@v4
+        with:
+          name: changelog
+          path: .
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+
+          # Copy all artifacts (excluding changelog)
+          for dir in artifacts/*/; do
+            dirname=$(basename "$dir")
+            if [ "$dirname" != "changelog" ]; then
+              echo "Processing $dirname..."
+              cp "$dir"* release-assets/ 2>/dev/null || true
+            fi
+          done
+
+          # Create master checksum file
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt || shasum -a 256 * > SHA256SUMS.txt
+          cd ..
+
+          echo "Release assets:"
+          ls -lh release-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-assets/*
+          body_path: changelog.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release summary
+        run: |
+          echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Release URL**: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Release Assets" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### CLI Binaries" >> $GITHUB_STEP_SUMMARY
+          ls -lh release-assets/hippo-cli-* 2>/dev/null | awk '{printf "- %s (%s)\n", $9, $5}' | sed 's|release-assets/||' >> $GITHUB_STEP_SUMMARY || echo "- No CLI binaries found" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Web Server" >> $GITHUB_STEP_SUMMARY
+          ls -lh release-assets/hippo-web-* 2>/dev/null | awk '{printf "- %s (%s)\n", $9, $5}' | sed 's|release-assets/||' >> $GITHUB_STEP_SUMMARY || echo "- No web server binaries found" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Desktop Apps" >> $GITHUB_STEP_SUMMARY
+          ls -lh release-assets/*.{dmg,msi,exe,AppImage,deb} 2>/dev/null | awk '{printf "- %s (%s)\n", $9, $5}' | sed 's|release-assets/||' >> $GITHUB_STEP_SUMMARY || echo "- No desktop installers found" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### WASM Module" >> $GITHUB_STEP_SUMMARY
+          ls -lh release-assets/hippo-wasm* 2>/dev/null | awk '{printf "- %s (%s)\n", $9, $5}' | sed 's|release-assets/||' >> $GITHUB_STEP_SUMMARY || echo "- No WASM module found" >> $GITHUB_STEP_SUMMARY
+
+  # Optional: Publish to crates.io
+  publish-crates:
+    name: Publish to crates.io
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref, 'alpha') && !contains(github.ref, 'beta') && !contains(github.ref, 'rc') && vars.PUBLISH_TO_CRATES == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish hippo-core
+        run: |
+          cd hippo-core
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "Failed to publish hippo-core (may already exist)"
+        continue-on-error: true
+
+      - name: Wait for crates.io index update
+        run: sleep 30
+
+      - name: Publish hippo-cli
+        run: |
+          cd hippo-cli
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "Failed to publish hippo-cli (may already exist)"
+        continue-on-error: true
+
+      - name: Wait for crates.io index update
+        run: sleep 30
+
+      - name: Publish hippo-web
+        run: |
+          cd hippo-web
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "Failed to publish hippo-web (may already exist)"
+        continue-on-error: true
+
+      - name: Wait for crates.io index update
+        run: sleep 30
+
+      - name: Publish hippo-wasm
+        run: |
+          cd hippo-wasm
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "Failed to publish hippo-wasm (may already exist)"
+        continue-on-error: true

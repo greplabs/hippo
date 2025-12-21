@@ -428,11 +428,7 @@ mod duplicates_tests {
         let group = DuplicateGroup {
             hash: "test_hash".to_string(),
             size: 1000,
-            memory_ids: vec![
-                Uuid::new_v4(),
-                Uuid::new_v4(),
-                Uuid::new_v4(),
-            ],
+            memory_ids: vec![Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()],
             paths: vec![PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")],
         };
 
