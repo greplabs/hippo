@@ -146,6 +146,34 @@
     .sidebar-footer { padding: 16px; border-top: 1px solid rgba(0,0,0,0.04); }
     body.dark .sidebar-footer { border-color: rgba(255,255,255,0.04); }
     .sidebar-footer p { font-size: 12px; color: #a8a29e; }
+    .sidebar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .sidebar-icon-btn {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.04);
+      color: #57534e;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    .sidebar-icon-btn:hover { background: rgba(0,0,0,0.08); color: #292524; transform: translateY(-1px); }
+    .sidebar-icon-btn:active { transform: translateY(0) scale(0.95); }
+    body.dark .sidebar-icon-btn { background: rgba(255,255,255,0.06); color: #a8a29e; }
+    body.dark .sidebar-icon-btn:hover { background: rgba(255,255,255,0.1); color: #d6d3d1; }
+    .sidebar-icon-btn.danger { color: #dc2626; }
+    .sidebar-icon-btn.danger:hover { background: rgba(220,38,38,0.1); }
+    body.dark .sidebar-icon-btn.danger { color: #f87171; }
+    .sidebar-icon-btn.primary {
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      color: white;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.25);
+    }
+    .sidebar-icon-btn.primary:hover { box-shadow: 0 4px 12px rgba(99,102,241,0.35); }
+    .sidebar-icon-btn .icon { width: 18px; height: 18px; }
     .section-title { font-size: 10px; color: #a8a29e; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.08em; font-weight: 600; }
 
     .source-item {
@@ -480,7 +508,6 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      align-items: center;
       gap: 6px;
     }
     .filter-btn.active {
@@ -882,6 +909,17 @@
       color: #a8a29e;
       text-align: center;
       animation: fadeIn 0.4s ease;
+      padding: 40px 20px;
+    }
+    .empty-mascot {
+      font-size: 64px;
+      margin-bottom: 16px;
+      filter: grayscale(0.3);
+      animation: gentleBounce 2s ease-in-out infinite;
+    }
+    @keyframes gentleBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
     }
     .empty-icon { font-size: 56px; margin-bottom: 20px; opacity: 0.6; }
     .empty-title { font-size: 18px; font-weight: 600; color: #57534e; margin-bottom: 6px; letter-spacing: -0.01em; }
@@ -1727,11 +1765,13 @@
           </div>
         </div>
         <button class="sidebar-btn ai-chat-btn" id="chatBtn"><span class="icon icon-sm" id="chatBtnIcon"></span> Ask Hippo</button>
-        <button class="sidebar-btn" id="settingsBtn"><span class="icon icon-sm" id="settingsIcon"></span> AI Settings</button>
-        <button class="sidebar-btn" id="exportBtn"><span class="icon icon-sm" id="exportIcon"></span> Export Index</button>
-        <button class="sidebar-btn" id="importBtn"><span class="icon icon-sm" id="importIcon"></span> Import Index</button>
-        <button class="sidebar-btn" id="darkModeBtn"><span class="icon icon-sm" id="themeIcon"></span> <span id="themeText">Dark Mode</span></button>
-        <button class="sidebar-btn danger" id="resetBtn"><span class="icon icon-sm" id="resetIcon"></span> Reset Index</button>
+        <div class="sidebar-actions">
+          <button class="sidebar-icon-btn" id="settingsBtn" title="AI Settings"><span class="icon" id="settingsIcon"></span></button>
+          <button class="sidebar-icon-btn" id="exportBtn" title="Export Index"><span class="icon" id="exportIcon"></span></button>
+          <button class="sidebar-icon-btn" id="importBtn" title="Import Index"><span class="icon" id="importIcon"></span></button>
+          <button class="sidebar-icon-btn" id="darkModeBtn" title="Toggle Dark Mode"><span class="icon" id="themeIcon"></span></button>
+          <button class="sidebar-icon-btn danger" id="resetBtn" title="Reset Index"><span class="icon" id="resetIcon"></span></button>
+        </div>
       </div>
     </aside>
 
@@ -1954,7 +1994,12 @@
                   <option value="nomic-embed-text">nomic-embed-text (274MB)</option>
                   <option value="mxbai-embed-large">mxbai-embed-large (670MB)</option>
                 </optgroup>
-                <optgroup label="Text Generation (Light)">
+                <optgroup label="Text Generation (Ultra Light - Under 2GB)">
+                  <option value="gemma2:2b">gemma2:2b (1.6GB) - Recommended</option>
+                  <option value="qwen2.5:1.5b">qwen2.5:1.5b (0.9GB)</option>
+                  <option value="llama3.2:1b">llama3.2:1b (1.3GB)</option>
+                </optgroup>
+                <optgroup label="Text Generation (Light - 2-4GB)">
                   <option value="llama3.2:3b">llama3.2:3b (2GB)</option>
                   <option value="phi3:mini">phi3:mini (2.3GB)</option>
                   <option value="qwen2.5:3b">qwen2.5:3b (1.9GB)</option>
@@ -3115,7 +3160,7 @@
       function initIcons() {
         document.getElementById('logoIcon').innerHTML = icons.hippo;
         document.getElementById('themeIcon').innerHTML = darkMode ? icons.sun : icons.moon;
-        document.getElementById('themeText').textContent = darkMode ? 'Light Mode' : 'Dark Mode';
+        document.getElementById('darkModeBtn').title = darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode';
         document.getElementById('themeToggleIcon').innerHTML = darkMode ? icons.sun : icons.moon;
         document.getElementById('resetIcon').innerHTML = icons.trash;
         document.getElementById('searchIcon').innerHTML = icons.search;
@@ -3915,9 +3960,9 @@
 
           if (filtered.length === 0) {
             var emptyHtml = '<div class="empty">';
-            emptyHtml += '<div class="empty-icon"><span class="icon icon-2xl" style="color:#a8a29e;">' + icons.folderEmpty + '</span></div>';
-            emptyHtml += '<div class="empty-title">' + (sources.length === 0 ? 'Add a folder to get started' : 'No files found') + '</div>';
-            emptyHtml += '<div class="empty-text">' + (sources.length === 0 ? 'Click the button below to index your files' : 'Try a different search or filter') + '</div>';
+            emptyHtml += '<div class="empty-mascot">🦛</div>';
+            emptyHtml += '<div class="empty-title">' + (sources.length === 0 ? 'Welcome to Hippo!' : 'No files found') + '</div>';
+            emptyHtml += '<div class="empty-text">' + (sources.length === 0 ? 'Add a folder and I\\'ll remember every file for you!' : 'Try a different search or filter') + '</div>';
             if (sources.length === 0) {
               emptyHtml += '<div class="empty-action"><button class="empty-action-btn" onclick="addSource()"><span class="icon icon-sm">' + icons.plus + '</span> Add Folder</button></div>';
             }
@@ -6055,7 +6100,7 @@
 
           // Update sidebar button
           document.getElementById('themeIcon').innerHTML = darkMode ? icons.sun : icons.moon;
-          document.getElementById('themeText').textContent = darkMode ? 'Light Mode' : 'Dark Mode';
+          document.getElementById('darkModeBtn').title = darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode';
 
           // Update header button with rotation animation
           var headerBtn = document.getElementById('themeToggleBtn');

@@ -1,0 +1,12 @@
+[
+  { "name": "work", "count": 87 },
+  { "name": "personal", "count": 56 },
+  { "name": "vacation", "count": 34 },
+  { "name": "project", "count": 42 },
+  { "name": "important", "count": 23 },
+  { "name": "archive", "count": 18 },
+  { "name": "screenshots", "count": 45 },
+  { "name": "photos", "count": 89 },
+  { "name": "code", "count": 67 },
+  { "name": "documents", "count": 52 }
+]

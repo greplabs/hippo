@@ -1,0 +1,48 @@
+# Rust build artifacts
+target/
+Cargo.lock
+
+# Development files
+.git/
+.github/
+.cargo/
+.devcontainer/
+
+# Documentation (except main README)
+CONTRIBUTING.md
+DOCKER.md
+QUICKSTART-DOCKER.md
+DOCKER-FILES-SUMMARY.md
+
+# Source code (we only need the demo directory)
+hippo-core/
+hippo-cli/
+hippo-tauri/
+hippo-web/src/
+hippo-web/tests/
+hippo-wasm/
+
+# Docker files
+Dockerfile
+Dockerfile.web
+docker-compose.yml
+docker-compose.dev.yml
+.dockerignore
+Cross.toml
+
+# Build tools
+Makefile
+deny.toml
+
+# Environment files
+.env
+.env.example
+
+# Storage and snapshots
+storage/
+snapshots/
+models/
+
+# Misc
+.qdrant-initialized
+.cspell.json

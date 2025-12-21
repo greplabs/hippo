@@ -8,8 +8,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
+  # Code quality checks
   check:
     name: Check & Lint
     runs-on: ubuntu-latest
@@ -41,19 +43,158 @@ jobs:
             ~/.cargo/registry/
             ~/.cargo/git/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-check-
 
       - name: Format check
         run: cargo fmt --all -- --check
 
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+      - name: Clippy (all workspace members)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-      - name: Check
-        run: cargo check --all-targets
+      - name: Check all workspace members
+        run: cargo check --workspace --all-targets --all-features
 
-  test:
-    name: Test
+  # Test core library
+  test-core:
+    name: Test Core - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libssl-dev \
+            pkg-config
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: ${{ runner.os }}-cargo-test-core-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-core-
+
+      - name: Run hippo-core tests
+        run: cargo test -p hippo-core --all-features
+
+  # Test CLI
+  test-cli:
+    name: Test CLI - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libssl-dev \
+            pkg-config
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: ${{ runner.os }}-cargo-test-cli-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-cli-
+
+      - name: Run hippo-cli tests
+        run: cargo test -p hippo-cli --all-features
+
+  # Test web server
+  test-web:
+    name: Test Web Server - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: ${{ runner.os }}-cargo-test-web-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-web-
+
+      - name: Run hippo-web tests
+        run: cargo test -p hippo-web --all-features
+
+  # Test WASM build
+  test-wasm:
+    name: Test WASM Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: wasm-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: wasm-cargo-test-
+
+      - name: Check WASM compilation
+        run: |
+          cd hippo-wasm
+          cargo check --target wasm32-unknown-unknown
+
+      - name: Build WASM with wasm-pack
+        run: |
+          cd hippo-wasm
+          wasm-pack build --target web --dev
+
+      - name: Run WASM tests
+        run: |
+          cd hippo-wasm
+          wasm-pack test --node
+
+  # Test Tauri build
+  test-tauri:
+    name: Test Tauri - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -86,14 +227,16 @@ jobs:
             ~/.cargo/registry/
             ~/.cargo/git/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-tauri-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-tauri-
 
-      - name: Run tests
-        run: cargo test --workspace
+      - name: Run hippo-tauri tests
+        run: cargo test -p hippo-tauri
 
+  # Build all components (smoke test)
   build:
-    name: Build
-    needs: [check, test]
+    name: Build All Components - ${{ matrix.os }}
+    needs: [check, test-core, test-cli, test-web, test-wasm, test-tauri]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -134,17 +277,139 @@ jobs:
             ~/.cargo/registry/
             ~/.cargo/git/
             target/
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-build-
 
-      - name: Build release
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Build all workspace members
+        run: cargo build --release --workspace --target ${{ matrix.target }}
 
-      - name: Upload artifacts
+      - name: Verify CLI binary
+        if: runner.os != 'Windows'
+        run: test -f target/${{ matrix.target }}/release/hippo
+
+      - name: Verify CLI binary (Windows)
+        if: runner.os == 'Windows'
+        run: Test-Path target/${{ matrix.target }}/release/hippo.exe
+        shell: pwsh
+
+      - name: Verify Web binary
+        if: runner.os != 'Windows'
+        run: test -f target/${{ matrix.target }}/release/hippo-web
+
+      - name: Verify Web binary (Windows)
+        if: runner.os == 'Windows'
+        run: Test-Path target/${{ matrix.target }}/release/hippo-web.exe
+        shell: pwsh
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: hippo-${{ matrix.target }}
           path: |
-            target/${{ matrix.target }}/release/hippo-tauri*
             target/${{ matrix.target }}/release/hippo*
             !target/${{ matrix.target }}/release/*.d
+            !target/${{ matrix.target }}/release/hippo-*.rlib
+            !target/${{ matrix.target }}/release/build/
+            !target/${{ matrix.target }}/release/deps/
+            !target/${{ matrix.target }}/release/examples/
+            !target/${{ matrix.target }}/release/incremental/
           retention-days: 7
+
+  # Security audit
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run security audit
+        run: cargo audit
+
+  # Dependency check
+  dependencies:
+    name: Check Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check for outdated dependencies
+        run: |
+          cargo install cargo-outdated --locked || true
+          cargo outdated --workspace --exit-code 0 || true
+
+  # Documentation build
+  docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: docs-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: docs-cargo-
+
+      - name: Build documentation
+        run: cargo doc --workspace --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: target/doc/
+          retention-days: 7
+
+  # Summary job
+  ci-success:
+    name: CI Success
+    needs: [check, test-core, test-cli, test-web, test-wasm, test-tauri, build, security-audit, docs]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          if [[ "${{ needs.check.result }}" != "success" ]] || \
+             [[ "${{ needs.test-core.result }}" != "success" ]] || \
+             [[ "${{ needs.test-cli.result }}" != "success" ]] || \
+             [[ "${{ needs.test-web.result }}" != "success" ]] || \
+             [[ "${{ needs.test-wasm.result }}" != "success" ]] || \
+             [[ "${{ needs.test-tauri.result }}" != "success" ]] || \
+             [[ "${{ needs.build.result }}" != "success" ]] || \
+             [[ "${{ needs.security-audit.result }}" != "success" ]] || \
+             [[ "${{ needs.docs.result }}" != "success" ]]; then
+            echo "One or more CI jobs failed!"
+            exit 1
+          fi
+          echo "All CI jobs passed successfully!"

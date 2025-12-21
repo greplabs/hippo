@@ -19,9 +19,11 @@ const HIPPO_ART: &str = r#"
  |\__\    /__/|
   \    ||    /
    \        /
-    \  __  /   HIPPO
-     '.__.'    The Memory That Never Forgets
+    \  __  /
+     '.__.'
 "#;
+
+const HIPPO_TAGLINE: &str = "The Memory That Never Forgets";
 
 #[derive(Parser)]
 #[command(name = "hippo")]
@@ -186,6 +188,20 @@ fn format_bytes(bytes: u64) -> String {
 
 fn print_hippo() {
     println!("{}", HIPPO_ART.bright_cyan());
+    // Print colorful name
+    let colors = [
+        "H".bright_magenta().bold(),
+        "I".bright_blue().bold(),
+        "P".bright_cyan().bold(),
+        "P".bright_green().bold(),
+        "O".bright_yellow().bold(),
+    ];
+    print!("    ");
+    for c in &colors {
+        print!("{}", c);
+    }
+    println!(" 🦛");
+    println!("    {}\n", HIPPO_TAGLINE.dimmed().italic());
 }
 
 fn print_header(text: &str) {
@@ -204,20 +220,109 @@ fn print_info(text: &str) {
     println!("{} {}", "•".bright_blue(), text);
 }
 
-fn get_kind_string(kind: &hippo_core::MemoryKind) -> String {
-    match kind {
-        hippo_core::MemoryKind::Image { .. } => "Image".to_string(),
-        hippo_core::MemoryKind::Video { .. } => "Video".to_string(),
-        hippo_core::MemoryKind::Audio { .. } => "Audio".to_string(),
-        hippo_core::MemoryKind::Code { language, .. } => format!("Code ({})", language),
-        hippo_core::MemoryKind::Document { .. } => "Document".to_string(),
-        hippo_core::MemoryKind::Spreadsheet { .. } => "Spreadsheet".to_string(),
-        hippo_core::MemoryKind::Presentation { .. } => "Presentation".to_string(),
-        hippo_core::MemoryKind::Archive { .. } => "Archive".to_string(),
-        hippo_core::MemoryKind::Database => "Database".to_string(),
-        hippo_core::MemoryKind::Folder => "Folder".to_string(),
-        hippo_core::MemoryKind::Unknown => "File".to_string(),
+fn format_tags(tags: &[hippo_core::Tag]) -> String {
+    if tags.is_empty() {
+        return "—".dimmed().to_string();
     }
+    tags.iter()
+        .map(|t| match t.source {
+            hippo_core::TagSource::User => t.name.bright_cyan().to_string(),
+            hippo_core::TagSource::Ai => format!("{}{}", t.name.bright_magenta(), "✨".dimmed()),
+            hippo_core::TagSource::Imported => t.name.bright_green().to_string(),
+            hippo_core::TagSource::System => t.name.dimmed().to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn get_kind_icon(kind: &hippo_core::MemoryKind) -> &'static str {
+    match kind {
+        hippo_core::MemoryKind::Image { .. } => "🖼️ ",
+        hippo_core::MemoryKind::Video { .. } => "🎬",
+        hippo_core::MemoryKind::Audio { .. } => "🎵",
+        hippo_core::MemoryKind::Code { .. } => "💻",
+        hippo_core::MemoryKind::Document { .. } => "📄",
+        hippo_core::MemoryKind::Spreadsheet { .. } => "📊",
+        hippo_core::MemoryKind::Presentation { .. } => "📽️ ",
+        hippo_core::MemoryKind::Archive { .. } => "📦",
+        hippo_core::MemoryKind::Database => "🗃️ ",
+        hippo_core::MemoryKind::Folder => "📁",
+        hippo_core::MemoryKind::Unknown => "📎",
+    }
+}
+
+fn get_kind_string(kind: &hippo_core::MemoryKind) -> String {
+    let icon = get_kind_icon(kind);
+    match kind {
+        hippo_core::MemoryKind::Image { .. } => format!("{} Image", icon),
+        hippo_core::MemoryKind::Video { .. } => format!("{} Video", icon),
+        hippo_core::MemoryKind::Audio { .. } => format!("{} Audio", icon),
+        hippo_core::MemoryKind::Code { language, .. } => format!("{} {}", icon, language),
+        hippo_core::MemoryKind::Document { .. } => format!("{} Document", icon),
+        hippo_core::MemoryKind::Spreadsheet { .. } => format!("{} Spreadsheet", icon),
+        hippo_core::MemoryKind::Presentation { .. } => format!("{} Presentation", icon),
+        hippo_core::MemoryKind::Archive { .. } => format!("{} Archive", icon),
+        hippo_core::MemoryKind::Database => format!("{} Database", icon),
+        hippo_core::MemoryKind::Folder => format!("{} Folder", icon),
+        hippo_core::MemoryKind::Unknown => format!("{} File", icon),
+    }
+}
+
+fn format_bytes_colored(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    let formatted = format_bytes(bytes);
+
+    // Color based on size: small=green, medium=yellow, large=red
+    if bytes >= GB {
+        formatted.bright_red().to_string()
+    } else if bytes >= 100 * MB {
+        formatted.bright_yellow().to_string()
+    } else if bytes >= 10 * MB {
+        formatted.yellow().to_string()
+    } else {
+        formatted.bright_green().to_string()
+    }
+}
+
+fn print_memory_card(mem: &hippo_core::Memory, index: Option<usize>) {
+    let name = mem.metadata.title.clone().unwrap_or_else(|| {
+        mem.path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Unknown".to_string())
+    });
+
+    let prefix = match index {
+        Some(i) => format!("{}", format!("[{}]", i + 1).dimmed()),
+        None => "  ".to_string(),
+    };
+
+    // First line: icon + name + size
+    println!(
+        "{} {} {} {}",
+        prefix,
+        get_kind_icon(&mem.kind),
+        name.bright_white().bold(),
+        format!("({})", format_bytes_colored(mem.metadata.file_size)).dimmed()
+    );
+
+    // Second line: path (truncated if too long)
+    let path_str = mem.path.display().to_string();
+    let display_path = if path_str.len() > 60 {
+        format!("...{}", &path_str[path_str.len() - 57..])
+    } else {
+        path_str
+    };
+    println!("{}   {}", prefix, display_path.dimmed());
+
+    // Third line: tags (if any)
+    if !mem.tags.is_empty() {
+        println!("{}   {}", prefix, format_tags(&mem.tags));
+    }
+    println!();
 }
 
 #[tokio::main]
@@ -283,42 +388,49 @@ async fn main() -> Result<()> {
                 print_info("No memories found. Try a different search?");
             } else {
                 println!(
-                    "\n{} {} memories found:\n",
-                    "Found".bright_green(),
-                    results.memories.len()
+                    "\n🔍 {} {}:\n",
+                    results.memories.len().to_string().bright_green().bold(),
+                    "memories found".bright_green()
                 );
 
-                let rows: Vec<MemoryRow> = results
-                    .memories
-                    .iter()
-                    .map(|r| {
-                        let mem = &r.memory;
-                        let name = mem.metadata.title.clone().unwrap_or_else(|| {
-                            mem.path
-                                .file_name()
-                                .map(|n| n.to_string_lossy().to_string())
-                                .unwrap_or_default()
-                        });
-                        let kind = get_kind_string(&mem.kind);
-                        let size = format_bytes(mem.metadata.file_size);
-                        let tags = mem
-                            .tags
-                            .iter()
-                            .map(|t| t.name.clone())
-                            .collect::<Vec<_>>()
-                            .join(", ");
+                // Use card view for better colors (<=10 results) or table for many
+                if results.memories.len() <= 10 {
+                    for (i, r) in results.memories.iter().enumerate() {
+                        print_memory_card(&r.memory, Some(i));
+                    }
+                } else {
+                    let rows: Vec<MemoryRow> = results
+                        .memories
+                        .iter()
+                        .map(|r| {
+                            let mem = &r.memory;
+                            let name = mem.metadata.title.clone().unwrap_or_else(|| {
+                                mem.path
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_default()
+                            });
+                            let kind = get_kind_string(&mem.kind);
+                            let size = format_bytes(mem.metadata.file_size);
+                            let tags = mem
+                                .tags
+                                .iter()
+                                .map(|t| t.name.clone())
+                                .collect::<Vec<_>>()
+                                .join(", ");
 
-                        MemoryRow {
-                            name,
-                            kind,
-                            size,
-                            tags,
-                        }
-                    })
-                    .collect();
+                            MemoryRow {
+                                name,
+                                kind,
+                                size,
+                                tags,
+                            }
+                        })
+                        .collect();
 
-                let table = Table::new(rows).to_string();
-                println!("{}", table);
+                    let table = Table::new(rows).to_string();
+                    println!("{}", table);
+                }
             }
         }
 
@@ -336,42 +448,49 @@ async fn main() -> Result<()> {
                 print_info("No memories yet. Try 'hippo chomp <folder>' to add some!");
             } else {
                 println!(
-                    "\n{} {} memories:\n",
-                    "Showing".bright_green(),
-                    results.memories.len()
+                    "\n📚 {} {}:\n",
+                    results.memories.len().to_string().bright_green().bold(),
+                    "memories".bright_green()
                 );
 
-                let rows: Vec<MemoryRow> = results
-                    .memories
-                    .iter()
-                    .map(|r| {
-                        let mem = &r.memory;
-                        let name = mem.metadata.title.clone().unwrap_or_else(|| {
-                            mem.path
-                                .file_name()
-                                .map(|n| n.to_string_lossy().to_string())
-                                .unwrap_or_default()
-                        });
-                        let kind = get_kind_string(&mem.kind);
-                        let size = format_bytes(mem.metadata.file_size);
-                        let tags = mem
-                            .tags
-                            .iter()
-                            .map(|t| t.name.clone())
-                            .collect::<Vec<_>>()
-                            .join(", ");
+                // Use card view for better colors (<=10 results) or table for many
+                if results.memories.len() <= 10 {
+                    for (i, r) in results.memories.iter().enumerate() {
+                        print_memory_card(&r.memory, Some(i));
+                    }
+                } else {
+                    let rows: Vec<MemoryRow> = results
+                        .memories
+                        .iter()
+                        .map(|r| {
+                            let mem = &r.memory;
+                            let name = mem.metadata.title.clone().unwrap_or_else(|| {
+                                mem.path
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_default()
+                            });
+                            let kind = get_kind_string(&mem.kind);
+                            let size = format_bytes(mem.metadata.file_size);
+                            let tags = mem
+                                .tags
+                                .iter()
+                                .map(|t| t.name.clone())
+                                .collect::<Vec<_>>()
+                                .join(", ");
 
-                        MemoryRow {
-                            name,
-                            kind,
-                            size,
-                            tags,
-                        }
-                    })
-                    .collect();
+                            MemoryRow {
+                                name,
+                                kind,
+                                size,
+                                tags,
+                            }
+                        })
+                        .collect();
 
-                let table = Table::new(rows).to_string();
-                println!("{}", table);
+                    let table = Table::new(rows).to_string();
+                    println!("{}", table);
+                }
             }
         }
 
