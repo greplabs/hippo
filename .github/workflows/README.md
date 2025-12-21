@@ -86,15 +86,14 @@ gh workflow run ci.yml
 
 | File | Trigger | Purpose | Duration |
 |------|---------|---------|----------|
-| `ci.yml` | Push, PR | Main CI pipeline | ~15-25 min |
-| `test.yml` | Push, PR, Daily | Comprehensive testing | ~20-30 min |
-| `release.yml` | Tag (v*) | Create releases | ~30-45 min |
+| `ci.yml` | Push, PR | Main CI pipeline with comprehensive testing | ~15-25 min |
+| `release.yml` | Tag (v*) | Multi-platform release builds | ~30-45 min |
 | `dependencies.yml` | Weekly, Manual | Dependency management | ~5-10 min |
 | `docs.yml` | Push (docs), PR | Documentation | ~5-10 min |
-| `performance.yml` | Push, PR | Benchmarks & metrics | ~15-20 min |
-| `nightly.yml` | Daily, Manual | Nightly builds | ~25-35 min |
 | `docker.yml` | Push, Tag, PR | Container builds | ~10-15 min |
 | `claude-review.yml` | PR | AI code review | ~2-5 min |
+| `cli-tests.yml` | Push, PR | CLI testing | ~10-15 min |
+| `claude.yml` | Manual | Claude Code integration | ~5 min |
 
 ## Status Badges
 
@@ -156,9 +155,13 @@ gh workflow run dependencies.yml
 ### Create a Release
 
 ```bash
-# 1. Update version
+# 1. Update version in Cargo.toml
+# Edit the workspace version:
+# [workspace.package]
+# version = "1.0.0"
+
 # 2. Commit changes
-git add .
+git add Cargo.toml
 git commit -m "chore: bump version to 1.0.0"
 git push
 
@@ -166,12 +169,18 @@ git push
 git tag -a v1.0.0 -m "Release v1.0.0"
 git push origin v1.0.0
 
-# 4. Wait for workflow
+# 4. Wait for workflow (builds all components)
 gh run watch
 
-# 5. Verify release
+# 5. Verify release artifacts
 gh release view v1.0.0
 ```
+
+The release workflow will build:
+- **CLI binaries** for Linux (x86_64, aarch64), macOS (x86_64, aarch64), Windows (x86_64)
+- **Web server** for all platforms
+- **WASM module** (hippo-wasm.tar.gz)
+- **Tauri desktop apps**: .dmg (macOS), .msi/.exe (Windows), .AppImage/.deb (Linux)
 
 ### View Workflow Status
 
@@ -219,9 +228,12 @@ act -l
 - Code coverage reports
 
 ### Release Artifacts (Permanent)
-- Platform binaries
-- SHA256 checksums
-- Auto-generated changelog
+- **CLI binaries**: hippo-cli-{linux,macos,windows}-{x86_64,aarch64}.{tar.gz,zip}
+- **Web server**: hippo-web-{platform}.{tar.gz,zip}
+- **WASM module**: hippo-wasm.tar.gz
+- **Desktop installers**: .dmg, .msi, .exe, .AppImage, .deb
+- **SHA256 checksums**: Individual .sha256 files + master SHA256SUMS.txt
+- **Auto-generated changelog** from git commits
 
 ### Nightly Artifacts (7 days)
 - Pre-release binaries

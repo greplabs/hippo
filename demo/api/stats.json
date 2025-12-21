@@ -1,0 +1,17 @@
+{
+  "total_memories": 247,
+  "by_kind": {
+    "Image": 128,
+    "Video": 23,
+    "Audio": 15,
+    "Code": 45,
+    "Document": 28,
+    "Unknown": 8
+  },
+  "by_source": {
+    "Local": 247
+  },
+  "total_size_bytes": 5432198765,
+  "index_size_bytes": 2456789,
+  "last_updated": "2025-12-21T00:00:00Z"
+}

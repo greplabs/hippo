@@ -1,0 +1,81 @@
+{
+  "version": 2,
+  "name": "hippo-demo",
+  "buildCommand": "echo 'No build needed - static files only'",
+  "outputDirectory": "demo",
+  "devCommand": "python3 -m http.server 8080 --directory demo",
+  "installCommand": "echo 'No dependencies to install'",
+  "framework": null,
+  "public": false,
+  "regions": ["iad1"],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, OPTIONS"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/health",
+      "destination": "/api/health.json"
+    },
+    {
+      "source": "/api/stats",
+      "destination": "/api/stats.json"
+    },
+    {
+      "source": "/api/search",
+      "destination": "/api/search.json"
+    },
+    {
+      "source": "/api/sources",
+      "destination": "/api/sources.json"
+    },
+    {
+      "source": "/api/tags",
+      "destination": "/api/tags.json"
+    }
+  ],
+  "cleanUrls": true,
+  "trailingSlash": false
+}

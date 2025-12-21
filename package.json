@@ -1,0 +1,22 @@
+{
+  "name": "hippo",
+  "version": "0.1.0",
+  "description": "The Memory That Never Forgets - Local-first file organizer",
+  "keywords": [
+    "file-organizer",
+    "search",
+    "tauri",
+    "rust",
+    "desktop-app"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/greplabs/hippo.git"
+  },
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "cd demo && python3 -m http.server 8080",
+    "preview": "cd demo && python3 -m http.server 8080"
+  }
+}

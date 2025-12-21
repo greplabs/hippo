@@ -97,6 +97,25 @@ ollama pull nomic-embed-text  # Embeddings (274MB)
 cargo run --bin hippo-tauri
 ```
 
+### Vercel Deployment (Live Demo)
+
+Deploy a live demo of Hippo with static sample data:
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy from project root
+vercel
+
+# Production deployment
+vercel --prod
+```
+
+Or click here: [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/greplabs/hippo)
+
+The demo uses the `demo/` directory with mock API responses and sample data.
+
 ### Docker Deployment (Web Server)
 
 Deploy Hippo as a web service with Docker Compose:
@@ -369,6 +388,7 @@ git push origin feature/amazing-feature
 
 ## Documentation
 
+- [Deployment Guide](DEPLOYMENT.md) - Complete deployment guide (Vercel, Docker, Desktop)
 - [Docker Deployment Guide](DOCKER.md) - Comprehensive Docker documentation
 - [Docker Quick Start](QUICKSTART-DOCKER.md) - Get started in 5 minutes
 - [Contributing Guidelines](CONTRIBUTING.md) - How to contribute
