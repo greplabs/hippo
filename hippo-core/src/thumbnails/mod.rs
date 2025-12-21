@@ -464,7 +464,10 @@ impl ThumbnailManager {
                 if let (Ok(src_time), Ok(thumb_time)) = (src_meta.modified(), thumb_meta.modified())
                 {
                     if thumb_time >= src_time {
-                        debug!("Using cached Office document thumbnail: {:?}", thumbnail_path);
+                        debug!(
+                            "Using cached Office document thumbnail: {:?}",
+                            thumbnail_path
+                        );
                         return Ok(thumbnail_path);
                     }
                 }
@@ -491,11 +494,7 @@ impl ThumbnailManager {
     }
 
     /// Extract thumbnail from Office Open XML document (ZIP archive)
-    fn extract_office_thumbnail_from_zip(
-        &self,
-        doc_path: &Path,
-        output_path: &Path,
-    ) -> Result<()> {
+    fn extract_office_thumbnail_from_zip(&self, doc_path: &Path, output_path: &Path) -> Result<()> {
         let file = fs::File::open(doc_path)?;
         let mut archive = zip::ZipArchive::new(file)
             .map_err(|e| HippoError::Other(format!("Failed to open ZIP archive: {}", e)))?;
