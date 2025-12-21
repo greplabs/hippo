@@ -12,6 +12,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::TempDir;
+use uuid::Uuid;
 
 // Test helpers
 mod helpers {
@@ -111,7 +112,7 @@ mod helpers {
         let start = std::time::Instant::now();
         loop {
             let stats = hippo.stats().await?;
-            if stats.total_memories >= expected_count {
+            if stats.total_memories >= expected_count as u64 {
                 return Ok(());
             }
             if start.elapsed().as_secs() > max_wait_secs {
@@ -607,7 +608,7 @@ mod error_tests {
         let (hippo, _temp_dir) = helpers::create_test_hippo().await?;
 
         // Test: Try to tag a non-existent memory
-        let fake_id = uuid::Uuid::new_v4();
+        let fake_id = Uuid::new_v4();
         let tag = Tag {
             name: "test".to_string(),
             source: TagSource::User,

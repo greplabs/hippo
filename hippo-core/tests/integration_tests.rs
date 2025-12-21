@@ -4,6 +4,7 @@
 
 use hippo_core::*;
 use std::path::PathBuf;
+use uuid::Uuid;
 
 #[cfg(test)]
 mod storage_tests {
@@ -158,7 +159,7 @@ mod organization_tests {
     #[test]
     fn test_file_pointer_creation() {
         let pointer = FilePointer {
-            memory_id: uuid::Uuid::new_v4(),
+            memory_id: Uuid::new_v4(),
             original_path: PathBuf::from("/photos/IMG_001.jpg"),
             virtual_paths: vec![VirtualPath {
                 path: PathBuf::from("By Date/2024/Summer/IMG_001.jpg"),
@@ -409,7 +410,7 @@ mod duplicates_tests {
         let group = hippo_core::duplicates::DuplicateGroup {
             hash: "abc123def456".to_string(),
             size: 1024 * 1024, // 1MB
-            memory_ids: vec![uuid::Uuid::new_v4(), uuid::Uuid::new_v4()],
+            memory_ids: vec![Uuid::new_v4(), Uuid::new_v4()],
             paths: vec![
                 PathBuf::from("/path/to/file1.jpg"),
                 PathBuf::from("/path/to/file2.jpg"),
@@ -428,9 +429,9 @@ mod duplicates_tests {
             hash: "test_hash".to_string(),
             size: 1000,
             memory_ids: vec![
-                uuid::Uuid::new_v4(),
-                uuid::Uuid::new_v4(),
-                uuid::Uuid::new_v4(),
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                Uuid::new_v4(),
             ],
             paths: vec![PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")],
         };
@@ -443,7 +444,7 @@ mod duplicates_tests {
         let group = DuplicateGroup {
             hash: "test_hash".to_string(),
             size: 5000,
-            memory_ids: vec![uuid::Uuid::new_v4(), uuid::Uuid::new_v4()],
+            memory_ids: vec![Uuid::new_v4(), Uuid::new_v4()],
             paths: vec![PathBuf::from("a"), PathBuf::from("b")],
         };
 
@@ -537,9 +538,9 @@ mod duplicates_tests {
 
     #[test]
     fn test_similar_by_embedding_basic() {
-        let id1 = uuid::Uuid::new_v4();
-        let id2 = uuid::Uuid::new_v4();
-        let id3 = uuid::Uuid::new_v4();
+        let id1 = Uuid::new_v4();
+        let id2 = Uuid::new_v4();
+        let id3 = Uuid::new_v4();
 
         let memories = vec![
             create_mock_memory_with_id(id1, 1000, None),
@@ -571,10 +572,10 @@ mod duplicates_tests {
 
     // Helper functions
     fn create_mock_memory(size: u64, hash: Option<String>) -> Memory {
-        create_mock_memory_with_id(uuid::Uuid::new_v4(), size, hash)
+        create_mock_memory_with_id(Uuid::new_v4(), size, hash)
     }
 
-    fn create_mock_memory_with_id(id: uuid::Uuid, size: u64, hash: Option<String>) -> Memory {
+    fn create_mock_memory_with_id(id: Uuid, size: u64, hash: Option<String>) -> Memory {
         Memory {
             id,
             path: PathBuf::from(format!("/test/{}.txt", id)),
@@ -793,7 +794,7 @@ mod favorites_tests {
 
     fn create_test_memory() -> Memory {
         Memory {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4(),
             path: PathBuf::from("/test/file.txt"),
             source: Source::Local {
                 root_path: PathBuf::from("/test"),
@@ -1084,7 +1085,7 @@ mod storage_operations_tests {
 
     fn create_test_memory(path: &str, size: u64) -> Memory {
         Memory {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4(),
             path: PathBuf::from(path),
             source: Source::Local {
                 root_path: PathBuf::from("/test"),
