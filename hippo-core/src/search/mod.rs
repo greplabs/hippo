@@ -336,6 +336,156 @@ impl Searcher {
                             });
                         }
                     }
+
+                    // === METADATA SEARCH ===
+
+                    // Search in EXIF data (camera, location)
+                    if let Some(ref exif) = memory.metadata.exif {
+                        // Camera make/model
+                        if let Some(ref make) = exif.camera_make {
+                            if make.to_lowercase().contains(&text_lower) {
+                                score += 6.0;
+                                highlights.push(Highlight {
+                                    field: "camera".to_string(),
+                                    snippet: make.clone(),
+                                });
+                            }
+                        }
+                        if let Some(ref model) = exif.camera_model {
+                            if model.to_lowercase().contains(&text_lower) {
+                                score += 6.0;
+                                highlights.push(Highlight {
+                                    field: "camera".to_string(),
+                                    snippet: model.clone(),
+                                });
+                            }
+                        }
+                    }
+
+                    // Search in location data
+                    if let Some(ref loc) = memory.metadata.location {
+                        if let Some(ref city) = loc.city {
+                            if city.to_lowercase().contains(&text_lower) {
+                                score += 8.0;
+                                highlights.push(Highlight {
+                                    field: "location".to_string(),
+                                    snippet: city.clone(),
+                                });
+                            }
+                        }
+                        if let Some(ref country) = loc.country {
+                            if country.to_lowercase().contains(&text_lower) {
+                                score += 7.0;
+                                highlights.push(Highlight {
+                                    field: "location".to_string(),
+                                    snippet: country.clone(),
+                                });
+                            }
+                        }
+                        if let Some(ref place) = loc.place_name {
+                            if place.to_lowercase().contains(&text_lower) {
+                                score += 6.0;
+                                highlights.push(Highlight {
+                                    field: "location".to_string(),
+                                    snippet: place.clone(),
+                                });
+                            }
+                        }
+                    }
+
+                    // Search in audio metadata (artist, album, genre)
+                    if let Some(ref audio) = memory.metadata.audio_metadata {
+                        if let Some(ref artist) = audio.artist {
+                            if artist.to_lowercase().contains(&text_lower) {
+                                score += 9.0; // High score for artist match
+                                highlights.push(Highlight {
+                                    field: "artist".to_string(),
+                                    snippet: artist.clone(),
+                                });
+                            }
+                        }
+                        if let Some(ref album) = audio.album {
+                            if album.to_lowercase().contains(&text_lower) {
+                                score += 8.0;
+                                highlights.push(Highlight {
+                                    field: "album".to_string(),
+                                    snippet: album.clone(),
+                                });
+                            }
+                        }
+                        if let Some(ref title) = audio.title {
+                            if title.to_lowercase().contains(&text_lower) {
+                                score += 9.0;
+                                highlights.push(Highlight {
+                                    field: "track".to_string(),
+                                    snippet: title.clone(),
+                                });
+                            }
+                        }
+                        if let Some(ref genre) = audio.genre {
+                            if genre.to_lowercase().contains(&text_lower) {
+                                score += 6.0;
+                                highlights.push(Highlight {
+                                    field: "genre".to_string(),
+                                    snippet: genre.clone(),
+                                });
+                            }
+                        }
+                    }
+
+                    // Search in document text preview
+                    if let Some(ref preview) = memory.metadata.text_preview {
+                        if preview.to_lowercase().contains(&text_lower) {
+                            score += 5.0;
+                            // Create a snippet around the match
+                            let preview_lower = preview.to_lowercase();
+                            if let Some(pos) = preview_lower.find(&text_lower) {
+                                let start = pos.saturating_sub(30);
+                                let end = (pos + text_lower.len() + 30).min(preview.len());
+                                let snippet = format!(
+                                    "...{}...",
+                                    &preview[start..end]
+                                );
+                                highlights.push(Highlight {
+                                    field: "content".to_string(),
+                                    snippet,
+                                });
+                            }
+                        }
+                    }
+
+                    // Search in code info (language, imports, functions)
+                    if let Some(ref code) = memory.metadata.code_info {
+                        if code.language.to_lowercase().contains(&text_lower) {
+                            score += 5.0;
+                            highlights.push(Highlight {
+                                field: "language".to_string(),
+                                snippet: code.language.clone(),
+                            });
+                        }
+                        // Search in function names
+                        for func in &code.functions {
+                            if func.name.to_lowercase().contains(&text_lower) {
+                                score += 6.0;
+                                highlights.push(Highlight {
+                                    field: "function".to_string(),
+                                    snippet: func.name.clone(),
+                                });
+                                break; // Only add one function highlight
+                            }
+                        }
+                        // Search in imports
+                        for import in &code.imports {
+                            if import.to_lowercase().contains(&text_lower) {
+                                score += 4.0;
+                                highlights.push(Highlight {
+                                    field: "import".to_string(),
+                                    snippet: import.clone(),
+                                });
+                                break; // Only add one import highlight
+                            }
+                        }
+                    }
                 }
 
                 // Recency boost
