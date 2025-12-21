@@ -161,6 +161,8 @@ pub struct MemoryMetadata {
     pub exif: Option<ExifData>,
     pub dimensions: Option<(u32, u32)>,
     pub duration: Option<f64>,
+    pub video_metadata: Option<VideoMetadata>,
+    pub audio_metadata: Option<AudioMetadata>,
 
     // Location
     pub location: Option<GeoLocation>,
@@ -194,8 +196,35 @@ pub struct ExifData {
     pub aperture: Option<f32>,
     pub iso: Option<u32>,
     pub shutter_speed: Option<String>,
+    pub exposure_time: Option<f32>, // In seconds
     pub taken_at: Option<DateTime<Utc>>,
     pub gps: Option<GeoLocation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoMetadata {
+    pub codec: Option<String>,
+    pub bitrate: Option<u64>, // bits per second
+    pub framerate: Option<f32>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub audio_codec: Option<String>,
+    pub audio_channels: Option<u32>,
+    pub audio_sample_rate: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioMetadata {
+    pub codec: Option<String>,
+    pub bitrate: Option<u64>, // bits per second
+    pub sample_rate: Option<u32>,
+    pub channels: Option<u32>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub title: Option<String>,
+    pub track_number: Option<u32>,
+    pub genre: Option<String>,
+    pub year: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
