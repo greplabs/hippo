@@ -146,6 +146,34 @@
     .sidebar-footer { padding: 16px; border-top: 1px solid rgba(0,0,0,0.04); }
     body.dark .sidebar-footer { border-color: rgba(255,255,255,0.04); }
     .sidebar-footer p { font-size: 12px; color: #a8a29e; }
+    .sidebar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .sidebar-icon-btn {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.04);
+      color: #57534e;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    .sidebar-icon-btn:hover { background: rgba(0,0,0,0.08); color: #292524; transform: translateY(-1px); }
+    .sidebar-icon-btn:active { transform: translateY(0) scale(0.95); }
+    body.dark .sidebar-icon-btn { background: rgba(255,255,255,0.06); color: #a8a29e; }
+    body.dark .sidebar-icon-btn:hover { background: rgba(255,255,255,0.1); color: #d6d3d1; }
+    .sidebar-icon-btn.danger { color: #dc2626; }
+    .sidebar-icon-btn.danger:hover { background: rgba(220,38,38,0.1); }
+    body.dark .sidebar-icon-btn.danger { color: #f87171; }
+    .sidebar-icon-btn.primary {
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      color: white;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.25);
+    }
+    .sidebar-icon-btn.primary:hover { box-shadow: 0 4px 12px rgba(99,102,241,0.35); }
+    .sidebar-icon-btn .icon { width: 18px; height: 18px; }
     .section-title { font-size: 10px; color: #a8a29e; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.08em; font-weight: 600; }
 
     .source-item {
@@ -1727,11 +1755,13 @@
           </div>
         </div>
         <button class="sidebar-btn ai-chat-btn" id="chatBtn"><span class="icon icon-sm" id="chatBtnIcon"></span> Ask Hippo</button>
-        <button class="sidebar-btn" id="settingsBtn"><span class="icon icon-sm" id="settingsIcon"></span> AI Settings</button>
-        <button class="sidebar-btn" id="exportBtn"><span class="icon icon-sm" id="exportIcon"></span> Export Index</button>
-        <button class="sidebar-btn" id="importBtn"><span class="icon icon-sm" id="importIcon"></span> Import Index</button>
-        <button class="sidebar-btn" id="darkModeBtn"><span class="icon icon-sm" id="themeIcon"></span> <span id="themeText">Dark Mode</span></button>
-        <button class="sidebar-btn danger" id="resetBtn"><span class="icon icon-sm" id="resetIcon"></span> Reset Index</button>
+        <div class="sidebar-actions">
+          <button class="sidebar-icon-btn" id="settingsBtn" title="AI Settings"><span class="icon" id="settingsIcon"></span></button>
+          <button class="sidebar-icon-btn" id="exportBtn" title="Export Index"><span class="icon" id="exportIcon"></span></button>
+          <button class="sidebar-icon-btn" id="importBtn" title="Import Index"><span class="icon" id="importIcon"></span></button>
+          <button class="sidebar-icon-btn" id="darkModeBtn" title="Toggle Dark Mode"><span class="icon" id="themeIcon"></span></button>
+          <button class="sidebar-icon-btn danger" id="resetBtn" title="Reset Index"><span class="icon" id="resetIcon"></span></button>
+        </div>
       </div>
     </aside>
 
@@ -3115,7 +3145,7 @@
       function initIcons() {
         document.getElementById('logoIcon').innerHTML = icons.hippo;
         document.getElementById('themeIcon').innerHTML = darkMode ? icons.sun : icons.moon;
-        document.getElementById('themeText').textContent = darkMode ? 'Light Mode' : 'Dark Mode';
+        document.getElementById('darkModeBtn').title = darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode';
         document.getElementById('themeToggleIcon').innerHTML = darkMode ? icons.sun : icons.moon;
         document.getElementById('resetIcon').innerHTML = icons.trash;
         document.getElementById('searchIcon').innerHTML = icons.search;
@@ -6055,7 +6085,7 @@
 
           // Update sidebar button
           document.getElementById('themeIcon').innerHTML = darkMode ? icons.sun : icons.moon;
-          document.getElementById('themeText').textContent = darkMode ? 'Light Mode' : 'Dark Mode';
+          document.getElementById('darkModeBtn').title = darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode';
 
           // Update header button with rotation animation
           var headerBtn = document.getElementById('themeToggleBtn');
