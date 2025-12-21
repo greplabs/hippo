@@ -220,9 +220,6 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -234,6 +231,21 @@ jobs:
             target/
           key: wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: wasm-cargo-
+
+      - name: Verify WASM target installation
+        run: |
+          rustup target list --installed | grep wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown
+          rustc --version
+          rustup show
+
+      - name: Install wasm-pack
+        run: |
+          # Check if wasm-pack is already cached
+          if ! command -v wasm-pack &> /dev/null; then
+            echo "Installing wasm-pack..."
+            curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+          fi
+          wasm-pack --version
 
       - name: Build WASM
         run: |
@@ -268,6 +280,8 @@ jobs:
           - os: macos-latest
             platform: macos
             target: universal-apple-darwin
+            # For universal binary, we need both architectures
+            additional_targets: "x86_64-apple-darwin aarch64-apple-darwin"
           - os: windows-latest
             platform: windows
             target: x86_64-pc-windows-msvc
@@ -279,6 +293,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      # Install additional targets for macOS universal binary
+      - name: Install additional Rust targets
+        if: matrix.additional_targets
+        run: |
+          for target in ${{ matrix.additional_targets }}; do
+            rustup target add $target
+          done
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -294,6 +316,14 @@ jobs:
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev
 
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          # Ensure Xcode command line tools are available
+          xcode-select --install 2>/dev/null || true
+          # No additional dependencies needed for macOS Tauri builds
+          # All required frameworks are pre-installed on GitHub Actions runners
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -307,12 +337,24 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-tauri-
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2.0.0" --locked
+        run: |
+          # Check if tauri-cli is already cached
+          if ! command -v cargo-tauri &> /dev/null; then
+            echo "Installing Tauri CLI..."
+            cargo install tauri-cli --version "^2.0.0" --locked
+          fi
+          cargo tauri --version
 
       - name: Build Tauri app
         run: |
           cd hippo-tauri
-          cargo tauri build
+          # For macOS universal binary, Tauri CLI handles the multi-arch build
+          if [ "${{ matrix.target }}" = "universal-apple-darwin" ]; then
+            cargo tauri build --verbose --target universal-apple-darwin
+          else
+            cargo tauri build --verbose --target ${{ matrix.target }}
+          fi
+        shell: bash
 
       - name: Prepare Linux artifacts
         if: runner.os == 'Linux'
@@ -336,20 +378,36 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           mkdir -p release
-          # DMG
-          if [ -f hippo-tauri/target/release/bundle/dmg/*.dmg ]; then
+
+          # For universal-apple-darwin, check the universal-apple-darwin subdirectory
+          if [ "${{ matrix.target }}" = "universal-apple-darwin" ]; then
+            TARGET_DIR="hippo-tauri/target/universal-apple-darwin/release"
+          else
+            TARGET_DIR="hippo-tauri/target/${{ matrix.target }}/release"
+          fi
+
+          # DMG - check both possible locations
+          if [ -f ${TARGET_DIR}/bundle/dmg/*.dmg ]; then
+            cp ${TARGET_DIR}/bundle/dmg/*.dmg release/
+          elif [ -f hippo-tauri/target/release/bundle/dmg/*.dmg ]; then
             cp hippo-tauri/target/release/bundle/dmg/*.dmg release/
           fi
-          # App bundle (zipped)
-          if [ -d hippo-tauri/target/release/bundle/macos/*.app ]; then
+
+          # App bundle (zipped) - check both possible locations
+          if [ -d ${TARGET_DIR}/bundle/macos/*.app ]; then
+            cd ${TARGET_DIR}/bundle/macos
+            zip -r ../../../../../../release/Hippo-macos.app.zip *.app
+            cd ../../../../../../
+          elif [ -d hippo-tauri/target/release/bundle/macos/*.app ]; then
             cd hippo-tauri/target/release/bundle/macos
             zip -r ../../../../../release/Hippo-macos.app.zip *.app
             cd ../../../../../
           fi
+
           # Create checksums
           cd release
           for file in *; do
-            shasum -a 256 "$file" > "$file.sha256"
+            [ -f "$file" ] && shasum -a 256 "$file" > "$file.sha256"
           done
 
       - name: Prepare Windows artifacts
