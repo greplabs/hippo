@@ -220,11 +220,6 @@ fn print_info(text: &str) {
     println!("{} {}", "•".bright_blue(), text);
 }
 
-#[allow(dead_code)]
-fn print_warning(text: &str) {
-    println!("{} {}", "⚠".bright_yellow(), text);
-}
-
 fn format_tags(tags: &[hippo_core::Tag]) -> String {
     if tags.is_empty() {
         return "—".dimmed().to_string();
