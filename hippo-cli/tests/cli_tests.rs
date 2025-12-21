@@ -103,7 +103,11 @@ mod helpers {
     }
 
     /// Wait for indexing to complete
-    pub async fn wait_for_indexing(hippo: &Hippo, expected_count: usize, max_wait_secs: u64) -> Result<()> {
+    pub async fn wait_for_indexing(
+        hippo: &Hippo,
+        expected_count: usize,
+        max_wait_secs: u64,
+    ) -> Result<()> {
         let start = std::time::Instant::now();
         loop {
             let stats = hippo.stats().await?;
@@ -284,10 +288,7 @@ mod integration_tests {
         };
         let results = hippo.search_advanced(query).await?;
 
-        assert!(
-            !results.memories.is_empty(),
-            "Should have indexed memories"
-        );
+        assert!(!results.memories.is_empty(), "Should have indexed memories");
 
         Ok(())
     }
@@ -392,14 +393,8 @@ mod integration_tests {
         // Test: Find duplicates (twins)
         let (duplicate_groups, summary) = hippo.find_duplicates(1).await?;
 
-        assert!(
-            duplicate_groups.len() > 0,
-            "Should find duplicate groups"
-        );
-        assert!(
-            summary.total_duplicates > 0,
-            "Should have duplicate files"
-        );
+        assert!(duplicate_groups.len() > 0, "Should find duplicate groups");
+        assert!(summary.total_duplicates > 0, "Should have duplicate files");
         assert!(summary.wasted_bytes > 0, "Should calculate wasted space");
 
         Ok(())
@@ -551,7 +546,10 @@ mod watch_tests {
         let dirs =
             directories::ProjectDirs::from("", "", "Hippo").expect("Failed to get project dirs");
 
-        assert!(dirs.data_dir().exists() || true, "Data dir should be accessible");
+        assert!(
+            dirs.data_dir().exists() || true,
+            "Data dir should be accessible"
+        );
 
         // Verify hippo config
         let stats = hippo.stats().await?;
@@ -596,7 +594,9 @@ mod error_tests {
         let (hippo, _temp_dir) = helpers::create_test_hippo().await?;
 
         // Test: Search with no indexed files
-        let results = hippo.search("nonexistent query that will never match").await?;
+        let results = hippo
+            .search("nonexistent query that will never match")
+            .await?;
         assert!(results.memories.is_empty(), "Should have no results");
 
         Ok(())
@@ -694,7 +694,10 @@ mod workflow_tests {
             ..Default::default()
         };
         let tagged_results = hippo.search_advanced(query).await?;
-        assert!(!tagged_results.memories.is_empty(), "Should find tagged files");
+        assert!(
+            !tagged_results.memories.is_empty(),
+            "Should find tagged files"
+        );
 
         // 7. Get stats (weight)
         let final_stats = hippo.stats().await?;
@@ -741,7 +744,10 @@ mod workflow_tests {
 
         // Search across all sources
         let results = hippo.search("vacation").await?;
-        assert!(!results.memories.is_empty(), "Should find files from any source");
+        assert!(
+            !results.memories.is_empty(),
+            "Should find files from any source"
+        );
 
         // Remove one source
         hippo.remove_source(&source1, true).await?;
@@ -751,7 +757,10 @@ mod workflow_tests {
 
         // Should still be able to search remaining source
         let stats = hippo.stats().await?;
-        assert!(stats.total_memories > 0, "Should still have memories from second source");
+        assert!(
+            stats.total_memories > 0,
+            "Should still have memories from second source"
+        );
 
         Ok(())
     }
@@ -827,8 +836,7 @@ mod workflow_tests {
 
         // Verify they're different files
         assert_ne!(
-            work_results.memories[0].memory.id,
-            personal_results.memories[0].memory.id,
+            work_results.memories[0].memory.id, personal_results.memories[0].memory.id,
             "Should be different files"
         );
 
@@ -860,10 +868,12 @@ mod brain_tests {
         // the setup works
 
         // Just verify we have files that could be analyzed
-        let results = hippo.search_advanced(hippo_core::SearchQuery {
-            limit: 100,
-            ..Default::default()
-        }).await?;
+        let results = hippo
+            .search_advanced(hippo_core::SearchQuery {
+                limit: 100,
+                ..Default::default()
+            })
+            .await?;
 
         let untagged: Vec<_> = results
             .memories
@@ -871,7 +881,10 @@ mod brain_tests {
             .filter(|r| r.memory.tags.len() < 3)
             .collect();
 
-        assert!(!untagged.is_empty(), "Should have files that could be tagged");
+        assert!(
+            !untagged.is_empty(),
+            "Should have files that could be tagged"
+        );
 
         // Note: Actual AI analysis requires ANTHROPIC_API_KEY
         // In CI/CD, these tests should be skipped or mocked

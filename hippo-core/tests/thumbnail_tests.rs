@@ -232,10 +232,7 @@ async fn test_generate_thumbnail_caching() {
     let mtime2 = fs::metadata(&thumb2).unwrap().modified().unwrap();
 
     assert_eq!(thumb1, thumb2, "Should return same thumbnail path");
-    assert_eq!(
-        mtime1, mtime2,
-        "Should not regenerate if source unchanged"
-    );
+    assert_eq!(mtime1, mtime2, "Should not regenerate if source unchanged");
 }
 
 #[tokio::test]

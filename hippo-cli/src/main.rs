@@ -200,7 +200,7 @@ fn print_hippo() {
     for c in &colors {
         print!("{}", c);
     }
-    println!(" {}", "🦛".to_string());
+    println!(" 🦛");
     println!("    {}\n", HIPPO_TAGLINE.dimmed().italic());
 }
 
@@ -230,13 +230,11 @@ fn format_tags(tags: &[hippo_core::Tag]) -> String {
         return "—".dimmed().to_string();
     }
     tags.iter()
-        .map(|t| {
-            match t.source {
-                hippo_core::TagSource::User => t.name.bright_cyan().to_string(),
-                hippo_core::TagSource::Ai => format!("{}{}", t.name.bright_magenta(), "✨".dimmed()),
-                hippo_core::TagSource::Imported => t.name.bright_green().to_string(),
-                hippo_core::TagSource::System => t.name.dimmed().to_string(),
-            }
+        .map(|t| match t.source {
+            hippo_core::TagSource::User => t.name.bright_cyan().to_string(),
+            hippo_core::TagSource::Ai => format!("{}{}", t.name.bright_magenta(), "✨".dimmed()),
+            hippo_core::TagSource::Imported => t.name.bright_green().to_string(),
+            hippo_core::TagSource::System => t.name.dimmed().to_string(),
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -395,8 +393,7 @@ async fn main() -> Result<()> {
                 print_info("No memories found. Try a different search?");
             } else {
                 println!(
-                    "\n{} {} {}:\n",
-                    "🔍".to_string(),
+                    "\n🔍 {} {}:\n",
                     results.memories.len().to_string().bright_green().bold(),
                     "memories found".bright_green()
                 );
@@ -456,8 +453,7 @@ async fn main() -> Result<()> {
                 print_info("No memories yet. Try 'hippo chomp <folder>' to add some!");
             } else {
                 println!(
-                    "\n{} {} {}:\n",
-                    "📚".to_string(),
+                    "\n📚 {} {}:\n",
                     results.memories.len().to_string().bright_green().bold(),
                     "memories".bright_green()
                 );

@@ -311,11 +311,7 @@ async fn test_list_tags_alphabetically_sorted() {
     let (storage, _temp) = create_test_storage().await;
 
     let mut memory = create_test_memory("file.txt");
-    memory.tags = vec![
-        Tag::user("zebra"),
-        Tag::user("apple"),
-        Tag::user("middle"),
-    ];
+    memory.tags = vec![Tag::user("zebra"), Tag::user("apple"), Tag::user("middle")];
     storage.upsert_memory(&memory).await.unwrap();
 
     let tags = storage.list_tags().await.unwrap();
@@ -362,13 +358,7 @@ async fn test_search_with_multiple_tags() {
     storage.upsert_memory(&memory2).await.unwrap();
 
     let results = storage
-        .search_with_tags(
-            None,
-            &["rust".to_string(), "code".to_string()],
-            None,
-            10,
-            0,
-        )
+        .search_with_tags(None, &["rust".to_string(), "code".to_string()], None, 10, 0)
         .await
         .unwrap();
 
@@ -484,10 +474,7 @@ async fn test_tag_operations_on_many_memories() {
     // Create many memories with tags
     for i in 0..20 {
         let mut memory = create_test_memory(&format!("file{}.txt", i));
-        memory.tags = vec![
-            Tag::user("common"),
-            Tag::user(&format!("unique_{}", i)),
-        ];
+        memory.tags = vec![Tag::user("common"), Tag::user(&format!("unique_{}", i))];
         storage.upsert_memory(&memory).await.unwrap();
     }
 

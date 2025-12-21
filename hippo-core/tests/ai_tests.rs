@@ -109,12 +109,12 @@ impl AiAnalyzer for MockClaudeClient {
         Ok(FileAnalysis {
             tags,
             description: parsed["description"].as_str().map(String::from),
-            organization: parsed["suggested_folder"].as_str().map(|f| {
-                OrganizationSuggestion {
+            organization: parsed["suggested_folder"]
+                .as_str()
+                .map(|f| OrganizationSuggestion {
                     suggested_folder: f.to_string(),
                     reason: "AI suggested".to_string(),
-                }
-            }),
+                }),
         })
     }
 
@@ -298,10 +298,7 @@ impl MockOllamaClient {
     }
 
     pub async fn chat(&self, messages: &[ChatMessage]) -> Result<String> {
-        Ok(format!(
-            "Mock chat response to {} messages",
-            messages.len()
-        ))
+        Ok(format!("Mock chat response to {} messages", messages.len()))
     }
 
     pub async fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
@@ -324,11 +321,7 @@ impl MockOllamaClient {
 
 // ==================== Test Helpers ====================
 
-fn create_test_memory(
-    path: &str,
-    kind: MemoryKind,
-    tags: Vec<&str>,
-) -> Memory {
+fn create_test_memory(path: &str, kind: MemoryKind, tags: Vec<&str>) -> Memory {
     Memory {
         id: Uuid::new_v4(),
         path: PathBuf::from(path),
@@ -390,10 +383,7 @@ async fn test_mock_claude_file_analysis() {
     assert_eq!(analysis.tags[0].confidence, 95);
     assert!(analysis.description.is_some());
     assert!(analysis.organization.is_some());
-    assert_eq!(
-        analysis.organization.unwrap().suggested_folder,
-        "src/ai"
-    );
+    assert_eq!(analysis.organization.unwrap().suggested_folder, "src/ai");
 }
 
 #[tokio::test]
@@ -606,10 +596,7 @@ async fn test_parse_search_query() {
         .await
         .unwrap();
 
-    assert!(analysis
-        .suggested_tags
-        .iter()
-        .any(|t| t.contains("rust")));
+    assert!(analysis.suggested_tags.iter().any(|t| t.contains("rust")));
 }
 
 #[tokio::test]
@@ -624,10 +611,7 @@ async fn test_complex_query_parsing() {
     .to_string()]);
 
     let analysis = mock_ollama
-        .analyze_document(
-            "find all big vacation photos from this summer",
-            "query",
-        )
+        .analyze_document("find all big vacation photos from this summer", "query")
         .await
         .unwrap();
 
@@ -720,10 +704,9 @@ async fn test_similar_file_detection() {
 
     // Should find Rust files as similar
     assert!(!similar.is_empty());
-    assert!(similar.iter().all(|s| matches!(
-        s.memory.kind,
-        MemoryKind::Code { .. }
-    )));
+    assert!(similar
+        .iter()
+        .all(|s| matches!(s.memory.kind, MemoryKind::Code { .. })));
     assert!(similar[0].similarity_score > 0.25);
 }
 
@@ -760,11 +743,7 @@ async fn test_exact_duplicate_detection() {
 async fn test_similar_name_duplicate_detection() {
     let client = UnifiedAiClient::new();
 
-    let target = create_test_memory(
-        "/files/document.txt",
-        MemoryKind::Unknown,
-        vec![],
-    );
+    let target = create_test_memory("/files/document.txt", MemoryKind::Unknown, vec![]);
 
     let mut similar = target.clone();
     similar.id = Uuid::new_v4();
@@ -894,21 +873,9 @@ async fn test_batch_analysis() {
     let mock_client = MockClaudeClient::new();
 
     let memories = vec![
-        create_test_memory(
-            "/file1.txt",
-            MemoryKind::Unknown,
-            vec![],
-        ),
-        create_test_memory(
-            "/file2.txt",
-            MemoryKind::Unknown,
-            vec![],
-        ),
-        create_test_memory(
-            "/file3.txt",
-            MemoryKind::Unknown,
-            vec![],
-        ),
+        create_test_memory("/file1.txt", MemoryKind::Unknown, vec![]),
+        create_test_memory("/file2.txt", MemoryKind::Unknown, vec![]),
+        create_test_memory("/file3.txt", MemoryKind::Unknown, vec![]),
     ];
 
     // Analyze all files
@@ -972,22 +939,16 @@ async fn test_concurrent_analysis() {
     let mock_client = Arc::new(MockClaudeClient::new());
 
     let memories: Vec<_> = (0..10)
-        .map(|i| {
-            create_test_memory(
-                &format!("/file{}.txt", i),
-                MemoryKind::Unknown,
-                vec![],
-            )
-        })
+        .map(|i| create_test_memory(&format!("/file{}.txt", i), MemoryKind::Unknown, vec![]))
         .collect();
 
     // Analyze concurrently
     let mut handles = Vec::new();
     for memory in memories {
         let client = Arc::clone(&mock_client);
-        handles.push(task::spawn(async move {
-            client.analyze_file(&memory).await
-        }));
+        handles.push(task::spawn(
+            async move { client.analyze_file(&memory).await },
+        ));
     }
 
     let results = futures::future::join_all(handles).await;

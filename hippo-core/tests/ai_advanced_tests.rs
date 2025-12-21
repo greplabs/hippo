@@ -438,8 +438,7 @@ async fn test_detect_project_patterns_across_files() {
     }
 
     // Detect common patterns (tags appearing multiple times)
-    let mut tag_counts: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
+    let mut tag_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for tag in &all_tags {
         *tag_counts.entry(tag.clone()).or_insert(0) += 1;
     }

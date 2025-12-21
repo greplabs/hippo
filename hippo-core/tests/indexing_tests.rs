@@ -149,7 +149,10 @@ async fn test_discover_files_basic() {
     assert!(files.len() > 0, "Should discover files");
 
     // Should include known files
-    let paths: Vec<String> = files.iter().map(|p| p.to_string_lossy().to_string()).collect();
+    let paths: Vec<String> = files
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
     assert!(
         paths.iter().any(|p| p.contains("readme.txt")),
         "Should find readme.txt"
@@ -169,9 +172,14 @@ async fn test_discover_files_nested() {
     let files = discover_files(&source).await.unwrap();
 
     // Should find deeply nested files
-    let paths: Vec<String> = files.iter().map(|p| p.to_string_lossy().to_string()).collect();
+    let paths: Vec<String> = files
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
     assert!(
-        paths.iter().any(|p| p.contains("nested") && p.contains("hidden.txt")),
+        paths
+            .iter()
+            .any(|p| p.contains("nested") && p.contains("hidden.txt")),
         "Should find deeply nested files"
     );
 }
@@ -188,7 +196,10 @@ async fn test_discover_files_filters_hidden() {
     let source = Source::Local { root_path: root };
     let files = discover_files(&source).await.unwrap();
 
-    let paths: Vec<String> = files.iter().map(|p| p.to_string_lossy().to_string()).collect();
+    let paths: Vec<String> = files
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
 
     // Should find visible but not hidden
     assert!(paths.iter().any(|p| p.contains("visible.txt")));
@@ -207,7 +218,10 @@ async fn test_discover_files_filters_unsupported() {
     let source = Source::Local { root_path: root };
     let files = discover_files(&source).await.unwrap();
 
-    let paths: Vec<String> = files.iter().map(|p| p.to_string_lossy().to_string()).collect();
+    let paths: Vec<String> = files
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
 
     assert!(paths.iter().any(|p| p.contains("supported.txt")));
     assert!(!paths.iter().any(|p| p.contains("unsupported.xyz")));
@@ -232,7 +246,10 @@ async fn test_discover_files_skips_directories() {
     let source = Source::Local { root_path: root };
     let files = discover_files(&source).await.unwrap();
 
-    let paths: Vec<String> = files.iter().map(|p| p.to_string_lossy().to_string()).collect();
+    let paths: Vec<String> = files
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
 
     // Should not find files in skipped directories
     assert!(!paths.iter().any(|p| p.contains(".git")));

@@ -448,7 +448,9 @@ async fn test_mixed_source_types() {
     assert!(sources.len() >= 3);
 
     // Should have different source types
-    let has_local = sources.iter().any(|s| matches!(s.source, Source::Local { .. }));
+    let has_local = sources
+        .iter()
+        .any(|s| matches!(s.source, Source::Local { .. }));
     let has_gdrive = sources
         .iter()
         .any(|s| matches!(s.source, Source::GoogleDrive { .. }));

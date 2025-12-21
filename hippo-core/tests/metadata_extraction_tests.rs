@@ -115,10 +115,7 @@ class MyClass:
         metadata.functions.contains(&"world".to_string()),
         "Should find world function"
     );
-    assert!(
-        metadata.imports.len() >= 2,
-        "Should find import statements"
-    );
+    assert!(metadata.imports.len() >= 2, "Should find import statements");
 }
 
 #[test]
