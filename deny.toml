@@ -28,7 +28,8 @@ allow = [
     "Unicode-3.0",
 ]
 # How to handle licenses that are not in the allow list
-unlicensed = "deny"
+# The 'unlicensed' key was deprecated, use 'default' instead
+default = "deny"
 # Confidence threshold for license detection
 confidence-threshold = 0.8
 
