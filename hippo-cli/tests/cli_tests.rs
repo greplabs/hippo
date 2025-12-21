@@ -7,7 +7,7 @@
 //! - Full CLI workflows
 
 use anyhow::Result;
-use hippo_core::{Hippo, HippoConfig, Memory, MemoryKind, Source, Tag, TagSource};
+use hippo_core::{Hippo, HippoConfig, MemoryKind, Source, Tag, TagSource};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -397,7 +397,7 @@ mod integration_tests {
         // Test: Find duplicates (twins)
         let (duplicate_groups, summary) = hippo.find_duplicates(1).await?;
 
-        assert!(duplicate_groups.len() > 0, "Should find duplicate groups");
+        assert!(!duplicate_groups.is_empty(), "Should find duplicate groups");
         assert!(summary.total_duplicates > 0, "Should have duplicate files");
         assert!(summary.wasted_bytes > 0, "Should calculate wasted space");
 
@@ -550,15 +550,14 @@ mod watch_tests {
         let dirs =
             directories::ProjectDirs::from("", "", "Hippo").expect("Failed to get project dirs");
 
-        assert!(
-            dirs.data_dir().exists() || true,
-            "Data dir should be accessible"
-        );
+        // Just verify we can access the data dir path (exists or not)
+        let _data_dir = dirs.data_dir();
 
         // Verify hippo config
         let stats = hippo.stats().await?;
         // Just verify we can get stats (config is working)
-        assert!(stats.total_memories >= 0, "Stats should be accessible");
+        // stats.total_memories is u64, so just check we got a value
+        let _ = stats.total_memories;
 
         Ok(())
     }
@@ -618,7 +617,7 @@ mod error_tests {
             confidence: None,
         };
 
-        let result = hippo.add_tag(fake_id, tag).await;
+        let _result = hippo.add_tag(fake_id, tag).await;
         // This might succeed or fail depending on implementation
         // Either way, the memory shouldn't exist
         let memory = hippo.get_memory(fake_id).await?;

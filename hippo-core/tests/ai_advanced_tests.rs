@@ -7,6 +7,8 @@
 //! - Complex state management
 //! - Integration patterns
 
+#![allow(unused_imports, clippy::new_without_default)]
+
 use hippo_core::ai::{
     AiConfig, AiProvider, CodeSummary, DocumentSummary, FileAnalysis, TagSuggestion,
     UnifiedAiClient,

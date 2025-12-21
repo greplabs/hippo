@@ -238,6 +238,7 @@ async fn test_invalid_sort_order() {
 /// Run with: HIPPO_TEST_SERVER=true cargo test --package hippo-web -- --ignored
 #[cfg(feature = "test-server")]
 mod server_tests {
+    #[allow(unused_imports)]
     use super::*;
 
     #[tokio::test]

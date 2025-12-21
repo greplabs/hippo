@@ -442,10 +442,7 @@ impl Searcher {
                             if let Some(pos) = preview_lower.find(&text_lower) {
                                 let start = pos.saturating_sub(30);
                                 let end = (pos + text_lower.len() + 30).min(preview.len());
-                                let snippet = format!(
-                                    "...{}...",
-                                    &preview[start..end]
-                                );
+                                let snippet = format!("...{}...", &preview[start..end]);
                                 highlights.push(Highlight {
                                     field: "content".to_string(),
                                     snippet,
