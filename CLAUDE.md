@@ -1567,3 +1567,105 @@ graph TB
 ---
 
 This documentation is comprehensive and up-to-date as of the current codebase. For questions or contributions, refer to the individual module source files for implementation details.
+
+---
+
+## Current Work In Progress (December 2024)
+
+### Recent Changes
+- **PR #23**: Fixed JavaScript syntax error (`I\\'ll` → `I\'ll`) that broke the UI
+- **PR #24**: Fixed virtual scroller not rendering on initial load (dimension fallbacks)
+- **PR #25**: Reverted UI to v0.1.0-alpha as a checkpoint (new UI had regressions)
+
+### Known Issues to Fix
+
+#### 1. Qdrant Server Not Starting
+**Status**: BROKEN - Qdrant fails to start within 30 seconds
+**Location**: `hippo-core/src/qdrant/manager.rs`
+**Symptoms**:
+- App logs: "Qdrant failed to start within 30 seconds"
+- Connection refused on port 6334
+- Falls back to SQLite for embeddings
+
+**Investigation needed**:
+- Check if Qdrant binary is properly downloaded
+- Verify port 6334/6333 are not blocked
+- Check Qdrant process logs for errors
+- May need to increase timeout or fix startup sequence
+
+#### 2. File Watcher Not Re-indexing
+**Status**: INCOMPLETE - Watcher events detected but files not re-indexed
+**Location**: `hippo-core/src/watcher/mod.rs`
+**Issues**:
+- `notify::RecommendedWatcher` is never instantiated (line 172: `_watcher: None`)
+- `start_flush_task()` (line 463) is defined but never called
+- `handle_event()` (line 393-427) only deletes old entries, doesn't re-index
+
+**Fix needed**:
+1. Create actual `notify::recommended_watcher()` in `watch()` method
+2. Wire up notify events to `process_event()`
+3. Start `start_flush_task()` when watcher initializes
+4. Make `handle_event()` trigger re-indexing via indexer
+
+#### 3. UI Regressions (New UI vs v0.1.0-alpha)
+**Status**: Reverted to old UI in PR #25
+**Location**: `hippo-tauri/ui/dist/index.html`
+**Old file**: 4273 lines, **New file**: 6626 lines
+
+The new UI added many features but introduced regressions:
+- Tab buttons not working
+- Files not displaying
+- Filters not working
+- Icons missing
+
+**Approach**: Incrementally add back features from new UI while testing each change
+
+### Features Added Since v0.1.0-alpha
+- Virtual scrolling for large file lists
+- Graph view (D3.js visualization)
+- Enhanced search with natural language parsing
+- Date filters
+- Saved searches
+- Code syntax highlighting (Prism.js)
+- Keyboard navigation
+
+### Pending Work
+
+#### High Priority
+1. Fix Qdrant server startup
+2. Fix file watcher re-indexing
+3. Incrementally restore new UI features
+
+#### Medium Priority
+1. Native app builds for all platforms (macOS, Windows, Linux)
+2. Code signing and notarization for macOS
+3. Installer packages
+
+#### Lower Priority
+1. Cloud source integration (Google Drive, iCloud, etc.)
+2. Face clustering for photos
+3. Better connection inference in knowledge graph
+
+### Commands for Testing
+
+```bash
+# Build everything
+cargo build --workspace
+
+# Run tests
+cargo test --workspace
+
+# Run Tauri app
+cargo tauri dev
+
+# Run CLI
+cargo run -p hippo-cli -- --help
+
+# Run web server
+cargo run -p hippo-web
+```
+
+### Database Locations
+- **macOS**: `~/Library/Application Support/Hippo/hippo.db`
+- **Qdrant data**: `~/Library/Application Support/com.hippo.app/qdrant/`
+- **Thumbnails**: `~/.cache/Hippo/thumbnails/`
