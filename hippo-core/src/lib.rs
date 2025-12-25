@@ -213,7 +213,11 @@ impl Hippo {
 
         // Initialize watcher (optional - can be started later)
         let watcher = match watcher::FileWatcher::new(storage.clone(), None) {
-            Ok(w) => Some(Arc::new(RwLock::new(w))),
+            Ok(mut w) => {
+                // Set the indexer so the watcher can re-index changed files
+                w.set_indexer(indexer.clone());
+                Some(Arc::new(RwLock::new(w)))
+            }
             Err(e) => {
                 tracing::warn!("Failed to create file watcher: {}", e);
                 None

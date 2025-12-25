@@ -3,8 +3,10 @@
 //! This module provides file system monitoring capabilities to detect
 //! changes to indexed files and automatically update the index.
 
-use crate::{error::Result, models::Source, storage::Storage, HippoError};
-use notify::{Event, EventKind, RecommendedWatcher};
+use crate::{error::Result, indexer::Indexer, models::Source, storage::Storage, HippoError};
+use notify::{
+    event::ModifyKind, Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
+};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -169,7 +171,8 @@ pub struct FileWatcher {
     state: Arc<WatcherState>,
     event_tx: tokio::sync::broadcast::Sender<WatchEvent>,
     storage: Arc<Storage>,
-    _watcher: Option<RecommendedWatcher>,
+    indexer: Option<Arc<Indexer>>,
+    watcher: Option<RecommendedWatcher>,
 }
 
 impl FileWatcher {
@@ -187,8 +190,14 @@ impl FileWatcher {
             state,
             event_tx,
             storage,
-            _watcher: None,
+            indexer: None,
+            watcher: None,
         })
+    }
+
+    /// Set the indexer for re-indexing files on changes
+    pub fn set_indexer(&mut self, indexer: Arc<Indexer>) {
+        self.indexer = Some(indexer);
     }
 
     /// Subscribe to watch events
@@ -205,6 +214,18 @@ impl FileWatcher {
             )));
         }
 
+        // Initialize the notify watcher if not already done
+        if self.watcher.is_none() {
+            self.init_notify_watcher()?;
+        }
+
+        // Add path to the actual notify watcher
+        if let Some(watcher) = &mut self.watcher {
+            watcher
+                .watch(path, RecursiveMode::Recursive)
+                .map_err(|e| HippoError::Watcher(format!("Failed to watch path: {}", e)))?;
+        }
+
         let mut watched_paths = self.state.watched_paths.write().await;
         watched_paths.insert(path.to_path_buf(), source.clone());
 
@@ -216,8 +237,169 @@ impl FileWatcher {
         Ok(())
     }
 
+    /// Initialize the notify watcher with event handling
+    fn init_notify_watcher(&mut self) -> Result<()> {
+        let (tx, rx) = std::sync::mpsc::channel::<Event>();
+
+        let config = Config::default()
+            .with_poll_interval(Duration::from_secs(2))
+            .with_compare_contents(false);
+
+        let watcher = RecommendedWatcher::new(
+            move |res: std::result::Result<Event, notify::Error>| {
+                if let Ok(event) = res {
+                    let _ = tx.send(event);
+                }
+            },
+            config,
+        )
+        .map_err(|e| HippoError::Watcher(format!("Failed to create watcher: {}", e)))?;
+
+        self.watcher = Some(watcher);
+
+        // Store rx for background processing - we'll spawn a task to handle events
+        // Convert to async processing
+        let state = self.state.clone();
+        let storage = self.storage.clone();
+        let indexer = self.indexer.clone();
+
+        // Spawn background task to process notify events
+        tokio::spawn(async move {
+            Self::process_notify_events(rx, state, storage, indexer).await;
+        });
+
+        info!("Notify watcher initialized");
+        Ok(())
+    }
+
+    /// Background task to process events from notify
+    async fn process_notify_events(
+        rx: std::sync::mpsc::Receiver<Event>,
+        state: Arc<WatcherState>,
+        storage: Arc<Storage>,
+        indexer: Option<Arc<Indexer>>,
+    ) {
+        loop {
+            // Use recv_timeout to avoid blocking forever
+            match rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(event) => {
+                    // Check if paused
+                    if *state.is_paused.read().await {
+                        continue;
+                    }
+
+                    // Process the event
+                    if let Err(e) =
+                        Self::handle_notify_event(event, &state, &storage, &indexer).await
+                    {
+                        warn!("Failed to handle notify event: {}", e);
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    // Normal timeout, continue
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    info!("Notify watcher channel disconnected, stopping event processing");
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Handle a single notify event
+    async fn handle_notify_event(
+        event: Event,
+        state: &Arc<WatcherState>,
+        storage: &Arc<Storage>,
+        indexer: &Option<Arc<Indexer>>,
+    ) -> Result<()> {
+        let watched_paths = state.watched_paths.read().await;
+
+        match event.kind {
+            EventKind::Create(_) => {
+                for path in event.paths {
+                    if !path.is_file() {
+                        continue;
+                    }
+
+                    // Find which source this file belongs to
+                    if let Some(source) =
+                        Self::find_source_for_path_static(&path, &watched_paths)
+                    {
+                        info!("File created: {:?}", path);
+                        state.increment_stat("created").await;
+
+                        // Re-index the file
+                        if let Some(idx) = indexer {
+                            if let Err(e) = idx.index_single_file(&path, &source).await {
+                                warn!("Failed to index created file {:?}: {}", path, e);
+                            }
+                        }
+                    }
+                }
+            }
+            EventKind::Modify(ModifyKind::Data(_)) | EventKind::Modify(ModifyKind::Any) => {
+                for path in event.paths {
+                    if !path.is_file() {
+                        continue;
+                    }
+
+                    if let Some(source) =
+                        Self::find_source_for_path_static(&path, &watched_paths)
+                    {
+                        info!("File modified: {:?}", path);
+                        state.increment_stat("modified").await;
+
+                        // Delete old entry and re-index
+                        let _ = storage.remove_memory_by_path(&path).await;
+
+                        if let Some(idx) = indexer {
+                            if let Err(e) = idx.index_single_file(&path, &source).await {
+                                warn!("Failed to re-index modified file {:?}: {}", path, e);
+                            }
+                        }
+                    }
+                }
+            }
+            EventKind::Remove(_) => {
+                for path in event.paths {
+                    info!("File deleted: {:?}", path);
+                    state.increment_stat("deleted").await;
+
+                    // Remove from index
+                    if let Err(e) = storage.remove_memory_by_path(&path).await {
+                        debug!("Failed to delete memory for {:?}: {}", path, e);
+                    }
+                }
+            }
+            _ => {
+                debug!("Ignoring event kind: {:?}", event.kind);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Static version of find_source_for_path for use in async contexts
+    fn find_source_for_path_static(
+        path: &Path,
+        watched_paths: &HashMap<PathBuf, Source>,
+    ) -> Option<Source> {
+        for (watched_path, source) in watched_paths {
+            if path.starts_with(watched_path) {
+                return Some(source.clone());
+            }
+        }
+        None
+    }
+
     /// Stop watching a specific path
     pub async fn unwatch(&mut self, path: &Path) -> Result<()> {
+        // Unwatch from notify
+        if let Some(watcher) = &mut self.watcher {
+            let _ = watcher.unwatch(path);
+        }
+
         let mut watched_paths = self.state.watched_paths.write().await;
         watched_paths.remove(path);
 
@@ -233,6 +415,14 @@ impl FileWatcher {
 
     /// Stop watching all paths
     pub async fn stop_all(&mut self) -> Result<()> {
+        // Unwatch all paths from notify
+        if let Some(watcher) = &mut self.watcher {
+            let watched_paths = self.state.watched_paths.read().await;
+            for path in watched_paths.keys() {
+                let _ = watcher.unwatch(path);
+            }
+        }
+
         let mut watched_paths = self.state.watched_paths.write().await;
         watched_paths.clear();
 
