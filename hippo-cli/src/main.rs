@@ -29,11 +29,16 @@ const HIPPO_TAGLINE: &str = "The Memory That Never Forgets";
 #[command(name = "hippo")]
 #[command(author, version, about = "Hippo - The Memory That Never Forgets")]
 #[command(after_help = "Examples:
-  hippo chomp ~/Documents     Index a folder
-  hippo sniff \"vacation\"      Search for files
-  hippo remember              List recent files
-  hippo twins                 Find duplicate files
-  hippo brain                 AI auto-organize
+  hippo chomp ~/Documents           Index a folder
+  hippo sniff \"vacation\"            Search for files
+  hippo sniff \"photos\" --semantic   AI-powered semantic search
+  hippo sniff \"code\" -f json        Export results as JSON
+  hippo think \"sunset photos\"       Natural language AI search
+  hippo kin \"beach.jpg\"             Find similar files
+  hippo chat \"What Rust files do I have?\"  Ask AI about your files
+  hippo remember                    List recent files
+  hippo twins                       Find duplicate files
+  hippo brain                       AI auto-organize
 ")]
 struct Cli {
     #[command(subcommand)]
@@ -60,6 +65,45 @@ enum Commands {
         /// Limit results
         #[arg(short, long, default_value = "20")]
         limit: usize,
+        /// Sort by: newest, oldest, name, size
+        #[arg(short = 'o', long, default_value = "newest")]
+        sort: String,
+        /// Use semantic/AI search instead of text search
+        #[arg(long)]
+        semantic: bool,
+        /// Output format: pretty, json, csv
+        #[arg(short = 'f', long, default_value = "pretty")]
+        format: String,
+    },
+
+    /// AI semantic search - find files by meaning
+    #[command(alias = "semantic", alias = "ai-search")]
+    Think {
+        /// Natural language query
+        query: String,
+        /// Limit results
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+    },
+
+    /// Find similar files - discover related content
+    #[command(alias = "similar", alias = "related")]
+    Kin {
+        /// File path or memory ID to find similar files for
+        target: String,
+        /// Number of similar files to show
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+    },
+
+    /// Chat with AI about your files
+    #[command(alias = "ask", alias = "rag")]
+    Chat {
+        /// Your question about the files
+        question: String,
+        /// Show source files used for context
+        #[arg(long)]
+        show_sources: bool,
     },
 
     /// Remember things - list your memories
@@ -366,70 +410,135 @@ async fn main() -> Result<()> {
             print_info(&format!("Total memories: {}", stats.total_memories));
         }
 
-        Commands::Sniff { query, tags, limit } => {
-            print_header(&format!("Sniffing for \"{}\"", query.bright_yellow()));
+        Commands::Sniff { query, tags, limit, sort, semantic, format } => {
+            let search_mode = if semantic { "🧠 semantic" } else { "🔍 text" };
+            print_header(&format!("Sniffing ({}) for \"{}\"", search_mode, query.bright_yellow()));
 
-            let search_query = SearchQuery {
-                text: Some(query),
-                tags: tags
-                    .into_iter()
-                    .map(|t| TagFilter {
-                        tag: t,
-                        mode: TagFilterMode::Include,
-                    })
-                    .collect(),
-                limit,
-                ..Default::default()
+            let results = if semantic {
+                // Use semantic search
+                hippo.semantic_search(&query, limit).await?
+            } else {
+                // Use text search with sort
+                let sort_order = match sort.to_lowercase().as_str() {
+                    "oldest" => hippo_core::SortOrder::DateOldest,
+                    "name" | "name-asc" => hippo_core::SortOrder::NameAsc,
+                    "name-desc" => hippo_core::SortOrder::NameDesc,
+                    "size" | "size-desc" => hippo_core::SortOrder::SizeDesc,
+                    "size-asc" => hippo_core::SortOrder::SizeAsc,
+                    _ => hippo_core::SortOrder::DateNewest,
+                };
+
+                let search_query = SearchQuery {
+                    text: Some(query.clone()),
+                    tags: tags
+                        .into_iter()
+                        .map(|t| TagFilter {
+                            tag: t,
+                            mode: TagFilterMode::Include,
+                        })
+                        .collect(),
+                    limit,
+                    sort: sort_order,
+                    ..Default::default()
+                };
+                hippo.search_advanced(search_query).await?
             };
-
-            let results = hippo.search_advanced(search_query).await?;
 
             if results.memories.is_empty() {
                 print_info("No memories found. Try a different search?");
             } else {
-                println!(
-                    "\n🔍 {} {}:\n",
-                    results.memories.len().to_string().bright_green().bold(),
-                    "memories found".bright_green()
-                );
-
-                // Use card view for better colors (<=10 results) or table for many
-                if results.memories.len() <= 10 {
-                    for (i, r) in results.memories.iter().enumerate() {
-                        print_memory_card(&r.memory, Some(i));
+                // Handle different output formats
+                match format.to_lowercase().as_str() {
+                    "json" => {
+                        // JSON output for piping/scripting
+                        let json_results: Vec<serde_json::Value> = results
+                            .memories
+                            .iter()
+                            .map(|r| {
+                                serde_json::json!({
+                                    "id": r.memory.id.to_string(),
+                                    "path": r.memory.path.display().to_string(),
+                                    "name": r.memory.metadata.title.clone().unwrap_or_else(||
+                                        r.memory.path.file_name()
+                                            .map(|n| n.to_string_lossy().to_string())
+                                            .unwrap_or_default()
+                                    ),
+                                    "kind": format!("{:?}", r.memory.kind),
+                                    "size": r.memory.metadata.file_size,
+                                    "tags": r.memory.tags.iter().map(|t| &t.name).collect::<Vec<_>>(),
+                                    "score": r.score,
+                                })
+                            })
+                            .collect();
+                        println!("{}", serde_json::to_string_pretty(&json_results).unwrap_or_default());
                     }
-                } else {
-                    let rows: Vec<MemoryRow> = results
-                        .memories
-                        .iter()
-                        .map(|r| {
-                            let mem = &r.memory;
-                            let name = mem.metadata.title.clone().unwrap_or_else(|| {
-                                mem.path
-                                    .file_name()
+                    "csv" => {
+                        // CSV output
+                        println!("path,name,kind,size,tags,score");
+                        for r in &results.memories {
+                            let name = r.memory.metadata.title.clone().unwrap_or_else(||
+                                r.memory.path.file_name()
                                     .map(|n| n.to_string_lossy().to_string())
                                     .unwrap_or_default()
-                            });
-                            let kind = get_kind_string(&mem.kind);
-                            let size = format_bytes(mem.metadata.file_size);
-                            let tags = mem
-                                .tags
-                                .iter()
-                                .map(|t| t.name.clone())
-                                .collect::<Vec<_>>()
-                                .join(", ");
-
-                            MemoryRow {
+                            );
+                            let tags = r.memory.tags.iter().map(|t| t.name.as_str()).collect::<Vec<_>>().join(";");
+                            println!("\"{}\",\"{}\",\"{:?}\",{},\"{}\",{:.2}",
+                                r.memory.path.display(),
                                 name,
-                                kind,
-                                size,
+                                r.memory.kind,
+                                r.memory.metadata.file_size,
                                 tags,
-                            }
-                        })
-                        .collect();
+                                r.score
+                            );
+                        }
+                    }
+                    _ => {
+                        // Pretty output (default)
+                        println!(
+                            "\n🔍 {} {}:\n",
+                            results.memories.len().to_string().bright_green().bold(),
+                            "memories found".bright_green()
+                        );
 
-                    let table = Table::new(rows).to_string();
-                    println!("{}", table);
+                        // Use card view for better colors (<=10 results) or table for many
+                        if results.memories.len() <= 10 {
+                            for (i, r) in results.memories.iter().enumerate() {
+                                print_memory_card(&r.memory, Some(i));
+                            }
+                        } else {
+                            let rows: Vec<MemoryRow> = results
+                                .memories
+                                .iter()
+                                .map(|r| {
+                                    let mem = &r.memory;
+                                    let name = mem.metadata.title.clone().unwrap_or_else(|| {
+                                        mem.path
+                                            .file_name()
+                                            .map(|n| n.to_string_lossy().to_string())
+                                            .unwrap_or_default()
+                                    });
+                                    let kind = get_kind_string(&mem.kind);
+                                    let size = format_bytes(mem.metadata.file_size);
+                                    let tags = mem
+                                        .tags
+                                        .iter()
+                                        .map(|t| t.name.clone())
+                                        .collect::<Vec<_>>()
+                                        .join(", ");
+
+                                    MemoryRow {
+                                        name,
+                                        kind,
+                                        size,
+                                        tags,
+                                    }
+                                })
+                                .collect();
+
+                            let table = Table::new(rows).to_string();
+                            println!("{}", table);
+                        }
+                    }
                 }
             }
         }
@@ -512,6 +621,215 @@ async fn main() -> Result<()> {
                 "Total Sources:".bright_blue(),
                 sources.len().to_string().bright_yellow()
             );
+        }
+
+        Commands::Think { query, limit } => {
+            print_header(&format!("🧠 Thinking about \"{}\"...", query.bright_yellow()));
+
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{spinner:.magenta} {msg}")
+                    .unwrap(),
+            );
+            pb.set_message("Searching semantically with AI embeddings...");
+            pb.enable_steady_tick(std::time::Duration::from_millis(100));
+
+            match hippo.semantic_search(&query, limit).await {
+                Ok(results) => {
+                    pb.finish_and_clear();
+
+                    if results.memories.is_empty() {
+                        print_info("No semantically similar files found.");
+                        println!("\n{}", "Tip: Semantic search works best when files have been indexed with embeddings. Make sure Ollama is running.".dimmed());
+                    } else {
+                        println!(
+                            "\n🧠 {} {}:\n",
+                            results.memories.len().to_string().bright_magenta().bold(),
+                            "semantically relevant files".bright_magenta()
+                        );
+
+                        for (i, r) in results.memories.iter().enumerate() {
+                            let score_pct = (r.score * 100.0) as u32;
+                            let score_color = if score_pct >= 80 {
+                                format!("{}%", score_pct).bright_green()
+                            } else if score_pct >= 50 {
+                                format!("{}%", score_pct).bright_yellow()
+                            } else {
+                                format!("{}%", score_pct).bright_red()
+                            };
+
+                            println!(
+                                "{} {} {}",
+                                format!("[{}]", i + 1).dimmed(),
+                                score_color,
+                                "relevance".dimmed()
+                            );
+                            print_memory_card(&r.memory, None);
+                        }
+                    }
+                }
+                Err(e) => {
+                    pb.finish_and_clear();
+                    print_error(&format!("Semantic search failed: {}", e));
+                    println!("\n{}", "Tip: Make sure Ollama is running with 'ollama serve'".dimmed());
+                }
+            }
+        }
+
+        Commands::Kin { target, limit } => {
+            print_header(&format!("🔗 Finding files similar to \"{}\"...", target.bright_cyan()));
+
+            // First, find the target file
+            let results = hippo.search(&target).await?;
+
+            if let Some(result) = results.memories.first() {
+                let memory = &result.memory;
+                println!(
+                    "\n  {} {}\n",
+                    "Reference file:".dimmed(),
+                    memory.path.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default()
+                        .bright_cyan()
+                );
+
+                let pb = ProgressBar::new_spinner();
+                pb.set_style(
+                    ProgressStyle::default_spinner()
+                        .template("{spinner:.cyan} {msg}")
+                        .unwrap(),
+                );
+                pb.set_message("Finding similar files via embeddings...");
+                pb.enable_steady_tick(std::time::Duration::from_millis(100));
+
+                match hippo.find_similar(memory.id, limit).await {
+                    Ok(similar_ids) => {
+                        pb.finish_and_clear();
+
+                        if similar_ids.is_empty() {
+                            print_info("No similar files found.");
+                        } else {
+                            println!(
+                                "🔗 {} {}:\n",
+                                similar_ids.len().to_string().bright_cyan().bold(),
+                                "similar files".bright_cyan()
+                            );
+
+                            // Fetch the actual memories for the similar IDs
+                            for (i, (mem_id, score)) in similar_ids.iter().enumerate() {
+                                if let Ok(Some(mem)) = hippo.get_memory(*mem_id).await {
+                                    let score_pct = (score * 100.0) as u32;
+                                    let score_color = if score_pct >= 80 {
+                                        format!("{}%", score_pct).bright_green()
+                                    } else if score_pct >= 50 {
+                                        format!("{}%", score_pct).bright_yellow()
+                                    } else {
+                                        format!("{}%", score_pct).bright_red()
+                                    };
+                                    println!(
+                                        "{} {} {}",
+                                        format!("[{}]", i + 1).dimmed(),
+                                        score_color,
+                                        "similarity".dimmed()
+                                    );
+                                    print_memory_card(&mem, None);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        pb.finish_and_clear();
+                        print_error(&format!("Failed to find similar files: {}", e));
+                    }
+                }
+            } else {
+                print_error(&format!("No file found matching: {}", target));
+            }
+        }
+
+        Commands::Chat { question, show_sources } => {
+            print_header(&format!("💬 Asking: \"{}\"", question.bright_yellow()));
+
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{spinner:.blue} {msg}")
+                    .unwrap(),
+            );
+            pb.set_message("Gathering context and thinking...");
+            pb.enable_steady_tick(std::time::Duration::from_millis(100));
+
+            // Get relevant context via semantic search
+            let context_results = hippo.semantic_search(&question, 10).await;
+            let context_files: Vec<String> = match &context_results {
+                Ok(results) => results.memories.iter().map(|r| {
+                    r.memory.path.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default()
+                }).collect(),
+                Err(_) => vec![],
+            };
+
+            // Use Ollama for RAG
+            let ollama = hippo_core::OllamaClient::new();
+
+            if !ollama.is_available().await {
+                pb.finish_and_clear();
+                print_error("Ollama is not available.");
+                println!("\n{}", "Tip: Start Ollama with 'ollama serve'".dimmed());
+                return Ok(());
+            }
+
+            // Build context from search results
+            let mut context = String::new();
+            if let Ok(results) = context_results {
+                for r in results.memories.iter().take(5) {
+                    let mem = &r.memory;
+                    context.push_str(&format!(
+                        "\n---\nFile: {}\nPath: {}\nTags: {}\n",
+                        mem.metadata.title.clone().unwrap_or_else(||
+                            mem.path.file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_default()
+                        ),
+                        mem.path.display(),
+                        mem.tags.iter().map(|t| t.name.as_str()).collect::<Vec<_>>().join(", ")
+                    ));
+                    if let Some(preview) = &mem.metadata.text_preview {
+                        context.push_str(&format!("Content preview: {}\n", preview.chars().take(500).collect::<String>()));
+                    }
+                }
+            }
+
+            let prompt = format!(
+                "Based on the following files from the user's collection:\n{}\n\nAnswer this question: {}",
+                context,
+                question
+            );
+
+            pb.set_message("AI is thinking...");
+
+            match ollama.generate(&prompt, Some("You are Hippo, a helpful AI assistant for organizing and finding files. Be concise but helpful.")).await {
+                Ok(response) => {
+                    pb.finish_and_clear();
+
+                    println!("\n{}", "🦛 Hippo says:".bright_magenta().bold());
+                    println!("{}\n", response.bright_white());
+
+                    if show_sources && !context_files.is_empty() {
+                        println!("{}", "📚 Sources used:".dimmed());
+                        for file in context_files.iter().take(5) {
+                            println!("  • {}", file.bright_cyan());
+                        }
+                        println!();
+                    }
+                }
+                Err(e) => {
+                    pb.finish_and_clear();
+                    print_error(&format!("AI response failed: {}", e));
+                }
+            }
         }
 
         Commands::Herd => {

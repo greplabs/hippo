@@ -1650,6 +1650,42 @@ ollama pull llava:7b          # Optional for image analysis
 - ✅ Added ci-success aggregation job
 - ✅ Caching for faster builds
 
+#### Documentation (December 25, 2025)
+- ✅ Created comprehensive CLI tutorial (`docs/CLI_TUTORIAL.md`)
+- ✅ Created full feature list (`docs/FEATURES.md`)
+- ✅ Created brand guide with colors, typography (`docs/BRAND_GUIDE.md`)
+- ✅ Created mobile app architecture plan (`docs/MOBILE_APP.md`)
+- ✅ Created SVG icon (`assets/hippo-icon.svg`)
+
+### New Documentation
+
+| Document | Description |
+|----------|-------------|
+| `docs/CLI_TUTORIAL.md` | Complete CLI guide with all 14 commands and examples |
+| `docs/FEATURES.md` | Full feature matrix (70+ features documented) |
+| `docs/BRAND_GUIDE.md` | Colors, typography, iconography, voice & tone |
+| `docs/MOBILE_APP.md` | Mobile app architecture (React Native + Rust) |
+| `assets/hippo-icon.svg` | Vector logo/icon |
+
+### CLI Commands Reference
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `chomp` | eat, index, add | Index a folder |
+| `sniff` | search, find, s | Search files |
+| `remember` | list, ls | List memories |
+| `weight` | stats, info | Show statistics |
+| `herd` | sources, folders | List sources |
+| `mark` | tag | Add tags |
+| `twins` | duplicates, dupes | Find duplicates |
+| `brain` | ai, organize | AI auto-organize |
+| `splash` | refresh, reindex | Reindex all |
+| `stomp` | remove, rm | Remove source |
+| `yawn` | open, reveal | Open in Finder |
+| `wade` | watch | Watch changes |
+| `den` | config, home | Show config |
+| `forget` | reset, clear | Clear all |
+
 ---
 
 ## Elite Project Roadmap 🚀
