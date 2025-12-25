@@ -1,0 +1,41 @@
+name: Quick CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quick-check:
+    name: Quick Check
+    runs-on: macos-latest  # Use macos for faster availability
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: quick-ci-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check & Clippy (core only)
+        run: cargo clippy -p hippo-core --all-features -- -D warnings
+
+      - name: Test core
+        run: cargo test -p hippo-core --all-features
+
+      - name: Build Tauri (check only)
+        run: cargo check -p hippo-tauri
