@@ -1572,81 +1572,91 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ---
 
-## Current Work In Progress (December 2024)
+## Current Work In Progress (December 2025)
 
-### Recent Changes
-- **PR #23**: Fixed JavaScript syntax error (`I\\'ll` → `I\'ll`) that broke the UI
-- **PR #24**: Fixed virtual scroller not rendering on initial load (dimension fallbacks)
-- **PR #25**: Reverted UI to v0.1.0-alpha as a checkpoint (new UI had regressions)
+### Latest Checkpoint (Branch: ci/simplify)
 
-### Known Issues to Fix
+**Recent Changes**:
+- ✅ Switched default AI model to `llama3.2:1b` (lighter, faster, ~1GB)
+- ✅ Enabled auto-tagging by default with Ollama
+- ✅ Added Prism.js syntax highlighting for code files
+- ✅ Added code preview panel in detail view
+- ✅ CI parallelized with 3 independent jobs (lint, test, build-check)
 
-#### 1. Qdrant Server Not Starting
-**Status**: BROKEN - Qdrant fails to start within 30 seconds
-**Location**: `hippo-core/src/qdrant/manager.rs`
-**Symptoms**:
-- App logs: "Qdrant failed to start within 30 seconds"
-- Connection refused on port 6334
-- Falls back to SQLite for embeddings
+**Previous Fixes (PR #30)**:
+- ✅ Qdrant server startup - Extended timeout to 60s, added stderr capture for debugging
+- ✅ File watcher auto-start - Now starts automatically after initialization
+- ✅ Search error handling - Shows toast notifications on failure
+- ✅ Chat Ollama validation - Checks availability before sending messages
+- ✅ UI stability improvements - Error handling across all async operations
 
-**Investigation needed**:
-- Check if Qdrant binary is properly downloaded
-- Verify port 6334/6333 are not blocked
-- Check Qdrant process logs for errors
-- May need to increase timeout or fix startup sequence
+### Current AI Configuration
 
-#### 2. File Watcher Not Re-indexing
-**Status**: INCOMPLETE - Watcher events detected but files not re-indexed
-**Location**: `hippo-core/src/watcher/mod.rs`
-**Issues**:
-- `notify::RecommendedWatcher` is never instantiated (line 172: `_watcher: None`)
-- `start_flush_task()` (line 463) is defined but never called
-- `handle_event()` (line 393-427) only deletes old entries, doesn't re-index
+**Default Models (No API Key Required)**:
+- **Embeddings**: `nomic-embed-text` (768-dim, local via Ollama)
+- **Generation**: `llama3.2:1b` (~1GB, fast and lightweight)
+- **Vision/Image**: `llava:7b` (image captioning and analysis)
 
-**Fix needed**:
-1. Create actual `notify::recommended_watcher()` in `watch()` method
-2. Wire up notify events to `process_event()`
-3. Start `start_flush_task()` when watcher initializes
-4. Make `handle_event()` trigger re-indexing via indexer
+**Model Priority List (from fastest to best quality)**:
+1. `llama3.2:1b` - Default, smallest and fastest
+2. `qwen2.5:1.5b` - Very fast alternative
+3. `gemma2:2b` - Excellent quality/speed ratio
+4. `phi3:mini` - Microsoft's compact model
 
-#### 3. UI Regressions (New UI vs v0.1.0-alpha)
-**Status**: Reverted to old UI in PR #25
-**Location**: `hippo-tauri/ui/dist/index.html`
-**Old file**: 4273 lines, **New file**: 6626 lines
+**Optional Models**:
+- Claude API (requires `ANTHROPIC_API_KEY`) - for enhanced analysis
+- OpenAI embeddings (requires API key) - fallback only
 
-The new UI added many features but introduced regressions:
-- Tab buttons not working
-- Files not displaying
-- Filters not working
-- Icons missing
+### Working Features
 
-**Approach**: Incrementally add back features from new UI while testing each change
+| Feature | Status | Notes |
+|---------|--------|-------|
+| File indexing | ✅ Working | 70+ file types supported |
+| Text search | ✅ Working | Fast SQL-based search |
+| Tag filtering | ✅ Working | Include/exclude modes |
+| Semantic search | ✅ Working | Requires Ollama |
+| File watcher | ✅ Working | Auto-starts on init |
+| Thumbnails | ✅ Working | Images, videos, PDFs |
+| AI Chat (RAG) | ✅ Working | Local Ollama only |
+| Image captions | ✅ Working | llava:7b model |
+| Code parsing | ✅ Partial | Rust, Python, JS, Go |
+| Auto-tagging | ✅ Enabled | Default on with Ollama |
+| Code preview | ✅ Working | Prism.js syntax highlighting |
 
-### Features Added Since v0.1.0-alpha
-- Virtual scrolling for large file lists
-- Graph view (D3.js visualization)
-- Enhanced search with natural language parsing
-- Date filters
-- Saved searches
-- Code syntax highlighting (Prism.js)
-- Keyboard navigation
+### Completed (This Session)
+
+#### Phase 1: AI Without API Key
+- ✅ Switched to lighter model (`llama3.2:1b`)
+- ✅ Enabled auto-tagging by default
+- ✅ Updated model priority list in RecommendedModels
+
+#### Phase 2: Code Features in UI
+- ✅ Added Prism.js for syntax highlighting (20+ languages)
+- ✅ Added code preview panel in detail view
+- ⏳ Symbol navigation from search results (pending)
+- ⏳ Code structure outline (pending)
+
+#### Phase 3: CI Optimization
+- ✅ Parallelized CI into 3 jobs (lint, test, build-check)
+- ✅ Added ci-success aggregation job
+- ⏳ Test sharding (future)
 
 ### Pending Work
 
 #### High Priority
-1. Fix Qdrant server startup
-2. Fix file watcher re-indexing
-3. Incrementally restore new UI features
+1. Enable auto-tagging by default for new indexes
+2. Add syntax highlighting to code preview
+3. Improve image analysis with better embedding storage
 
 #### Medium Priority
-1. Native app builds for all platforms (macOS, Windows, Linux)
-2. Code signing and notarization for macOS
-3. Installer packages
+1. Code preview panel with line numbers
+2. Symbol-to-line navigation
+3. CI parallel workers
 
 #### Lower Priority
-1. Cloud source integration (Google Drive, iCloud, etc.)
+1. Cloud source integration (Google Drive, iCloud)
 2. Face clustering for photos
-3. Better connection inference in knowledge graph
+3. Knowledge graph visualization
 
 ### Commands for Testing
 
