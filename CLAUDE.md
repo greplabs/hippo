@@ -568,7 +568,7 @@ where
 
 ### 6. Watcher (`hippo-core/src/watcher/mod.rs`)
 
-**Purpose**: Real-time file system monitoring with debouncing.
+**Purpose**: Real-time file system monitoring with automatic re-indexing using the `notify` crate.
 
 **Architecture**:
 
@@ -577,6 +577,8 @@ pub struct FileWatcher {
     state: Arc<WatcherState>,
     event_tx: broadcast::Sender<WatchEvent>,
     storage: Arc<Storage>,
+    indexer: Option<Arc<Indexer>>,  // For automatic re-indexing
+    watcher: Option<RecommendedWatcher>,  // notify crate watcher
 }
 
 pub enum WatchEvent {
@@ -590,52 +592,52 @@ pub enum WatchEvent {
 }
 ```
 
-**Debouncing**:
+**Key Features**:
 
-```rust
-struct DebouncedEvents {
-    pending: HashMap<PathBuf, (WatchEvent, Instant)>,
-    debounce_duration: Duration,  // Default: 500ms
-}
+1. **Native File Watching**: Uses `notify` crate's `RecommendedWatcher` for platform-native file system events
+2. **Automatic Re-indexing**: When a file is created or modified, the watcher automatically calls `indexer.index_single_file()` to update the index
+3. **Automatic Deletion**: When a file is deleted, the corresponding memory is removed from the index
+4. **Background Event Processing**: Events are processed in a dedicated async task
+5. **Pause/Resume**: Can temporarily pause event processing while maintaining watchers
 
-// Prevents rapid-fire updates for same file
-// Coalesces multiple events into single update
+**Event Handling Flow**:
+
+```mermaid
+graph LR
+    A[File System Change] --> B[notify event]
+    B --> C[Background Task]
+    C --> D{Event Type?}
+    D -->|Create| E[index_single_file]
+    D -->|Modify| F[remove + index_single_file]
+    D -->|Delete| G[remove_memory_by_path]
 ```
 
 **Example Usage**:
 
 ```rust
-// Create watcher
+// Create watcher with indexer
 let mut watcher = FileWatcher::new(storage.clone(), Some(500))?;
+watcher.set_indexer(indexer.clone());  // Enable auto re-indexing
 
-// Watch a path
+// Watch a path - automatically starts notify watcher
 watcher.watch(&path, source).await?;
 
-// Subscribe to events
+// Subscribe to events (optional - for custom handling)
 let mut rx = watcher.subscribe();
 tokio::spawn(async move {
     while let Ok(event) = rx.recv().await {
         match event {
             WatchEvent::Created { path, .. } => {
-                println!("New file: {:?}", path);
+                println!("New file indexed: {:?}", path);
             }
             WatchEvent::Modified { path, .. } => {
-                println!("File changed: {:?}", path);
+                println!("File re-indexed: {:?}", path);
             }
             WatchEvent::Deleted { path } => {
-                println!("File deleted: {:?}", path);
+                println!("File removed from index: {:?}", path);
             }
             _ => {}
         }
-    }
-});
-
-// Periodic flush (in background task)
-tokio::spawn(async move {
-    let mut interval = tokio::time::interval(Duration::from_millis(100));
-    loop {
-        interval.tick().await;
-        watcher.flush_events().await.ok();
     }
 });
 
