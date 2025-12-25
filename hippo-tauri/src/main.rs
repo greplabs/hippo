@@ -433,12 +433,10 @@ async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
 
     let (sender, receiver) = std::sync::mpsc::channel();
 
-    app.dialog()
-        .file()
-        .pick_folder(move |folder_path| {
-            let result = folder_path.map(|p| p.to_string());
-            let _ = sender.send(result);
-        });
+    app.dialog().file().pick_folder(move |folder_path| {
+        let result = folder_path.map(|p| p.to_string());
+        let _ = sender.send(result);
+    });
 
     // Wait for the dialog result
     match receiver.recv() {
