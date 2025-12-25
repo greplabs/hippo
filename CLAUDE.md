@@ -1574,38 +1574,46 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (Branch: ci/simplify)
+### Latest Checkpoint (December 25, 2025)
 
-**Recent Changes**:
-- ✅ Switched default AI model to `llama3.2:1b` (lighter, faster, ~1GB)
+**Commit**: `main` branch - All PRs merged
+
+**Recent AI Quality Improvements**:
+- ✅ Switched default model to `gemma2:2b` (better quality/speed ratio)
+- ✅ Improved RAG with semantic search for context retrieval
+- ✅ Increased context size from 1.5K to 20K+ chars
+- ✅ Enhanced prompts for better AI responses
+- ✅ Lower temperature (0.3) for more focused answers
+- ✅ Increased token limit (2048) for detailed responses
+
+**Previous Changes**:
 - ✅ Enabled auto-tagging by default with Ollama
-- ✅ Added Prism.js syntax highlighting for code files
+- ✅ Added Prism.js syntax highlighting for code files (20+ languages)
 - ✅ Added code preview panel in detail view
 - ✅ CI parallelized with 3 independent jobs (lint, test, build-check)
-
-**Previous Fixes (PR #30)**:
-- ✅ Qdrant server startup - Extended timeout to 60s, added stderr capture for debugging
+- ✅ Qdrant server startup - Extended timeout to 60s
 - ✅ File watcher auto-start - Now starts automatically after initialization
 - ✅ Search error handling - Shows toast notifications on failure
-- ✅ Chat Ollama validation - Checks availability before sending messages
-- ✅ UI stability improvements - Error handling across all async operations
 
 ### Current AI Configuration
 
 **Default Models (No API Key Required)**:
 - **Embeddings**: `nomic-embed-text` (768-dim, local via Ollama)
-- **Generation**: `llama3.2:1b` (~1GB, fast and lightweight)
+- **Generation**: `gemma2:2b` (~1.6GB, excellent quality/speed)
 - **Vision/Image**: `llava:7b` (image captioning and analysis)
 
-**Model Priority List (from fastest to best quality)**:
-1. `llama3.2:1b` - Default, smallest and fastest
-2. `qwen2.5:1.5b` - Very fast alternative
-3. `gemma2:2b` - Excellent quality/speed ratio
-4. `phi3:mini` - Microsoft's compact model
+**Installed Models (Recommended)**:
+```bash
+ollama pull nomic-embed-text  # Required for semantic search
+ollama pull gemma2:2b         # Default generation model
+ollama pull llava:7b          # Optional for image analysis
+```
 
-**Optional Models**:
-- Claude API (requires `ANTHROPIC_API_KEY`) - for enhanced analysis
-- OpenAI embeddings (requires API key) - fallback only
+**Model Priority List (quality-focused)**:
+1. `gemma2:2b` - Default, best quality/speed balance
+2. `llama3.2:3b` - Great quality, slightly larger
+3. `qwen2.5:1.5b` - Very fast alternative
+4. `llama3.2:1b` - Fastest but lower quality
 
 ### Working Features
 
@@ -1614,49 +1622,83 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 | File indexing | ✅ Working | 70+ file types supported |
 | Text search | ✅ Working | Fast SQL-based search |
 | Tag filtering | ✅ Working | Include/exclude modes |
-| Semantic search | ✅ Working | Requires Ollama |
-| File watcher | ✅ Working | Auto-starts on init |
+| Semantic search | ✅ Working | Vector similarity via Qdrant |
+| File watcher | ✅ Working | Auto-starts on init, uses notify crate |
 | Thumbnails | ✅ Working | Images, videos, PDFs |
-| AI Chat (RAG) | ✅ Working | Local Ollama only |
+| AI Chat (RAG) | ✅ Improved | Semantic context retrieval |
 | Image captions | ✅ Working | llava:7b model |
-| Code parsing | ✅ Partial | Rust, Python, JS, Go |
+| Code parsing | ✅ Working | Rust, Python, JS, Go |
 | Auto-tagging | ✅ Enabled | Default on with Ollama |
 | Code preview | ✅ Working | Prism.js syntax highlighting |
 
-### Completed (This Session)
+### Completed (Recent Sessions)
 
-#### Phase 1: AI Without API Key
-- ✅ Switched to lighter model (`llama3.2:1b`)
-- ✅ Enabled auto-tagging by default
-- ✅ Updated model priority list in RecommendedModels
+#### AI Quality Improvements
+- ✅ Switched to `gemma2:2b` for better responses
+- ✅ RAG now uses semantic search to find relevant documents
+- ✅ Context includes file content, tags, and metadata
+- ✅ Improved system prompts with clear instructions
+- ✅ Responses reference actual filenames
 
-#### Phase 2: Code Features in UI
+#### Code Features in UI
 - ✅ Added Prism.js for syntax highlighting (20+ languages)
 - ✅ Added code preview panel in detail view
-- ⏳ Symbol navigation from search results (pending)
-- ⏳ Code structure outline (pending)
+- ✅ Auto-detects language from file extension
 
-#### Phase 3: CI Optimization
+#### CI/CD Optimization
 - ✅ Parallelized CI into 3 jobs (lint, test, build-check)
 - ✅ Added ci-success aggregation job
-- ⏳ Test sharding (future)
+- ✅ Caching for faster builds
 
-### Pending Work
+---
 
-#### High Priority
-1. Enable auto-tagging by default for new indexes
-2. Add syntax highlighting to code preview
-3. Improve image analysis with better embedding storage
+## Elite Project Roadmap 🚀
 
-#### Medium Priority
-1. Code preview panel with line numbers
-2. Symbol-to-line navigation
-3. CI parallel workers
+### Phase 1: Polish & Stability (Current Focus)
+- [ ] Add loading states and skeleton UI during searches
+- [ ] Implement proper error boundaries in UI
+- [ ] Add keyboard shortcuts cheat sheet (Cmd+/)
+- [ ] Improve onboarding experience for new users
+- [ ] Add dark mode theme toggle
 
-#### Lower Priority
-1. Cloud source integration (Google Drive, iCloud)
-2. Face clustering for photos
-3. Knowledge graph visualization
+### Phase 2: Advanced Search & Discovery
+- [ ] Natural language date parsing ("files from last week")
+- [ ] Saved searches / smart folders
+- [ ] Search history with quick access
+- [ ] Duplicate file detection UI with merge options
+- [ ] Similar file clusters visualization
+
+### Phase 3: AI Enhancements
+- [ ] Streaming AI responses (real-time typing effect)
+- [ ] AI-powered file organization suggestions
+- [ ] Batch AI analysis for selected files
+- [ ] Custom prompt templates for power users
+- [ ] Multi-modal search (text + image query)
+
+### Phase 4: Collaboration & Cloud
+- [ ] Google Drive integration
+- [ ] iCloud Drive integration
+- [ ] Dropbox integration
+- [ ] S3 bucket integration
+- [ ] Shareable search links
+
+### Phase 5: Advanced Visualization
+- [ ] Knowledge graph with D3.js
+- [ ] Timeline view for temporal exploration
+- [ ] Geographic map for geotagged photos
+- [ ] File relationship explorer
+- [ ] Statistics dashboard
+
+### Quality Checklist for Elite Status
+- [ ] 90%+ test coverage on hippo-core
+- [ ] Performance benchmarks documented
+- [ ] Comprehensive API documentation
+- [ ] User guide with screenshots
+- [ ] Video tutorials for key features
+- [ ] Accessibility audit (WCAG 2.1)
+- [ ] Security audit for file handling
+- [ ] Memory profiling and optimization
+- [ ] Bundle size optimization for UI
 
 ### Commands for Testing
 

@@ -940,15 +940,72 @@ async fn ollama_rag_query(
         return Err("Ollama is not running. Please start Ollama first.".to_string());
     }
 
-    // Get all memories
-    let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
-    let query_lower = query.to_lowercase();
-
     // Track relevant files for preview
     let mut relevant_files: Vec<serde_json::Value> = Vec::new();
-
-    // Build context from files - use metadata and content
     let mut context_parts: Vec<String> = Vec::new();
+
+    // First, try semantic search to find most relevant documents
+    let semantic_results = hippo.semantic_search(&query, 15).await;
+    let mut semantic_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    if let Ok(results) = &semantic_results {
+        println!("[Hippo] Found {} semantically relevant files", results.memories.len());
+        for result in results.memories.iter().take(10) {
+            let memory = &result.memory;
+            let score = result.score;
+            semantic_ids.insert(memory.id.to_string());
+            let filename = memory.path.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Read file content for text/code files
+            let content_preview = if matches!(&memory.kind,
+                hippo_core::MemoryKind::Document { .. } | hippo_core::MemoryKind::Code { .. }) {
+                std::fs::read_to_string(&memory.path)
+                    .map(|c| c.chars().take(2000).collect::<String>())
+                    .unwrap_or_else(|_| String::new())
+            } else {
+                String::new()
+            };
+
+            let file_type = match &memory.kind {
+                hippo_core::MemoryKind::Code { language, .. } => format!("code:{}", language),
+                hippo_core::MemoryKind::Document { .. } => "document".to_string(),
+                hippo_core::MemoryKind::Image { width, height, .. } => format!("image ({}x{})", width, height),
+                hippo_core::MemoryKind::Video { .. } => "video".to_string(),
+                hippo_core::MemoryKind::Audio { .. } => "audio".to_string(),
+                _ => "file".to_string(),
+            };
+
+            // Build context for this file
+            let mut file_context = format!("📁 {} [{}] (relevance: {:.0}%)", filename, file_type, score * 100.0);
+            if let Some(title) = &memory.metadata.title {
+                file_context.push_str(&format!("\n   Title: {}", title));
+            }
+            if !memory.tags.is_empty() {
+                let tags: Vec<String> = memory.tags.iter().map(|t| t.name.clone()).collect();
+                file_context.push_str(&format!("\n   Tags: {}", tags.join(", ")));
+            }
+            if !content_preview.is_empty() {
+                file_context.push_str(&format!("\n   Content:\n{}", content_preview));
+            }
+            context_parts.push(file_context);
+
+            relevant_files.push(serde_json::json!({
+                "id": memory.id.to_string(),
+                "path": memory.path.to_string_lossy(),
+                "name": filename,
+                "type": file_type,
+                "size": memory.metadata.file_size,
+                "relevance": "high",
+                "score": score
+            }));
+        }
+    }
+
+    // Also get all memories for statistics
+    let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+    let query_lower = query.to_lowercase();
 
     // Collect file statistics
     let mut file_types: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -968,144 +1025,83 @@ async fn ollama_rag_query(
         total_size += memory.metadata.file_size;
     }
 
-    // Add collection summary
+    // Add collection summary at the start
     let summary = format!(
-        "File collection: {} total files, {:.1} MB total size. Types: {}",
+        "📊 Collection Overview: {} total files, {:.1} MB total size\nFile types: {}",
         memories.len(),
         total_size as f64 / 1_000_000.0,
-        file_types
-            .iter()
-            .map(|(k, v)| format!("{}: {}", k, v))
-            .collect::<Vec<_>>()
-            .join(", ")
+        file_types.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join(", ")
     );
-    context_parts.push(summary);
+    context_parts.insert(0, summary);
 
-    // For text/code files, include content samples
-    let mut text_files_added = 0;
-    for memory in memories.iter() {
-        if text_files_added >= 10 {
-            break;
-        }
+    // If semantic search didn't find enough, add some keyword matches
+    if context_parts.len() < 5 {
+        for memory in memories.iter().take(100) {
+            if semantic_ids.contains(&memory.id.to_string()) {
+                continue;
+            }
 
-        let is_text_file = matches!(
-            &memory.kind,
-            hippo_core::MemoryKind::Document { .. } | hippo_core::MemoryKind::Code { .. }
-        );
+            let filename = memory.path.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let filename_lower = filename.to_lowercase();
 
-        if is_text_file {
-            if let Ok(content) = std::fs::read_to_string(&memory.path) {
-                let filename = memory
-                    .path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_default();
+            // Check keyword relevance
+            let is_relevant = query_lower.split_whitespace()
+                .any(|word| filename_lower.contains(word) ||
+                     memory.tags.iter().any(|t| t.name.to_lowercase().contains(word)));
 
-                // Check if relevant to query
-                let content_lower = content.to_lowercase();
-                let filename_lower = filename.to_lowercase();
-                let is_relevant = query_lower
-                    .split_whitespace()
-                    .any(|word| content_lower.contains(word) || filename_lower.contains(word));
+            if is_relevant && relevant_files.len() < 15 {
+                let file_type = match &memory.kind {
+                    hippo_core::MemoryKind::Code { language, .. } => format!("code:{}", language),
+                    hippo_core::MemoryKind::Document { .. } => "document".to_string(),
+                    hippo_core::MemoryKind::Image { .. } => "image".to_string(),
+                    _ => "file".to_string(),
+                };
 
-                if is_relevant || text_files_added < 3 {
-                    let preview: String = content.chars().take(1000).collect();
-                    let lang = if let hippo_core::MemoryKind::Code { language, .. } = &memory.kind {
-                        format!(" ({})", language)
-                    } else {
-                        String::new()
-                    };
-                    context_parts.push(format!("File: {}{}\n{}", filename, lang, preview));
-                    text_files_added += 1;
+                relevant_files.push(serde_json::json!({
+                    "id": memory.id.to_string(),
+                    "path": memory.path.to_string_lossy(),
+                    "name": filename,
+                    "type": file_type,
+                    "size": memory.metadata.file_size,
+                    "relevance": "medium"
+                }));
 
-                    // Add to relevant files
-                    let file_type = match &memory.kind {
-                        hippo_core::MemoryKind::Code { language, .. } => {
-                            format!("code:{}", language)
-                        }
-                        hippo_core::MemoryKind::Document { .. } => "document".to_string(),
-                        _ => "file".to_string(),
-                    };
-                    relevant_files.push(serde_json::json!({
-                        "id": memory.id.to_string(),
-                        "path": memory.path.to_string_lossy(),
-                        "name": filename,
-                        "type": file_type,
-                        "size": memory.metadata.file_size,
-                        "relevance": if is_relevant { "high" } else { "medium" }
-                    }));
-                }
+                // Add brief context
+                context_parts.push(format!("📁 {} [{}]", filename, file_type));
             }
         }
     }
 
-    // For images, include metadata and add to relevant files
-    let mut image_info: Vec<String> = Vec::new();
-    for memory in memories
-        .iter()
-        .filter(|m| matches!(m.kind, hippo_core::MemoryKind::Image { .. }))
-        .take(20)
-    {
-        let filename = memory
-            .path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
+    let context = context_parts.join("\n\n");
 
-        let mut details = vec![filename.clone()];
-        let (width, height) =
-            if let hippo_core::MemoryKind::Image { width, height, .. } = &memory.kind {
-                details.push(format!("{}x{}", width, height));
-                (*width, *height)
-            } else {
-                (0, 0)
-            };
-        // Add modified date from memory
-        details.push(memory.modified_at.format("%Y-%m-%d").to_string());
-        image_info.push(details.join(" - "));
-
-        // Check relevance for images
-        let filename_lower = filename.to_lowercase();
-        let is_relevant = query_lower
-            .split_whitespace()
-            .any(|word| filename_lower.contains(word));
-
-        if relevant_files.len() < 12 {
-            relevant_files.push(serde_json::json!({
-                "id": memory.id.to_string(),
-                "path": memory.path.to_string_lossy(),
-                "name": filename,
-                "type": "image",
-                "size": memory.metadata.file_size,
-                "width": width,
-                "height": height,
-                "relevance": if is_relevant { "high" } else { "low" }
-            }));
-        }
-    }
-
-    if !image_info.is_empty() {
-        context_parts.push(format!("Recent images:\n{}", image_info.join("\n")));
-    }
-
-    let context = context_parts.join("\n\n---\n\n");
-
-    // Build the prompt
+    // Build an improved prompt
     let prompt = format!(
-        "You are a helpful file assistant. Based on the user's file collection, answer their question.\n\n\
-        USER'S FILES:\n{}\n\n\
-        USER'S QUESTION: {}\n\n\
-        Provide a helpful, concise answer based on the files above. If you can't answer from the files, say so.",
+        r#"Based on the user's file collection below, provide a helpful and detailed answer to their question.
+
+## File Collection Context:
+{}
+
+## User's Question:
+{}
+
+## Instructions:
+- Answer based ONLY on the files and information provided above
+- Be specific and reference actual filenames when relevant
+- If you can identify patterns, themes, or useful insights, share them
+- If the answer cannot be determined from the files, say so clearly
+- Keep the response focused and well-organized"#,
         context, query
     );
 
-    println!(
-        "[Hippo] Sending to Ollama ({} chars context)",
-        context.len()
-    );
+    println!("[Hippo] Sending to Ollama ({} chars context)", context.len());
 
-    // Use generate API with system prompt
-    let system = "You are a helpful file assistant. Answer questions about the user's files based on the provided context. Be concise and helpful.";
+    // Use generate API with improved system prompt
+    let system = r#"You are Hippo, an intelligent file assistant that helps users understand and organize their files.
+You have access to the user's file collection and can answer questions about their documents, code, images, and other files.
+Be helpful, accurate, and specific. Reference actual filenames and provide actionable insights when possible."#;
+
     let response = ai_client
         .ollama()
         .generate(&prompt, Some(system))
