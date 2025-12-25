@@ -3080,15 +3080,19 @@
         setItems: function(items, mode) {
           this.items = items;
           this.viewMode = mode;
-          this.render();
+          // Use requestAnimationFrame to ensure DOM is ready for measurement
+          var self = this;
+          requestAnimationFrame(function() {
+            self.render();
+          });
         },
         getVisibleRange: function() {
           if (!this.scrollParent || this.items.length === 0) {
             return { start: 0, end: 0, offsetY: 0 };
           }
           var scrollTop = this.scrollParent.scrollTop;
-          var containerHeight = this.scrollParent.clientHeight;
-          var containerWidth = this.container ? this.container.clientWidth : this.scrollParent.clientWidth;
+          var containerHeight = this.scrollParent.clientHeight || window.innerHeight || 800;
+          var containerWidth = this.container ? this.container.clientWidth : (this.scrollParent.clientWidth || window.innerWidth || 1200);
           if (this.viewMode === 'grid') {
             var cols = Math.floor((containerWidth + this.gridGap) / (this.gridItemWidth + this.gridGap)) || 1;
             var rowHeight = this.gridItemHeight + this.gridGap;
@@ -3113,7 +3117,7 @@
         getTotalHeight: function() {
           if (this.items.length === 0) return 0;
           if (this.viewMode === 'grid') {
-            var containerWidth = this.container ? this.container.clientWidth : 800;
+            var containerWidth = this.container ? this.container.clientWidth : (window.innerWidth || 1200);
             var cols = Math.floor((containerWidth + this.gridGap) / (this.gridItemWidth + this.gridGap)) || 1;
             var rows = Math.ceil(this.items.length / cols);
             return rows * (this.gridItemHeight + this.gridGap);
