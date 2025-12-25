@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradient for main body -->
+    <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366F1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8B5CF6;stop-opacity:1" />
+    </linearGradient>
+    <!-- Gradient for accent -->
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#A78BFA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#C4B5FD;stop-opacity:1" />
+    </linearGradient>
+    <!-- Shadow filter -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#bodyGradient)" filter="url(#shadow)"/>
+
+  <!-- Hippo face -->
+  <g transform="translate(256, 256)">
+    <!-- Ears -->
+    <ellipse cx="-100" cy="-80" rx="35" ry="45" fill="url(#accentGradient)"/>
+    <ellipse cx="100" cy="-80" rx="35" ry="45" fill="url(#accentGradient)"/>
+
+    <!-- Head -->
+    <ellipse cx="0" cy="0" rx="140" ry="120" fill="url(#accentGradient)"/>
+
+    <!-- Snout -->
+    <ellipse cx="0" cy="60" rx="100" ry="70" fill="#DDD6FE"/>
+
+    <!-- Nostrils -->
+    <ellipse cx="-35" cy="50" rx="18" ry="12" fill="#6366F1"/>
+    <ellipse cx="35" cy="50" rx="18" ry="12" fill="#6366F1"/>
+
+    <!-- Eyes -->
+    <circle cx="-55" cy="-30" r="25" fill="white"/>
+    <circle cx="55" cy="-30" r="25" fill="white"/>
+
+    <!-- Pupils -->
+    <circle cx="-50" cy="-25" r="14" fill="#1E1B4B"/>
+    <circle cx="60" cy="-25" r="14" fill="#1E1B4B"/>
+
+    <!-- Eye shine -->
+    <circle cx="-45" cy="-32" r="6" fill="white"/>
+    <circle cx="65" cy="-32" r="6" fill="white"/>
+
+    <!-- Smile -->
+    <path d="M -40 90 Q 0 120 40 90" stroke="#6366F1" stroke-width="6" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- Memory sparkles -->
+  <g fill="#FCD34D">
+    <circle cx="380" cy="100" r="8"/>
+    <circle cx="420" cy="150" r="5"/>
+    <circle cx="130" cy="120" r="6"/>
+    <circle cx="100" cy="170" r="4"/>
+    <circle cx="400" cy="380" r="7"/>
+    <circle cx="120" cy="400" r="5"/>
+  </g>
+</svg>
