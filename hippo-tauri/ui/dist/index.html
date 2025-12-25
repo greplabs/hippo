@@ -938,7 +938,66 @@
     .cmd-footer span { display: flex; align-items: center; gap: 4px; }
     .cmd-empty { padding: 32px; text-align: center; color: #a8a29e; }
     .cmd-empty .icon { margin-bottom: 8px; }
+
+    /* Code preview section styles */
+    .code-preview-section {
+      margin-top: 16px;
+      border-top: 1px solid #e7e5e4;
+      padding-top: 16px;
+    }
+    body.dark .code-preview-section { border-color: #44403c; }
+    .code-preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .code-preview-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #292524;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    body.dark .code-preview-title { color: #e7e5e4; }
+    .code-preview-container {
+      max-height: 400px;
+      overflow: auto;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      background: #1d1f21;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    body.dark .code-preview-container { border-color: #44403c; }
+    .code-preview-container pre { margin: 0; padding: 16px; background: transparent !important; }
+    .code-preview-container code {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+      font-size: 12px;
+      background: transparent !important;
+    }
+    .code-preview-loading { padding: 32px; text-align: center; color: #a8a29e; font-size: 12px; }
+    .code-preview-error { padding: 16px; color: #dc2626; font-size: 12px; text-align: center; }
+    body.dark .code-preview-error { color: #fca5a5; }
+    .code-lang-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      background: #f5f5f4;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #57534e;
+      font-weight: 500;
+    }
+    body.dark .code-lang-badge { background: #292524; color: #a8a29e; }
+    .code-stats { display: flex; gap: 12px; margin-top: 8px; font-size: 11px; color: #78716c; }
+    body.dark .code-stats { color: #a8a29e; }
+    .code-stat { display: flex; align-items: center; gap: 4px; }
   </style>
+
+  <!-- Prism.js for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
 <body>
   <div class="app">
@@ -1026,6 +1085,16 @@
           <div class="info-row"><span class="info-label">Type</span><span class="info-value" id="detailType">-</span></div>
           <div class="info-row"><span class="info-label">Size</span><span class="info-value" id="detailSize">-</span></div>
           <div class="info-row"><span class="info-label">Modified</span><span class="info-value" id="detailDate">-</span></div>
+        </div>
+        <div class="code-preview-section" id="codePreviewSection" style="display:none;">
+          <div class="code-preview-header">
+            <span class="code-preview-title">Code Preview</span>
+            <span class="code-lang-badge" id="codeLangBadge"></span>
+          </div>
+          <div class="code-preview-container" id="codePreviewContainer">
+            <div class="code-preview-loading">Loading code...</div>
+          </div>
+          <div class="code-stats" id="codeStats" style="display:none;"></div>
         </div>
         <div class="ai-section" id="aiSection">
           <button class="ai-btn" id="aiAnalyzeBtn"><span class="icon icon-sm" id="aiIcon"></span> Analyze with AI</button>
@@ -4071,6 +4140,65 @@
           } else {
             preview.innerHTML = getIcon(mem.kind, '2xl');
           }
+
+          // Show code preview for code files
+          var codePreviewSection = document.getElementById('codePreviewSection');
+          if (type === 'code' && mem.kind && mem.kind.Code) {
+            showCodePreview(mem.path, mem.kind.Code.language);
+          } else {
+            codePreviewSection.style.display = 'none';
+          }
+        }
+
+        function showCodePreview(path, language) {
+          var section = document.getElementById('codePreviewSection');
+          var container = document.getElementById('codePreviewContainer');
+          var badge = document.getElementById('codeLangBadge');
+          var stats = document.getElementById('codeStats');
+
+          section.style.display = 'block';
+          container.innerHTML = '<div class="code-preview-loading">Loading code...</div>';
+          badge.textContent = language || 'code';
+          stats.style.display = 'none';
+
+          invoke('read_file_content', { path: path, maxLines: 500 })
+            .then(function(result) {
+              if (result.is_binary) {
+                container.innerHTML = '<div class="code-preview-error">Binary file - cannot preview</div>';
+                return;
+              }
+
+              var langMap = {
+                'rs': 'rust', 'py': 'python', 'js': 'javascript', 'jsx': 'jsx',
+                'ts': 'typescript', 'tsx': 'tsx', 'go': 'go', 'java': 'java',
+                'c': 'c', 'cpp': 'cpp', 'cc': 'cpp', 'h': 'c', 'hpp': 'cpp',
+                'rb': 'ruby', 'php': 'php', 'swift': 'swift', 'kt': 'kotlin',
+                'scala': 'scala', 'sh': 'bash', 'bash': 'bash', 'zsh': 'bash',
+                'sql': 'sql', 'html': 'markup', 'xml': 'markup', 'css': 'css',
+                'json': 'json', 'yaml': 'yaml', 'yml': 'yaml', 'toml': 'toml'
+              };
+
+              var ext = path.split('.').pop().toLowerCase();
+              var prismLang = langMap[ext] || 'plain';
+              var escapedContent = esc(result.content);
+
+              container.innerHTML = '<pre><code class="language-' + prismLang + '">' + escapedContent + '</code></pre>';
+
+              if (window.Prism) {
+                Prism.highlightAllUnder(container);
+              }
+
+              stats.style.display = 'flex';
+              var statsHtml = '<div class="code-stat"><span>' + result.lines + ' lines</span></div>';
+              if (result.truncated) {
+                statsHtml += '<div class="code-stat"><span style="color:#f59e0b;">Showing first 500 lines</span></div>';
+              }
+              stats.innerHTML = statsHtml;
+            })
+            .catch(function(error) {
+              container.innerHTML = '<div class="code-preview-error">Failed to load: ' + error + '</div>';
+              stats.style.display = 'none';
+            });
         }
 
         function toggleFavorite(id) {
@@ -4473,5 +4601,30 @@
       }
     })();
   </script>
+
+  <!-- Prism.js core and language support -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-jsx.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-tsx.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-ruby.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-php.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-swift.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-scala.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-toml.min.js"></script>
 </body>
 </html>

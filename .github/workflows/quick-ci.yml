@@ -11,16 +11,16 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  quick-check:
-    name: Quick Check
-    runs-on: macos-latest  # Use macos for faster availability
+  lint:
+    name: Lint (rustfmt + clippy)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: rustfmt, clippy
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -29,13 +29,74 @@ jobs:
             ~/.cargo/registry/
             ~/.cargo/git/
             target/
-          key: quick-ci-${{ hashFiles('**/Cargo.lock') }}
+          key: lint-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Check & Clippy (core only)
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (hippo-core)
         run: cargo clippy -p hippo-core --all-features -- -D warnings
 
-      - name: Test core
+  test:
+    name: Test (hippo-core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: test-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
         run: cargo test -p hippo-core --all-features
 
-      - name: Build Tauri (check only)
+  build-check:
+    name: Build Check (hippo-tauri)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: build-check-macos-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check Tauri build
         run: cargo check -p hippo-tauri
+
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [lint, test, build-check]
+    if: always()
+    steps:
+      - name: Check all jobs succeeded
+        run: |
+          if [[ "${{ needs.lint.result }}" != "success" ]]; then
+            echo "Lint job failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test.result }}" != "success" ]]; then
+            echo "Test job failed"
+            exit 1
+          fi
+          if [[ "${{ needs.build-check.result }}" != "success" ]]; then
+            echo "Build check job failed"
+            exit 1
+          fi
+          echo "All checks passed!"

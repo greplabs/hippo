@@ -25,8 +25,8 @@ pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 /// Default embedding model
 pub const DEFAULT_EMBEDDING_MODEL: &str = "nomic-embed-text";
 
-/// Default generation model - Gemma2 2B is fast, smart, and lightweight (~1.6GB)
-pub const DEFAULT_GENERATION_MODEL: &str = "gemma2:2b";
+/// Default generation model - Llama 3.2 1B is very fast and lightweight (~1GB)
+pub const DEFAULT_GENERATION_MODEL: &str = "llama3.2:1b";
 
 /// Recommended models for different use cases
 pub struct RecommendedModels;
@@ -34,9 +34,9 @@ pub struct RecommendedModels;
 impl RecommendedModels {
     /// Fast and lightweight models (~1-2GB) - good for quick responses
     pub const FAST: &'static [&'static str] = &[
-        "gemma2:2b",    // Google's Gemma2 2B - excellent quality/speed ratio
+        "llama3.2:1b",  // Meta's Llama 3.2 1B - smallest and fastest (default)
         "qwen2.5:1.5b", // Alibaba's Qwen 2.5 - very fast
-        "llama3.2:1b",  // Meta's Llama 3.2 1B - smallest Llama
+        "gemma2:2b",    // Google's Gemma2 2B - excellent quality/speed ratio
         "phi3:mini",    // Microsoft's Phi-3 mini
     ];
 

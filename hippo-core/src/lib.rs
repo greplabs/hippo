@@ -183,7 +183,7 @@ impl Default for HippoConfig {
             ai_api_key: None,
             qdrant_url: "http://localhost:6334".into(),
             indexing_parallelism: num_cpus::get().min(8),
-            auto_tag_enabled: false,
+            auto_tag_enabled: true,
         }
     }
 }
