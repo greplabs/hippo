@@ -301,10 +301,10 @@ impl QdrantManager {
             status.message = "Starting Qdrant...".to_string();
         }
 
-        // Start Qdrant process
+        // Start Qdrant process with environment variable for storage path
+        // Note: Qdrant v1.12+ uses environment variables instead of --storage-path
         let child = Command::new(&binary_path)
-            .arg("--storage-path")
-            .arg(&storage_path)
+            .env("QDRANT__STORAGE__STORAGE_PATH", &storage_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
