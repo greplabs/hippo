@@ -221,6 +221,51 @@
     .search-input { flex: 1; border: none; background: transparent; font-size: 14px; outline: none; color: #1c1917; font-weight: 400; }
     .search-input::placeholder { color: #a8a29e; }
     body.dark .search-input { color: #fafaf9; }
+
+    /* Search History Dropdown */
+    .search-history-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 4px;
+      background: white;
+      border: 1px solid #e7e5e4;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.12);
+      z-index: 1000;
+      max-height: 300px;
+      overflow-y: auto;
+      display: none;
+    }
+    .search-history-dropdown.show { display: block; animation: fadeInScale 0.15s ease; }
+    body.dark .search-history-dropdown { background: #1c1917; border-color: #44403c; }
+    .search-history-section { padding: 8px 0; }
+    .search-history-label { padding: 4px 12px; font-size: 11px; font-weight: 600; color: #78716c; text-transform: uppercase; letter-spacing: 0.5px; }
+    body.dark .search-history-label { color: #a8a29e; }
+    .search-history-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .search-history-item:hover { background: #f5f5f4; }
+    body.dark .search-history-item:hover { background: #292524; }
+    .search-history-item .icon { color: #a8a29e; flex-shrink: 0; }
+    .search-history-item .query { flex: 1; font-size: 13px; color: #292524; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    body.dark .search-history-item .query { color: #fafaf9; }
+    .search-history-item .time { font-size: 11px; color: #a8a29e; }
+    .search-history-item .remove { padding: 4px; border-radius: 4px; opacity: 0; transition: opacity 0.1s; }
+    .search-history-item:hover .remove { opacity: 1; }
+    .search-history-item .remove:hover { background: #e7e5e4; }
+    body.dark .search-history-item .remove:hover { background: #44403c; }
+    .search-history-clear { padding: 8px 12px; border-top: 1px solid #e7e5e4; text-align: center; }
+    body.dark .search-history-clear { border-color: #44403c; }
+    .search-history-clear button { font-size: 12px; color: #78716c; background: none; border: none; cursor: pointer; }
+    .search-history-clear button:hover { color: #ef4444; }
+
     .active-tags { display: flex; gap: 6px; flex-wrap: wrap; }
     .active-tag {
       display: flex;
@@ -919,15 +964,16 @@
     <main class="main">
       <div class="search-bar">
         <div style="display:flex;align-items:center;gap:0;">
-          <div class="search-container" style="flex:1;">
+          <div class="search-container" style="flex:1;position:relative;">
             <span class="icon icon-md" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
             <div class="active-tags" id="activeTags"></div>
-            <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)">
+            <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)" autocomplete="off">
+            <div class="search-history-dropdown" id="searchHistoryDropdown"></div>
           </div>
           <div class="search-mode">
-            <button class="search-mode-btn active" id="searchModeText" data-mode="text"><span class="icon icon-sm" id="searchModeTextIcon"></span> Text</button>
-            <button class="search-mode-btn" id="searchModeSemantic" data-mode="semantic"><span class="icon icon-sm" id="searchModeSemanticIcon"></span> AI</button>
-            <button class="search-mode-btn" id="searchModeSymbol" data-mode="symbol"><span class="icon icon-sm" id="searchModeSymbolIcon"></span> Code</button>
+            <button class="search-mode-btn active" id="searchModeText" data-mode="text" title="Search by filename, path, and tags (instant results as you type)"><span class="icon icon-sm" id="searchModeTextIcon"></span> Text</button>
+            <button class="search-mode-btn" id="searchModeSemantic" data-mode="semantic" title="AI-powered semantic search (press Enter to search)"><span class="icon icon-sm" id="searchModeSemanticIcon"></span> AI</button>
+            <button class="search-mode-btn" id="searchModeSymbol" data-mode="symbol" title="Search code symbols: functions, classes, imports (press Enter)"><span class="icon icon-sm" id="searchModeSymbolIcon"></span> Code</button>
           </div>
         </div>
         <div class="tag-bar" id="tagBar"></div>
@@ -2003,6 +2049,8 @@
         hippoAI: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="10" cy="14" rx="7" ry="6" fill="currentColor" opacity="0.1"/><ellipse cx="10" cy="14" rx="7" ry="6"/><circle cx="5" cy="8" r="2"/><circle cx="15" cy="8" r="2"/><circle cx="7" cy="12" r="1" fill="currentColor"/><circle cx="13" cy="12" r="1" fill="currentColor"/><ellipse cx="10" cy="16" rx="3.5" ry="2.5"/><circle cx="8.5" cy="16" r="0.7" fill="currentColor"/><circle cx="11.5" cy="16" r="0.7" fill="currentColor"/><path d="M19 3l-0.8 2.4a1 1 0 0 1-.6.6L15 6.8l2.4.8a1 1 0 0 1 .6.6L19 11l.8-2.4a1 1 0 0 1 .6-.6L23 7.2l-2.4-.8a1 1 0 0 1-.6-.6L19 3z" fill="currentColor" opacity="0.8"/><circle cx="21" cy="15" r="1" fill="currentColor" opacity="0.5"/></svg>',
         // Memory/elephant brain icon
         memory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.08"/><circle cx="12" cy="12" r="9"/><path d="M12 6v2"/><path d="M12 16v2"/><path d="M6 12h2"/><path d="M16 12h2"/><circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.2"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>',
+        // Clock icon for history
+        clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
         // Organize/magic wand icon
         organize: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 4-1 1 4 4 1-1a2.83 2.83 0 1 0-4-4Z"/><path d="m13 6-8.5 8.5a2.12 2.12 0 1 0 3 3L16 9"/><path d="m8 15 2 2"/><path d="M3 21h4"/><path d="M17 21h4"/><path d="M19 17v4"/><path d="M5 17v4"/></svg>'
       };
@@ -2036,6 +2084,10 @@
       var chatMessages = [];
       var chatOpen = false;
       var symbolResults = [];
+
+      // Search history
+      var searchHistory = JSON.parse(localStorage.getItem('hippo-search-history') || '[]');
+      var maxHistoryItems = 10;
 
       // Apply dark mode on load
       if (darkMode) document.body.classList.add('dark');
@@ -2399,7 +2451,103 @@
           invoke('search', { query: query || '', tags: activeTags }).then(function(r) {
             memories = (r.memories || []).map(function(x) { return x.memory; });
             renderFiles();
+            // Add to history if query is meaningful
+            if (query && query.trim().length >= 2) {
+              addToSearchHistory(query.trim(), memories.length);
+            }
           });
+        }
+
+        // Search history functions
+        function addToSearchHistory(query, resultCount) {
+          // Remove duplicate if exists
+          searchHistory = searchHistory.filter(function(h) { return h.query !== query; });
+          // Add to front
+          searchHistory.unshift({
+            query: query,
+            count: resultCount,
+            time: Date.now()
+          });
+          // Limit size
+          if (searchHistory.length > maxHistoryItems) {
+            searchHistory = searchHistory.slice(0, maxHistoryItems);
+          }
+          // Save
+          localStorage.setItem('hippo-search-history', JSON.stringify(searchHistory));
+        }
+
+        function removeFromSearchHistory(index) {
+          searchHistory.splice(index, 1);
+          localStorage.setItem('hippo-search-history', JSON.stringify(searchHistory));
+          renderSearchHistory();
+        }
+
+        function clearSearchHistory() {
+          searchHistory = [];
+          localStorage.setItem('hippo-search-history', '[]');
+          hideSearchHistory();
+        }
+
+        function showSearchHistory() {
+          if (searchHistory.length === 0) return;
+          renderSearchHistory();
+          document.getElementById('searchHistoryDropdown').classList.add('show');
+        }
+
+        function hideSearchHistory() {
+          document.getElementById('searchHistoryDropdown').classList.remove('show');
+        }
+
+        function renderSearchHistory() {
+          if (searchHistory.length === 0) {
+            hideSearchHistory();
+            return;
+          }
+          var html = '<div class="search-history-section">';
+          html += '<div class="search-history-label">Recent Searches</div>';
+          searchHistory.forEach(function(h, i) {
+            html += '<div class="search-history-item" data-index="' + i + '">';
+            html += '<span class="icon icon-sm">' + icons.clock + '</span>';
+            html += '<span class="query">' + esc(h.query) + '</span>';
+            html += '<span class="time">' + getTimeAgo(h.time) + '</span>';
+            html += '<button class="remove" data-index="' + i + '" title="Remove">' + icons.close + '</button>';
+            html += '</div>';
+          });
+          html += '</div>';
+          html += '<div class="search-history-clear"><button id="clearHistoryBtn">Clear History</button></div>';
+          document.getElementById('searchHistoryDropdown').innerHTML = html;
+
+          // Add clear button handler
+          var clearBtn = document.getElementById('clearHistoryBtn');
+          if (clearBtn) {
+            clearBtn.onclick = clearSearchHistory;
+          }
+
+          // Add click handlers
+          document.querySelectorAll('.search-history-item').forEach(function(item) {
+            item.onclick = function(e) {
+              if (e.target.closest('.remove')) {
+                e.stopPropagation();
+                removeFromSearchHistory(parseInt(item.dataset.index));
+                return;
+              }
+              var query = searchHistory[parseInt(item.dataset.index)].query;
+              document.getElementById('searchInput').value = query;
+              search(query);
+              hideSearchHistory();
+            };
+          });
+        }
+
+        function getTimeAgo(timestamp) {
+          var seconds = Math.floor((Date.now() - timestamp) / 1000);
+          if (seconds < 60) return 'just now';
+          var minutes = Math.floor(seconds / 60);
+          if (minutes < 60) return minutes + 'm ago';
+          var hours = Math.floor(minutes / 60);
+          if (hours < 24) return hours + 'h ago';
+          var days = Math.floor(hours / 24);
+          return days + 'd ago';
         }
 
         function renderSources() {
@@ -3545,14 +3693,20 @@
           document.querySelectorAll('.search-mode-btn').forEach(function(btn) {
             btn.classList.toggle('active', btn.dataset.mode === mode);
           });
-          // Update placeholder
+          // Update placeholder with clear instructions
           var input = document.getElementById('searchInput');
           if (mode === 'text') {
-            input.placeholder = 'Search files... (Tab to add tag)';
+            input.placeholder = 'Search files by name, path, or tags... (Tab to add tag filter)';
           } else if (mode === 'semantic') {
-            input.placeholder = 'Ask anything about your files...';
+            input.placeholder = 'Describe what you\'re looking for, then press Enter...';
           } else if (mode === 'symbol') {
-            input.placeholder = 'Search functions, classes, imports...';
+            input.placeholder = 'Search code symbols (functions, classes), then press Enter...';
+          }
+          // Show a toast when switching modes
+          if (mode === 'semantic') {
+            showToast('AI Search: Type your query and press Enter', 'info');
+          } else if (mode === 'symbol') {
+            showToast('Code Search: Only searches indexed code files', 'info');
           }
         }
 
@@ -4007,13 +4161,25 @@
           if (searchMode === 'text') {
             search(query);
           }
+          // Hide history when typing
+          if (query.length > 0) {
+            hideSearchHistory();
+          }
           // AI search is triggered on Enter, not on every keystroke
+        };
+
+        document.getElementById('searchInput').onfocus = function(e) {
+          // Show history when focusing empty search
+          if (!e.target.value && searchHistory.length > 0) {
+            showSearchHistory();
+          }
         };
 
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
           if (e.key === 'Enter' && searchMode !== 'text') {
             e.preventDefault();
             handleAISearch(e.target.value);
+            hideSearchHistory();
           }
         });
 
@@ -4028,8 +4194,19 @@
             }
             e.target.value = '';
             search('');
+            hideSearchHistory();
+          }
+          if (e.key === 'Escape') {
+            hideSearchHistory();
           }
         };
+
+        // Hide search history when clicking outside
+        document.addEventListener('click', function(e) {
+          if (!e.target.closest('.search-container')) {
+            hideSearchHistory();
+          }
+        });
 
         document.querySelectorAll('.filter-btn').forEach(function(btn) {
           btn.onclick = function() {
