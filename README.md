@@ -21,8 +21,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/greplabs/hippo/actions/workflows/quick-ci.yml"><img src="https://github.com/greplabs/hippo/actions/workflows/quick-ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/rust-1.70+-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/tauri-2.0-blue.svg" alt="Tauri">
+  <img src="https://img.shields.io/badge/ollama-local_AI-purple.svg" alt="Ollama">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
 </p>
@@ -55,24 +57,33 @@ Hippo is a **privacy-first file organizer** that runs entirely on your machine. 
 
 ### Core Features
 - **Instant Search** - SQL-powered full-text search across 100K+ files in milliseconds
-- **Smart Tags** - Auto-generated tags based on file type, location, and content
+- **Semantic Search** - Vector similarity search powered by Qdrant
+- **Smart Tags** - Auto-generated tags based on file type, location, and AI analysis
 - **Multiple Sources** - Index Documents, Desktop, Downloads, or any folder
-- **File Preview** - Quick preview with metadata display
-- **Dark/Light Mode** - Easy on the eyes, any time of day
+- **File Preview** - Quick preview with metadata, thumbnails, and code syntax highlighting
+- **Real-time Watching** - Automatic re-indexing when files change
 
-### AI Features (Local via Ollama)
+### AI Features (Local via Ollama - No API Key Required)
 - **Natural Language Search** - Ask questions about your files in plain English
+- **RAG-Powered Answers** - AI finds relevant documents and generates accurate responses
 - **Smart Organization** - AI suggests folder structures and categories
-- **Duplicate Detection** - Find and manage duplicate files
-- **Similar Files** - Discover related content across your library
-- **Tag Suggestions** - AI-powered tag recommendations
+- **Similar Files** - Discover related content using vector similarity
+- **Auto-Tagging** - AI-powered tag suggestions for new files
+- **Image Captioning** - Automatic descriptions for photos (llava:7b)
+- **Code Analysis** - Understand code structure and patterns
+
+### Developer Features
+- **Syntax Highlighting** - Prism.js support for 20+ languages
+- **Code Preview** - View source code with proper formatting
+- **Git-Friendly** - Works alongside your version control
 
 ### Technical Highlights
-- **100% Local** - All processing happens on your machine
-- **Blazing Fast** - Rust backend with SQLite FTS5 for instant search
-- **Cross-Platform** - macOS, Windows, Linux support via Tauri
+- **100% Local** - All processing happens on your machine, no cloud required
+- **Privacy First** - Your files never leave your computer
+- **Blazing Fast** - Rust backend with SQLite + Qdrant for instant search
+- **Cross-Platform** - macOS, Windows, Linux support via Tauri 2.0
 - **Lightweight** - ~50MB app size, minimal resource usage
-- **Extensible** - Plugin-ready architecture
+- **Extensible** - Clean architecture for easy customization
 
 ## Installation
 
@@ -89,9 +100,10 @@ Hippo is a **privacy-first file organizer** that runs entirely on your machine. 
 git clone https://github.com/greplabs/hippo.git
 cd hippo
 
-# Pull the AI models
-ollama pull qwen2:0.5b        # Fast chat model (352MB)
-ollama pull nomic-embed-text  # Embeddings (274MB)
+# Pull the AI models (one-time setup)
+ollama pull nomic-embed-text  # Required: embeddings (274MB)
+ollama pull gemma2:2b         # Recommended: excellent quality (1.6GB)
+# Optional: ollama pull llava:7b  # For image analysis
 
 # Build and run
 cargo run --bin hippo-tauri
@@ -323,22 +335,25 @@ File System                    Hippo                         User
 |-----------|------------|---------|
 | Backend | Rust | Core logic, performance |
 | Desktop | Tauri 2.0 | Native app wrapper |
-| Database | SQLite + FTS5 | Storage & full-text search |
+| Database | SQLite + Qdrant | Storage & vector search |
 | AI | Ollama | Local LLM inference |
 | UI | Vanilla JS/CSS | Lightweight, no build step |
-| Embeddings | nomic-embed-text | Vector similarity |
-| Chat Model | qwen2:0.5b | Fast responses |
+| Embeddings | nomic-embed-text | Vector similarity (768-dim) |
+| Chat Model | gemma2:2b | Quality responses |
+| Vision | llava:7b | Image understanding |
 
 ## Performance
 
 Hippo is designed for speed:
 
-| Operation | Time | Files |
-|-----------|------|-------|
-| Initial index | ~5 min | 100K files |
-| Search | <50ms | 137K files |
-| AI response | ~1.5s | With qwen2:0.5b |
-| Memory usage | ~100MB | Idle |
+| Operation | Time | Details |
+|-----------|------|---------|
+| Initial index | ~5 min | 100K files with metadata extraction |
+| Text search | <50ms | SQLite FTS5, 100K+ files |
+| Semantic search | <200ms | Qdrant vector similarity |
+| AI response | ~2s | With gemma2:2b (quality mode) |
+| Memory usage | ~100MB | Idle, scales with index size |
+| App size | ~50MB | Minimal dependencies |
 
 ## Contributing
 
@@ -375,16 +390,29 @@ git push origin feature/amazing-feature
 
 ## Roadmap
 
-- [x] Core indexing & search
-- [x] AI chat integration
-- [x] Duplicate detection
-- [x] File watching
-- [x] Custom icons & branding
-- [x] Image thumbnails
-- [ ] Face detection/clustering
+### Completed
+- [x] Core indexing & search (SQL + FTS5)
+- [x] Semantic vector search (Qdrant)
+- [x] AI chat with RAG integration
+- [x] Auto-tagging with Ollama
+- [x] Real-time file watching (notify crate)
+- [x] Image/video/PDF thumbnails
+- [x] Code syntax highlighting (Prism.js)
+- [x] Parallel CI/CD pipeline
+
+### Coming Soon
+- [ ] Dark mode theme toggle
+- [ ] Search history & saved searches
+- [ ] Streaming AI responses
+- [ ] Batch file analysis
+- [ ] Knowledge graph visualization
+
+### Future
+- [ ] Cloud integrations (Google Drive, iCloud, Dropbox)
+- [ ] Face clustering for photos
 - [ ] Mobile companion app
 - [ ] Browser extension
-- [ ] Sync between devices (E2E encrypted)
+- [ ] E2E encrypted sync
 
 ## Documentation
 
