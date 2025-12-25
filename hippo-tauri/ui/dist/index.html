@@ -4,28 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hippo</title>
-  <!-- Prism.js for syntax highlighting -->
-  <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
-  <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
-  <!-- D3.js for graph visualization -->
-  <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
-    /* ===== DESIGN TOKENS ===== */
-    :root {
-      --space-xs: 4px;
-      --space-sm: 8px;
-      --space-md: 12px;
-      --space-lg: 16px;
-      --space-xl: 24px;
-      --btn-height: 40px;
-      --btn-height-lg: 44px;
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 14px;
-      --transition-fast: 0.15s ease;
-      --transition-normal: 0.2s ease;
-    }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     /* Smooth global transitions */
@@ -34,18 +13,13 @@
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
       background: #f8f8f7;
+      transition: background 0.3s ease, color 0.3s ease;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       letter-spacing: -0.01em;
       line-height: 1.5;
     }
     body.dark { background: #0f0e0d; }
-
-    /* Targeted transitions - NOT on * (causes layout shift) */
-    body, button, input, .card, .list-item, .sidebar-btn, .filter-btn, .tag-btn, .action-btn {
-      transition: background-color var(--transition-fast), border-color var(--transition-fast),
-                  color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
-    }
 
     /* Global animation keyframes */
     @keyframes fadeIn {
@@ -71,10 +45,6 @@
     @keyframes scaleIn {
       from { transform: scale(0.9); opacity: 0; }
       to { transform: scale(1); opacity: 1; }
-    }
-    @keyframes rotateIcon {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
     }
 
     /* Skeleton loader base */
@@ -146,34 +116,6 @@
     .sidebar-footer { padding: 16px; border-top: 1px solid rgba(0,0,0,0.04); }
     body.dark .sidebar-footer { border-color: rgba(255,255,255,0.04); }
     .sidebar-footer p { font-size: 12px; color: #a8a29e; }
-    .sidebar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    .sidebar-icon-btn {
-      width: 40px;
-      height: 40px;
-      border: none;
-      border-radius: 10px;
-      background: rgba(0,0,0,0.04);
-      color: #57534e;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.15s ease;
-    }
-    .sidebar-icon-btn:hover { background: rgba(0,0,0,0.08); color: #292524; transform: translateY(-1px); }
-    .sidebar-icon-btn:active { transform: translateY(0) scale(0.95); }
-    body.dark .sidebar-icon-btn { background: rgba(255,255,255,0.06); color: #a8a29e; }
-    body.dark .sidebar-icon-btn:hover { background: rgba(255,255,255,0.1); color: #d6d3d1; }
-    .sidebar-icon-btn.danger { color: #dc2626; }
-    .sidebar-icon-btn.danger:hover { background: rgba(220,38,38,0.1); }
-    body.dark .sidebar-icon-btn.danger { color: #f87171; }
-    .sidebar-icon-btn.primary {
-      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-      color: white;
-      box-shadow: 0 2px 8px rgba(99,102,241,0.25);
-    }
-    .sidebar-icon-btn.primary:hover { box-shadow: 0 4px 12px rgba(99,102,241,0.35); }
-    .sidebar-icon-btn .icon { width: 18px; height: 18px; }
     .section-title { font-size: 10px; color: #a8a29e; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.08em; font-weight: 600; }
 
     .source-item {
@@ -195,15 +137,6 @@
     body.dark .source-item { background: rgba(255,255,255,0.04); color: #d6d3d1; }
     body.dark .source-item:hover { background: rgba(255,255,255,0.08); }
     .source-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
-
-    /* Status indicators */
-    .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 11px; color: #78716c; }
-    body.dark .status-row { color: #a8a29e; }
-    .status-indicator { display: flex; align-items: center; gap: 4px; }
-    .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-    .status-dot.online { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.5); }
-    .status-dot.offline { background: #a8a29e; }
-    .status-dot.loading { background: #f59e0b; animation: pulse 1s ease-in-out infinite; }
 
     .add-btn {
       width: 100%;
@@ -265,47 +198,6 @@
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     body.dark .search-bar { background: #1a1918; border-color: rgba(255,255,255,0.05); }
-
-    /* Theme toggle button in header */
-    .theme-toggle-btn {
-      width: 40px;
-      height: 40px;
-      border: none;
-      border-radius: 10px;
-      background: rgba(0,0,0,0.04);
-      color: #57534e;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      flex-shrink: 0;
-      margin-left: 12px;
-    }
-    .theme-toggle-btn:hover {
-      background: rgba(0,0,0,0.08);
-      color: #1c1917;
-      transform: translateY(-1px);
-    }
-    .theme-toggle-btn:active {
-      transform: translateY(0) scale(0.95);
-    }
-    .theme-toggle-btn .icon {
-      transition: transform 0.2s ease;
-    }
-    .theme-toggle-btn.rotating .icon {
-      animation: rotateIcon 0.5s ease;
-    }
-    body.dark .theme-toggle-btn {
-      background: rgba(255,255,255,0.06);
-      color: #d6d3d1;
-    }
-    body.dark .theme-toggle-btn:hover {
-      background: rgba(255,255,255,0.1);
-      color: #fafaf9;
-    }
-
     .search-container {
       display: flex;
       align-items: center;
@@ -329,129 +221,6 @@
     .search-input { flex: 1; border: none; background: transparent; font-size: 14px; outline: none; color: #1c1917; font-weight: 400; }
     .search-input::placeholder { color: #a8a29e; }
     body.dark .search-input { color: #fafaf9; }
-
-    /* AI badge for natural language search */
-    .ai-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 8px;
-      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-      color: white;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      animation: scaleIn 0.2s ease;
-      flex-shrink: 0;
-    }
-    .ai-badge .icon { font-size: 12px; }
-
-    /* NL interpretation display */
-    .nl-interpretation {
-      display: none;
-      margin-top: 10px;
-      padding: 10px 14px;
-      background: rgba(99, 102, 241, 0.08);
-      border-left: 3px solid #6366f1;
-      border-radius: 8px;
-      font-size: 13px;
-      color: #4338ca;
-      animation: fadeInUp 0.2s ease;
-    }
-    .nl-interpretation.show { display: block; }
-    body.dark .nl-interpretation { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; }
-    .nl-interpretation-label { font-weight: 600; margin-right: 6px; }
-
-    /* Recent searches dropdown */
-    .search-wrapper { position: relative; }
-    .recent-searches {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      background: white;
-      border: 1px solid rgba(0,0,0,0.08);
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.12);
-      padding: 8px;
-      z-index: 100;
-      animation: fadeInUp 0.15s ease;
-      display: none;
-    }
-    .recent-searches.show { display: block; }
-    body.dark .recent-searches { background: #1c1917; border-color: rgba(255,255,255,0.08); }
-    .recent-search-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 13px;
-      color: #57534e;
-      transition: all 0.15s;
-    }
-    .recent-search-item:hover { background: #f5f5f4; color: #1c1917; }
-    body.dark .recent-search-item { color: #a8a29e; }
-    body.dark .recent-search-item:hover { background: #292524; color: #fafaf9; }
-    .recent-search-icon { opacity: 0.5; }
-    .recent-search-text { flex: 1; font-weight: 500; }
-    .recent-search-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #a8a29e; }
-    body.dark .recent-search-meta { color: #78716c; }
-    .recent-search-count { padding: 2px 6px; background: rgba(0,0,0,0.04); border-radius: 4px; }
-    body.dark .recent-search-count { background: rgba(255,255,255,0.06); }
-    .recent-search-time { opacity: 0.7; }
-    .recent-search-remove { padding: 4px; background: none; border: none; color: #a8a29e; cursor: pointer; border-radius: 4px; transition: all 0.15s; opacity: 0; flex-shrink: 0; }
-    .recent-search-item:hover .recent-search-remove { opacity: 1; }
-    .recent-search-remove:hover { background: rgba(0,0,0,0.06); color: #dc2626; }
-    body.dark .recent-search-remove:hover { background: rgba(255,255,255,0.08); color: #f87171; }
-    .search-dropdown-section { padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06); }
-    .search-dropdown-section:last-child { border-bottom: none; }
-    body.dark .search-dropdown-section { border-color: rgba(255,255,255,0.06); }
-    .search-dropdown-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; font-size: 10px; font-weight: 600; color: #a8a29e; text-transform: uppercase; letter-spacing: 0.08em; }
-    .search-dropdown-clear { padding: 4px 8px; background: none; border: none; color: #78716c; font-size: 11px; font-weight: 500; cursor: pointer; border-radius: 4px; transition: all 0.15s; text-transform: none; letter-spacing: 0; }
-    .search-dropdown-clear:hover { background: rgba(0,0,0,0.04); color: #dc2626; }
-    body.dark .search-dropdown-clear:hover { background: rgba(255,255,255,0.06); color: #f87171; }
-    .save-search-btn { padding: 6px 12px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 8px; color: #6366f1; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-    .save-search-btn:hover { background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.3); transform: translateY(-1px); }
-    .save-search-btn:active { transform: translateY(0) scale(0.98); }
-    body.dark .save-search-btn { background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.3); }
-    body.dark .save-search-btn:hover { background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.4); }
-    .saved-search-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: #57534e; transition: all 0.15s; border: 1px solid rgba(99, 102, 241, 0.1); background: rgba(99, 102, 241, 0.02); margin-bottom: 4px; }
-    .saved-search-item:hover { background: rgba(99, 102, 241, 0.08); border-color: rgba(99, 102, 241, 0.2); color: #1c1917; }
-    body.dark .saved-search-item { color: #a8a29e; background: rgba(99, 102, 241, 0.05); border-color: rgba(99, 102, 241, 0.15); }
-    body.dark .saved-search-item:hover { background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.25); color: #fafaf9; }
-    .saved-search-icon { color: #6366f1; flex-shrink: 0; }
-    .saved-search-name { flex: 1; font-weight: 600; }
-    .saved-search-query { font-size: 11px; color: #a8a29e; opacity: 0.8; }
-
-    /* Date filter pills */
-    .date-filters {
-      display: flex;
-      gap: 6px;
-      margin-left: 12px;
-      padding-left: 12px;
-      border-left: 1px solid rgba(0,0,0,0.08);
-    }
-    body.dark .date-filters { border-left-color: rgba(255,255,255,0.08); }
-    .date-filter-btn {
-      padding: 6px 12px;
-      border: none;
-      background: transparent;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 500;
-      color: #78716c;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .date-filter-btn:hover { background: #f5f5f4; color: #1c1917; }
-    .date-filter-btn.active { background: #6366f1; color: white; }
-    body.dark .date-filter-btn { color: #a8a29e; }
-    body.dark .date-filter-btn:hover { background: #292524; color: #fafaf9; }
-    body.dark .date-filter-btn.active { background: #6366f1; color: white; }
-
     .active-tags { display: flex; gap: 6px; flex-wrap: wrap; }
     .active-tag {
       display: flex;
@@ -498,16 +267,15 @@
     }
     body.dark .filter-bar { background: #1a1918; border-color: rgba(255,255,255,0.04); }
     .filter-btn {
-      height: var(--btn-height);
-      padding: 0 var(--space-lg);
-      border-radius: var(--radius-md);
+      padding: 8px 16px;
+      border-radius: 10px;
       font-size: 13px;
       font-weight: 500;
       border: none;
       cursor: pointer;
-      display: inline-flex;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
       align-items: center;
-      justify-content: center;
       gap: 6px;
     }
     .filter-btn.active {
@@ -532,17 +300,15 @@
     }
     body.dark .view-toggle { background: rgba(255,255,255,0.06); }
     .view-btn {
-      width: var(--btn-height);
-      height: var(--btn-height);
+      width: 34px;
+      height: 34px;
       border: none;
-      border-radius: var(--radius-sm);
+      border-radius: 8px;
       cursor: pointer;
       background: transparent;
       color: #78716c;
       font-size: 16px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .view-btn:hover:not(.active) { background: rgba(0,0,0,0.04); }
     .view-btn.active { background: white; color: #1c1917; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
@@ -553,13 +319,6 @@
     /* Grid */
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 20px; }
     .list { display: flex; flex-direction: column; gap: 6px; max-width: 900px; }
-
-    /* Virtual scrolling */
-    .virtual-scroll-container { position: relative; width: 100%; }
-    .virtual-scroll-spacer { width: 100%; }
-    .virtual-scroll-content { position: absolute; top: 0; left: 0; right: 0; }
-    .virtual-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 20px; }
-    .virtual-list { display: flex; flex-direction: column; gap: 6px; max-width: 900px; }
 
     .card {
       background: white;
@@ -575,15 +334,8 @@
       transform: translateY(-4px);
     }
     .card:active { transform: translateY(-2px) scale(0.99); }
-    .card.keyboard-focused {
-      outline: 2px solid #3b82f6;
-      outline-offset: 2px;
-      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
-      transform: translateY(-2px);
-    }
     body.dark .card { background: #1c1917; border-color: rgba(255,255,255,0.04); }
     body.dark .card:hover { box-shadow: 0 20px 40px -12px rgba(0,0,0,0.4); }
-    body.dark .card.keyboard-focused { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25); }
 
     .card-preview {
       aspect-ratio: 1;
@@ -649,9 +401,7 @@
     }
     .list-item:hover { background: white; transform: translateX(4px); box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
     .list-item:active { transform: translateX(4px) scale(0.99); }
-    .list-item.keyboard-focused { background: white; outline: 2px solid #3b82f6; outline-offset: -2px; }
     body.dark .list-item:hover { background: #1c1917; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
-    body.dark .list-item.keyboard-focused { background: #1c1917; }
     .list-thumb {
       width: 48px;
       height: 48px;
@@ -730,20 +480,16 @@
     body.dark .detail-title { color: #fafaf9; }
     .detail-path { font-size: 11px; color: #a8a29e; margin-top: 6px; word-break: break-all; font-family: 'SF Mono', Monaco, monospace; padding: 8px 10px; background: rgba(0,0,0,0.02); border-radius: 8px; }
     body.dark .detail-path { background: rgba(255,255,255,0.04); }
-    .detail-actions { display: flex; gap: var(--space-sm); margin-top: 18px; align-items: center; }
+    .detail-actions { display: flex; gap: 10px; margin-top: 18px; }
     .action-btn {
       flex: 1;
-      height: var(--btn-height-lg);
-      padding: 0 var(--space-lg);
-      border-radius: var(--radius-md);
+      padding: 12px;
+      border-radius: 10px;
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       border: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-sm);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .action-btn.primary { background: #1c1917; color: white; }
     .action-btn.primary:hover { background: #292524; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
@@ -754,7 +500,7 @@
     .action-btn.secondary:active { transform: translateY(0) scale(0.98); }
     body.dark .action-btn.secondary { background: rgba(255,255,255,0.06); color: #d6d3d1; }
     body.dark .action-btn.secondary:hover { background: rgba(255,255,255,0.1); }
-    .action-btn.star { width: var(--btn-height-lg); height: var(--btn-height-lg); flex: none; font-size: 18px; padding: 0; }
+    .action-btn.star { width: 48px; flex: none; font-size: 18px; }
     .action-btn.star.active { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #f59e0b; }
 
     .detail-section { margin-top: 20px; }
@@ -763,7 +509,7 @@
     .detail-tag { padding: 4px 10px; background: #f5f5f4; border-radius: 6px; font-size: 12px; color: #57534e; cursor: pointer; transition: all 0.15s; }
     .detail-tag:hover { background: #e7e5e4; }
     body.dark .detail-tag { background: #44403c; color: #d6d3d1; }
-    .tag-input-container { display: flex; gap: var(--space-sm); align-items: center; }
+    .tag-input-container { display: flex; gap: 6px; }
     .tag-input { flex: 1; padding: 8px 10px; border: 1px solid #e7e5e4; border-radius: 6px; font-size: 12px; outline: none; }
     .tag-input:focus { border-color: #a8a29e; }
     body.dark .tag-input { background: #1c1917; border-color: #44403c; color: #fafaf9; }
@@ -882,7 +628,7 @@
     .modal-input:focus { border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1); }
     body.dark .modal-input { background: #0f0e0d; border-color: rgba(255,255,255,0.08); color: #fafaf9; }
     body.dark .modal-input:focus { border-color: #6366f1; }
-    .modal-actions { display: flex; gap: var(--space-sm); justify-content: flex-end; align-items: center; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
     .modal-btn {
       padding: 12px 20px;
       border-radius: 10px;
@@ -909,17 +655,6 @@
       color: #a8a29e;
       text-align: center;
       animation: fadeIn 0.4s ease;
-      padding: 40px 20px;
-    }
-    .empty-mascot {
-      font-size: 64px;
-      margin-bottom: 16px;
-      filter: grayscale(0.3);
-      animation: gentleBounce 2s ease-in-out infinite;
-    }
-    @keyframes gentleBounce {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-8px); }
     }
     .empty-icon { font-size: 56px; margin-bottom: 20px; opacity: 0.6; }
     .empty-title { font-size: 18px; font-weight: 600; color: #57534e; margin-bottom: 6px; letter-spacing: -0.01em; }
@@ -1158,584 +893,6 @@
     .cmd-footer span { display: flex; align-items: center; gap: 4px; }
     .cmd-empty { padding: 32px; text-align: center; color: #a8a29e; }
     .cmd-empty .icon { margin-bottom: 8px; }
-
-    /* ===== UX ENHANCEMENTS ===== */
-
-    /* Skeleton Loading Cards */
-    .skeleton-card {
-      background: white;
-      border-radius: 16px;
-      border: 1px solid rgba(0,0,0,0.04);
-      overflow: hidden;
-    }
-    body.dark .skeleton-card { background: #1c1917; border-color: rgba(255,255,255,0.04); }
-    .skeleton-card .skeleton-preview {
-      aspect-ratio: 1;
-      background: linear-gradient(90deg, #f5f5f4 25%, #fafaf9 50%, #f5f5f4 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s ease-in-out infinite;
-    }
-    body.dark .skeleton-card .skeleton-preview {
-      background: linear-gradient(90deg, #292524 25%, #3f3f46 50%, #292524 75%);
-      background-size: 200% 100%;
-    }
-    .skeleton-card .skeleton-info { padding: 14px 16px; }
-    .skeleton-card .skeleton-title {
-      height: 14px;
-      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s ease-in-out infinite;
-      border-radius: 4px;
-      width: 70%;
-    }
-    body.dark .skeleton-card .skeleton-title {
-      background: linear-gradient(90deg, #44403c 25%, #57534e 50%, #44403c 75%);
-      background-size: 200% 100%;
-    }
-    .skeleton-card .skeleton-size {
-      height: 10px;
-      margin-top: 8px;
-      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s ease-in-out infinite;
-      animation-delay: 0.1s;
-      border-radius: 4px;
-      width: 40%;
-    }
-    body.dark .skeleton-card .skeleton-size {
-      background: linear-gradient(90deg, #44403c 25%, #57534e 50%, #44403c 75%);
-      background-size: 200% 100%;
-    }
-
-    /* Skeleton List Item */
-    .skeleton-list-item {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 12px 14px;
-    }
-    .skeleton-list-item .skeleton-thumb {
-      width: 48px;
-      height: 48px;
-      border-radius: 10px;
-      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s ease-in-out infinite;
-      flex-shrink: 0;
-    }
-    body.dark .skeleton-list-item .skeleton-thumb {
-      background: linear-gradient(90deg, #292524 25%, #3f3f46 50%, #292524 75%);
-      background-size: 200% 100%;
-    }
-    .skeleton-list-item .skeleton-info { flex: 1; }
-    .skeleton-list-item .skeleton-title-line {
-      height: 14px;
-      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s ease-in-out infinite;
-      border-radius: 4px;
-      width: 60%;
-    }
-    .skeleton-list-item .skeleton-path-line {
-      height: 10px;
-      margin-top: 6px;
-      background: linear-gradient(90deg, #e7e5e4 25%, #f5f5f4 50%, #e7e5e4 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s ease-in-out infinite;
-      animation-delay: 0.1s;
-      border-radius: 4px;
-      width: 80%;
-    }
-    body.dark .skeleton-list-item .skeleton-title-line,
-    body.dark .skeleton-list-item .skeleton-path-line {
-      background: linear-gradient(90deg, #44403c 25%, #57534e 50%, #44403c 75%);
-      background-size: 200% 100%;
-    }
-
-    /* Staggered Card Animations */
-    .card, .list-item { animation: cardFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both; }
-    .card:nth-child(1), .list-item:nth-child(1) { animation-delay: 0ms; }
-    .card:nth-child(2), .list-item:nth-child(2) { animation-delay: 25ms; }
-    .card:nth-child(3), .list-item:nth-child(3) { animation-delay: 50ms; }
-    .card:nth-child(4), .list-item:nth-child(4) { animation-delay: 75ms; }
-    .card:nth-child(5), .list-item:nth-child(5) { animation-delay: 100ms; }
-    .card:nth-child(6), .list-item:nth-child(6) { animation-delay: 125ms; }
-    .card:nth-child(7), .list-item:nth-child(7) { animation-delay: 150ms; }
-    .card:nth-child(8), .list-item:nth-child(8) { animation-delay: 175ms; }
-    .card:nth-child(9), .list-item:nth-child(9) { animation-delay: 200ms; }
-    .card:nth-child(10), .list-item:nth-child(10) { animation-delay: 225ms; }
-    .card:nth-child(n+11), .list-item:nth-child(n+11) { animation-delay: 250ms; }
-
-    @keyframes cardFadeIn {
-      from { opacity: 0; transform: translateY(12px) scale(0.97); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    /* Enhanced Card Hover */
-    .card {
-      will-change: transform, box-shadow;
-      backface-visibility: hidden;
-    }
-    .card:hover .card-preview img {
-      transform: scale(1.08);
-      filter: brightness(1.02);
-    }
-
-    /* Smooth thumbnail loading - only hide pending thumbnails */
-    .card-preview img, .list-thumb img, .detail-preview img {
-      transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .card-preview img.thumb-pending, .list-thumb img.thumb-pending {
-      opacity: 0;
-    }
-    .card-preview img.loaded, .list-thumb img.loaded {
-      opacity: 1;
-    }
-
-    /* Loading Overlay */
-    .loading-overlay {
-      position: absolute;
-      inset: 0;
-      background: rgba(248, 248, 247, 0.85);
-      backdrop-filter: blur(4px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-      animation: fadeIn 0.2s ease;
-    }
-    body.dark .loading-overlay { background: rgba(15, 14, 13, 0.85); }
-    .loading-spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid rgba(0,0,0,0.1);
-      border-top-color: #6366f1;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    body.dark .loading-spinner { border-color: rgba(255,255,255,0.1); border-top-color: #818cf8; }
-
-    /* Enhanced Empty State */
-    .empty {
-      padding: 60px 20px;
-    }
-    .empty-icon {
-      width: 100px;
-      height: 100px;
-      margin: 0 auto 24px;
-      border-radius: 24px;
-      background: linear-gradient(135deg, #f5f5f4 0%, #e7e5e4 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: emptyBounce 2s ease-in-out infinite;
-    }
-    body.dark .empty-icon { background: linear-gradient(135deg, #292524 0%, #1c1917 100%); }
-    @keyframes emptyBounce {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-8px); }
-    }
-    .empty-title {
-      font-size: 20px;
-      margin-bottom: 8px;
-    }
-    .empty-text {
-      max-width: 320px;
-    }
-    .empty-action {
-      margin-top: 20px;
-    }
-    .empty-action-btn {
-      padding: 12px 24px;
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .empty-action-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3); }
-    .empty-action-btn:active { transform: translateY(0) scale(0.98); }
-
-    /* Progress bar for indexing */
-    .indexing-progress {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: rgba(99, 102, 241, 0.2);
-      z-index: 2000;
-      overflow: hidden;
-    }
-    .indexing-progress-bar {
-      height: 100%;
-      background: linear-gradient(90deg, #6366f1, #8b5cf6, #6366f1);
-      background-size: 200% 100%;
-      animation: progressShimmer 1.5s ease-in-out infinite;
-      transition: width 0.3s ease;
-    }
-    @keyframes progressShimmer {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
-
-    /* Smooth filter transitions */
-    .filter-btn {
-      position: relative;
-      overflow: hidden;
-    }
-    .filter-btn::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: currentColor;
-      opacity: 0;
-      transition: opacity 0.15s ease;
-    }
-    .filter-btn:active::after { opacity: 0.1; }
-
-    /* Better focus states */
-    .card:focus-visible, .list-item:focus-visible {
-      outline: 2px solid #6366f1;
-      outline-offset: 2px;
-    }
-    .filter-btn:focus-visible, .view-btn:focus-visible, .action-btn:focus-visible {
-      outline: 2px solid #6366f1;
-      outline-offset: 2px;
-    }
-
-    /* Ripple effect for buttons */
-    .ripple {
-      position: relative;
-      overflow: hidden;
-    }
-    .ripple::before {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 0;
-      height: 0;
-      background: rgba(255,255,255,0.3);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      transition: width 0.4s ease, height 0.4s ease, opacity 0.4s ease;
-      opacity: 0;
-    }
-    .ripple:active::before {
-      width: 200%;
-      height: 200%;
-      opacity: 1;
-      transition: width 0s, height 0s, opacity 0s;
-    }
-
-    /* ===== END UX ENHANCEMENTS ===== */
-
-    /* ===== GRAPH VISUALIZATION ===== */
-    #graphContainer {
-      width: 100%;
-      height: 100%;
-      position: relative;
-      background: #fafaf9;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    body.dark #graphContainer {
-      background: #1c1917;
-    }
-
-    #graphSvg {
-      width: 100%;
-      height: 100%;
-      cursor: grab;
-    }
-    #graphSvg:active {
-      cursor: grabbing;
-    }
-
-    /* Graph nodes */
-    .graph-node {
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .graph-node:hover {
-      filter: brightness(1.1);
-    }
-    .graph-node.center {
-      filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.5));
-    }
-
-    .node-circle {
-      stroke: #fff;
-      stroke-width: 2px;
-    }
-    body.dark .node-circle {
-      stroke: #1c1917;
-    }
-
-    .node-label {
-      font-size: 11px;
-      font-weight: 500;
-      fill: #292524;
-      text-anchor: middle;
-      pointer-events: none;
-      user-select: none;
-    }
-    body.dark .node-label {
-      fill: #e7e5e4;
-    }
-
-    /* Graph edges */
-    .graph-edge {
-      stroke: #d6d3d1;
-      stroke-width: 1.5px;
-      fill: none;
-      opacity: 0.6;
-    }
-    body.dark .graph-edge {
-      stroke: #57534e;
-    }
-    .graph-edge.similar {
-      stroke: #8b5cf6;
-      stroke-dasharray: 4 2;
-    }
-    .graph-edge.imports {
-      stroke: #3b82f6;
-      marker-end: url(#arrowhead);
-    }
-    .graph-edge.same_folder {
-      stroke: #10b981;
-      stroke-dasharray: 2 2;
-    }
-
-    .edge-label {
-      font-size: 9px;
-      fill: #78716c;
-      text-anchor: middle;
-      pointer-events: none;
-      user-select: none;
-    }
-    body.dark .edge-label {
-      fill: #a8a29e;
-    }
-
-    /* Graph toolbar */
-    .graph-toolbar {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      display: flex;
-      gap: 8px;
-      z-index: 10;
-    }
-
-    .graph-toolbar-btn {
-      padding: 8px 12px;
-      background: #fff;
-      border: 1px solid #e7e5e4;
-      border-radius: 6px;
-      font-size: 13px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.2s ease;
-    }
-    .graph-toolbar-btn:hover {
-      background: #fafaf9;
-      border-color: #d6d3d1;
-    }
-    .graph-toolbar-btn.active {
-      background: #8b5cf6;
-      color: #fff;
-      border-color: #8b5cf6;
-    }
-    body.dark .graph-toolbar-btn {
-      background: #292524;
-      border-color: #44403c;
-      color: #e7e5e4;
-    }
-    body.dark .graph-toolbar-btn:hover {
-      background: #3c3836;
-    }
-    body.dark .graph-toolbar-btn.active {
-      background: #8b5cf6;
-      border-color: #8b5cf6;
-    }
-
-    /* Graph legend */
-    .graph-legend {
-      position: absolute;
-      bottom: 16px;
-      left: 16px;
-      background: #fff;
-      border: 1px solid #e7e5e4;
-      border-radius: 8px;
-      padding: 12px;
-      font-size: 11px;
-      z-index: 10;
-    }
-    body.dark .graph-legend {
-      background: #292524;
-      border-color: #44403c;
-      color: #e7e5e4;
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-    .legend-item:last-child {
-      margin-bottom: 0;
-    }
-
-    .legend-color {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      border: 1px solid #e7e5e4;
-    }
-    body.dark .legend-color {
-      border-color: #44403c;
-    }
-
-    .legend-line {
-      width: 20px;
-      height: 2px;
-      border-radius: 1px;
-    }
-
-    /* Graph controls */
-    .graph-controls {
-      position: absolute;
-      top: 16px;
-      left: 16px;
-      background: #fff;
-      border: 1px solid #e7e5e4;
-      border-radius: 8px;
-      padding: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      z-index: 10;
-    }
-    body.dark .graph-controls {
-      background: #292524;
-      border-color: #44403c;
-    }
-
-    .graph-control-btn {
-      width: 32px;
-      height: 32px;
-      background: transparent;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.2s ease;
-      color: #57534e;
-    }
-    .graph-control-btn:hover {
-      background: #fafaf9;
-    }
-    body.dark .graph-control-btn {
-      color: #a8a29e;
-    }
-    body.dark .graph-control-btn:hover {
-      background: #3c3836;
-    }
-
-    /* Graph info panel */
-    .graph-info {
-      position: absolute;
-      bottom: 16px;
-      right: 16px;
-      background: #fff;
-      border: 1px solid #e7e5e4;
-      border-radius: 8px;
-      padding: 12px 16px;
-      font-size: 12px;
-      z-index: 10;
-      min-width: 200px;
-      max-width: 300px;
-      display: none;
-    }
-    .graph-info.visible {
-      display: block;
-      animation: fadeInUp 0.2s ease;
-    }
-    body.dark .graph-info {
-      background: #292524;
-      border-color: #44403c;
-      color: #e7e5e4;
-    }
-
-    .graph-info-title {
-      font-weight: 600;
-      margin-bottom: 8px;
-      color: #292524;
-    }
-    body.dark .graph-info-title {
-      color: #e7e5e4;
-    }
-
-    .graph-info-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 4px;
-      font-size: 11px;
-    }
-
-    .graph-info-label {
-      color: #78716c;
-    }
-    body.dark .graph-info-label {
-      color: #a8a29e;
-    }
-
-    /* Empty graph state */
-    .graph-empty {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      color: #a8a29e;
-    }
-
-    .graph-empty-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-      opacity: 0.3;
-    }
-
-    .graph-empty-title {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 8px;
-      color: #57534e;
-    }
-    body.dark .graph-empty-title {
-      color: #a8a29e;
-    }
-
-    .graph-empty-text {
-      font-size: 13px;
-      text-align: center;
-      max-width: 400px;
-    }
-    /* ===== END GRAPH VISUALIZATION ===== */
   </style>
 </head>
 <body>
@@ -1749,56 +906,31 @@
         <p class="section-title">Sources</p>
         <div id="sourcesList"></div>
         <button class="add-btn" id="addBtn">+ Add Folder</button>
-        <div style="margin-top:16px;" id="collectionsSection"></div>
-        <button class="sidebar-btn" id="discoverBtn" style="margin-top:8px;"><span class="icon icon-sm" style="color:#8b5cf6;">&#10024;</span> Discover Collections</button>
       </div>
       <div class="sidebar-footer">
-        <p id="statsText" style="margin-bottom:4px;">Loading...</p>
-        <div class="status-row">
-          <div class="status-indicator" title="Qdrant vector search">
-            <span class="status-dot loading" id="qdrantDot"></span>
-            <span id="qdrantStatus">Qdrant</span>
-          </div>
-          <div class="status-indicator" title="Ollama local AI">
-            <span class="status-dot loading" id="ollamaDot"></span>
-            <span id="ollamaStatusText">Ollama</span>
-          </div>
-        </div>
+        <p id="statsText" style="margin-bottom:8px;">Loading...</p>
         <button class="sidebar-btn ai-chat-btn" id="chatBtn"><span class="icon icon-sm" id="chatBtnIcon"></span> Ask Hippo</button>
-        <div class="sidebar-actions">
-          <button class="sidebar-icon-btn" id="settingsBtn" title="AI Settings"><span class="icon" id="settingsIcon"></span></button>
-          <button class="sidebar-icon-btn" id="exportBtn" title="Export Index"><span class="icon" id="exportIcon"></span></button>
-          <button class="sidebar-icon-btn" id="importBtn" title="Import Index"><span class="icon" id="importIcon"></span></button>
-          <button class="sidebar-icon-btn" id="darkModeBtn" title="Toggle Dark Mode"><span class="icon" id="themeIcon"></span></button>
-          <button class="sidebar-icon-btn danger" id="resetBtn" title="Reset Index"><span class="icon" id="resetIcon"></span></button>
-        </div>
+        <button class="sidebar-btn" id="settingsBtn"><span class="icon icon-sm" id="settingsIcon"></span> AI Settings</button>
+        <button class="sidebar-btn" id="darkModeBtn"><span class="icon icon-sm" id="themeIcon"></span> <span id="themeText">Dark Mode</span></button>
+        <button class="sidebar-btn danger" id="resetBtn"><span class="icon icon-sm" id="resetIcon"></span> Reset Index</button>
       </div>
     </aside>
 
     <main class="main">
       <div class="search-bar">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div class="search-wrapper" style="flex:1;position:relative;">
-            <div class="search-container">
-              <span class="icon icon-md" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
-              <div class="active-tags" id="activeTags"></div>
-              <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)">
-              <div class="ai-badge" id="nlBadge" style="display:none;"><span class="icon">&#10024;</span> AI</div>
-            </div>
-            <div class="recent-searches" id="recentSearchesDropdown"></div>
+        <div style="display:flex;align-items:center;gap:0;">
+          <div class="search-container" style="flex:1;">
+            <span class="icon icon-md" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
+            <div class="active-tags" id="activeTags"></div>
+            <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)">
           </div>
-          <button class="save-search-btn" id="saveSearchBtn" style="display:none;" title="Save this search">
-            <span class="icon icon-sm">&#128190;</span> Save
-          </button>
           <div class="search-mode">
             <button class="search-mode-btn active" id="searchModeText" data-mode="text"><span class="icon icon-sm" id="searchModeTextIcon"></span> Text</button>
             <button class="search-mode-btn" id="searchModeSemantic" data-mode="semantic"><span class="icon icon-sm" id="searchModeSemanticIcon"></span> AI</button>
             <button class="search-mode-btn" id="searchModeSymbol" data-mode="symbol"><span class="icon icon-sm" id="searchModeSymbolIcon"></span> Code</button>
           </div>
-          <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle theme"><span class="icon" id="themeToggleIcon"></span></button>
         </div>
         <div class="tag-bar" id="tagBar"></div>
-        <div class="nl-interpretation" id="nlInterpretation"></div>
       </div>
       <div class="symbol-results" id="symbolResults" style="display:none;"></div>
       <div class="filter-bar">
@@ -1810,20 +942,10 @@
         <button class="filter-btn" data-filter="code"><span class="icon icon-sm filter-icon" data-icon="code"></span> Code</button>
         <button class="filter-btn" data-filter="document"><span class="icon icon-sm filter-icon" data-icon="doc"></span> Docs</button>
         <div class="filter-spacer"></div>
-        <div class="date-filters">
-          <button class="date-filter-btn active" data-date="all">All Time</button>
-          <button class="date-filter-btn" data-date="today">Today</button>
-          <button class="date-filter-btn" data-date="week">This Week</button>
-          <button class="date-filter-btn" data-date="month">This Month</button>
-        </div>
         <span class="result-count" id="resultCount">0 files</span>
-        <button class="filter-btn" id="multiSelectToggle" title="Toggle multi-select mode">
-          <span class="icon icon-sm" id="multiSelectIcon"></span> Multi-Select
-        </button>
         <div class="view-toggle">
           <button class="view-btn active" id="gridViewBtn" title="Grid view"><span class="icon icon-sm" id="gridIcon"></span></button>
           <button class="view-btn" id="listViewBtn" title="List view"><span class="icon icon-sm" id="listIcon"></span></button>
-          <button class="view-btn" id="graphViewBtn" title="Graph view"><span class="icon icon-sm" id="graphIcon"></span></button>
         </div>
       </div>
       <div class="content">
@@ -1859,11 +981,6 @@
           <div class="info-row"><span class="info-label">Size</span><span class="info-value" id="detailSize">-</span></div>
           <div class="info-row"><span class="info-label">Modified</span><span class="info-value" id="detailDate">-</span></div>
         </div>
-        <div class="detail-section" id="captionSection" style="display:none;">
-          <p class="detail-section-title">AI Caption</p>
-          <button class="action-btn secondary" id="generateCaptionBtn" style="width:100%;margin-bottom:8px;">Generate Caption</button>
-          <div id="captionText" style="font-size:13px;color:#57534e;line-height:1.5;"></div>
-        </div>
         <div class="ai-section" id="aiSection">
           <button class="ai-btn" id="aiAnalyzeBtn"><span class="icon icon-sm" id="aiIcon"></span> Analyze with AI</button>
           <div id="aiResults" style="display:none;">
@@ -1893,21 +1010,11 @@
           </div>
           <div id="aiActionResults" style="display:none;"></div>
         </div>
-        <div id="virtualPathsSection"></div>
-        <div id="similarSection"></div>
       </div>
     </aside>
   </div>
 
   <div class="toast-container" id="toastContainer"></div>
-
-  <!-- Drop Zone Overlay -->
-  <div class="drop-zone-overlay" id="dropZone">
-    <div class="drop-zone-content">
-      <div class="icon" id="dropZoneIcon"></div>
-      <div>Drop folders here to index</div>
-    </div>
-  </div>
 
   <!-- Bulk Action Bar -->
   <div class="bulk-bar" id="bulkBar">
@@ -1915,9 +1022,7 @@
     <div class="bulk-divider"></div>
     <button class="bulk-btn" id="bulkFavorite"><span class="icon icon-sm" id="bulkStarIcon"></span> Favorite</button>
     <button class="bulk-btn" id="bulkTag"><span class="icon icon-sm" id="bulkTagIcon"></span> Add Tag</button>
-    <button class="bulk-btn danger" id="bulkDelete"><span class="icon icon-sm" id="bulkDeleteIcon"></span> Delete</button>
-    <div class="bulk-divider"></div>
-    <button class="bulk-btn" id="bulkSelectAll"><span class="icon icon-sm" id="bulkSelectIcon"></span> <span id="bulkSelectText">Select All</span></button>
+    <button class="bulk-btn" id="bulkSelectAll"><span class="icon icon-sm" id="bulkSelectIcon"></span> Select All</button>
     <button class="bulk-close" id="bulkClose"><span class="icon icon-sm" id="bulkCloseIcon"></span></button>
   </div>
 
@@ -1994,12 +1099,7 @@
                   <option value="nomic-embed-text">nomic-embed-text (274MB)</option>
                   <option value="mxbai-embed-large">mxbai-embed-large (670MB)</option>
                 </optgroup>
-                <optgroup label="Text Generation (Ultra Light - Under 2GB)">
-                  <option value="gemma2:2b">gemma2:2b (1.6GB) - Recommended</option>
-                  <option value="qwen2.5:1.5b">qwen2.5:1.5b (0.9GB)</option>
-                  <option value="llama3.2:1b">llama3.2:1b (1.3GB)</option>
-                </optgroup>
-                <optgroup label="Text Generation (Light - 2-4GB)">
+                <optgroup label="Text Generation (Light)">
                   <option value="llama3.2:3b">llama3.2:3b (2GB)</option>
                   <option value="phi3:mini">phi3:mini (2.3GB)</option>
                   <option value="qwen2.5:3b">qwen2.5:3b (1.9GB)</option>
@@ -2035,14 +1135,6 @@
             <option value="semantic">AI Search (semantic understanding)</option>
             <option value="symbol">Code Search (functions & symbols)</option>
           </select>
-        </div>
-
-        <div class="settings-section">
-          <label class="settings-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <input type="checkbox" id="autoTagEnabled" style="width:16px;height:16px;cursor:pointer;">
-            Auto-tag new files during indexing
-          </label>
-          <p class="settings-desc">Automatically generate AI-suggested tags for newly indexed files. Requires Ollama to be running.</p>
         </div>
       </div>
       <div class="settings-footer">
@@ -2863,32 +1955,6 @@
     body.dark .ai-stats { border-color: rgba(255,255,255,0.08); }
     .ai-stat { display: flex; align-items: center; gap: 4px; }
     .ai-stat .icon { width: 12px; height: 12px; }
-
-    /* Drop Zone Overlay */
-    .drop-zone-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(99, 102, 241, 0.15);
-      backdrop-filter: blur(4px);
-      z-index: 2000;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      border: 4px dashed rgba(99, 102, 241, 0.5);
-    }
-    .drop-zone-overlay.active { display: flex; }
-    .drop-zone-content {
-      text-align: center;
-      color: #6366f1;
-      font-size: 24px;
-      font-weight: 600;
-      padding: 40px;
-      background: white;
-      border-radius: 16px;
-      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
-    }
-    body.dark .drop-zone-content { background: #292524; color: #818cf8; }
-    .drop-zone-content .icon { width: 64px; height: 64px; margin-bottom: 16px; }
   </style>
 
   <script>
@@ -2912,7 +1978,6 @@
         folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
         grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
         list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
-        graph: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
         close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
         folderEmpty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>',
         folderPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>',
@@ -2925,7 +1990,6 @@
         command: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>',
         zap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
         check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
         checkSquare: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
         sparkles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>',
         brain: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"/></svg>',
@@ -2935,21 +1999,12 @@
         checkCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
         alertCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
         download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
-        upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
         // Custom Hippo AI icon - hippo with sparkle
         hippoAI: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="10" cy="14" rx="7" ry="6" fill="currentColor" opacity="0.1"/><ellipse cx="10" cy="14" rx="7" ry="6"/><circle cx="5" cy="8" r="2"/><circle cx="15" cy="8" r="2"/><circle cx="7" cy="12" r="1" fill="currentColor"/><circle cx="13" cy="12" r="1" fill="currentColor"/><ellipse cx="10" cy="16" rx="3.5" ry="2.5"/><circle cx="8.5" cy="16" r="0.7" fill="currentColor"/><circle cx="11.5" cy="16" r="0.7" fill="currentColor"/><path d="M19 3l-0.8 2.4a1 1 0 0 1-.6.6L15 6.8l2.4.8a1 1 0 0 1 .6.6L19 11l.8-2.4a1 1 0 0 1 .6-.6L23 7.2l-2.4-.8a1 1 0 0 1-.6-.6L19 3z" fill="currentColor" opacity="0.8"/><circle cx="21" cy="15" r="1" fill="currentColor" opacity="0.5"/></svg>',
         // Memory/elephant brain icon
         memory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.08"/><circle cx="12" cy="12" r="9"/><path d="M12 6v2"/><path d="M12 16v2"/><path d="M6 12h2"/><path d="M16 12h2"/><circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.2"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>',
         // Organize/magic wand icon
-        organize: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 4-1 1 4 4 1-1a2.83 2.83 0 1 0-4-4Z"/><path d="m13 6-8.5 8.5a2.12 2.12 0 1 0 3 3L16 9"/><path d="m8 15 2 2"/><path d="M3 21h4"/><path d="M17 21h4"/><path d="M19 17v4"/><path d="M5 17v4"/></svg>',
-        // Watch/eye-scan icon
-        watch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M12 9v6" stroke-width="1" opacity="0.5"/></svg>',
-        // Play icon (for watching)
-        play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
-        // Pause icon
-        pause: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
-        // Stop icon
-        stop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>'
+        organize: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 4-1 1 4 4 1-1a2.83 2.83 0 1 0-4-4Z"/><path d="m13 6-8.5 8.5a2.12 2.12 0 1 0 3 3L16 9"/><path d="m8 15 2 2"/><path d="M3 21h4"/><path d="M17 21h4"/><path d="M19 17v4"/><path d="M5 17v4"/></svg>'
       };
 
       // State
@@ -2960,22 +2015,13 @@
       var filterType = 'all';
       var activeTags = [];
       var viewMode = 'grid';
-      // Initialize dark mode from localStorage or system preference
-      var darkMode = (function() {
-        var stored = localStorage.getItem('hippo-theme');
-        if (stored !== null) {
-          return stored === 'dark';
-        }
-        // Check system preference
-        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      })();
+      var darkMode = localStorage.getItem('hippo-dark') === 'true';
       var convertFileSrc = null;
       var invoke = null;
 
       // Bulk selection state
       var selectedIds = [];
       var lastSelectedIdx = -1;
-      var isMultiSelectMode = false;
 
       // Thumbnail cache: path -> thumbnail path
       var thumbnailCache = {};
@@ -2991,41 +2037,6 @@
       var chatOpen = false;
       var symbolResults = [];
 
-      // Collections & Organization state
-      var collections = [];
-      var virtualPaths = [];
-      var similarMemories = [];
-      var qdrantAvailable = false;
-      var qdrantVectorCount = 0;
-
-      // Graph visualization state
-      var graphMode = 'mindmap'; // 'mindmap' or 'code'
-      var graphData = null;
-      var graphSimulation = null;
-      var showCollections = false;
-
-      // UX enhancements state
-      var keyboardFocusIndex = -1;
-      var recentSearches = JSON.parse(localStorage.getItem('hippo-recent-searches') || '[]');
-      var savedSearches = JSON.parse(localStorage.getItem('hippo-saved-searches') || '[]');
-      var dateFilter = 'all'; // 'all', 'today', 'week', 'month'
-      var autoTagEnabled = localStorage.getItem('hippo-auto-tag') === 'true';
-
-      // File watcher state
-      var watcherStats = {
-        total_watched_paths: 0,
-        events_processed: 0,
-        files_created: 0,
-        files_modified: 0,
-        files_deleted: 0,
-        files_renamed: 0,
-        is_watching: false,
-        is_paused: false
-      };
-      var watcherEnabled = localStorage.getItem('hippo-watcher-enabled') === 'true';
-      var showRecentSearches = false;
-      var searchDropdownBlurTimeout = null;
-
       // Apply dark mode on load
       if (darkMode) document.body.classList.add('dark');
 
@@ -3034,144 +2045,15 @@
       var cmdItems = [];
       var cmdMode = 'commands'; // 'commands' or 'files'
 
-      // Virtual scrolling state
-      var virtualScroller = {
-        items: [],
-        viewMode: 'grid',
-        container: null,
-        scrollParent: null,
-        overscan: 5,
-        rafId: null,
-        resizeObserver: null,
-        gridItemWidth: 190,
-        gridItemHeight: 260,
-        gridGap: 20,
-        listItemHeight: 48,
-        listGap: 6,
-        init: function(container, scrollParent) {
-          this.container = container;
-          this.scrollParent = scrollParent;
-          this.setupScrollListener();
-          this.setupResizeObserver();
-        },
-        setupScrollListener: function() {
-          var self = this;
-          if (this.scrollParent) {
-            this.scrollParent.addEventListener('scroll', function() {
-              if (self.rafId) return;
-              self.rafId = requestAnimationFrame(function() {
-                self.render();
-                self.rafId = null;
-              });
-            }, { passive: true });
-          }
-        },
-        setupResizeObserver: function() {
-          var self = this;
-          if (typeof ResizeObserver !== 'undefined') {
-            this.resizeObserver = new ResizeObserver(function() {
-              self.render();
-            });
-            if (this.scrollParent) {
-              this.resizeObserver.observe(this.scrollParent);
-            }
-          }
-        },
-        setItems: function(items, mode) {
-          this.items = items;
-          this.viewMode = mode;
-          // Use requestAnimationFrame to ensure DOM is ready for measurement
-          var self = this;
-          requestAnimationFrame(function() {
-            self.render();
-          });
-        },
-        getVisibleRange: function() {
-          if (!this.scrollParent || this.items.length === 0) {
-            return { start: 0, end: 0, offsetY: 0 };
-          }
-          var scrollTop = this.scrollParent.scrollTop;
-          var containerHeight = this.scrollParent.clientHeight || window.innerHeight || 800;
-          var containerWidth = this.container ? this.container.clientWidth : (this.scrollParent.clientWidth || window.innerWidth || 1200);
-          if (this.viewMode === 'grid') {
-            var cols = Math.floor((containerWidth + this.gridGap) / (this.gridItemWidth + this.gridGap)) || 1;
-            var rowHeight = this.gridItemHeight + this.gridGap;
-            var startRow = Math.floor(scrollTop / rowHeight);
-            var endRow = Math.ceil((scrollTop + containerHeight) / rowHeight);
-            startRow = Math.max(0, startRow - this.overscan);
-            endRow = Math.min(Math.ceil(this.items.length / cols), endRow + this.overscan);
-            var start = startRow * cols;
-            var end = Math.min(this.items.length, endRow * cols);
-            var offsetY = startRow * rowHeight;
-            return { start: start, end: end, offsetY: offsetY, cols: cols };
-          } else {
-            var itemHeight = this.listItemHeight + this.listGap;
-            var startIdx = Math.floor(scrollTop / itemHeight);
-            var endIdx = Math.ceil((scrollTop + containerHeight) / itemHeight);
-            startIdx = Math.max(0, startIdx - this.overscan);
-            endIdx = Math.min(this.items.length, endIdx + this.overscan);
-            var offsetY = startIdx * itemHeight;
-            return { start: startIdx, end: endIdx, offsetY: offsetY };
-          }
-        },
-        getTotalHeight: function() {
-          if (this.items.length === 0) return 0;
-          if (this.viewMode === 'grid') {
-            var containerWidth = this.container ? this.container.clientWidth : (window.innerWidth || 1200);
-            var cols = Math.floor((containerWidth + this.gridGap) / (this.gridItemWidth + this.gridGap)) || 1;
-            var rows = Math.ceil(this.items.length / cols);
-            return rows * (this.gridItemHeight + this.gridGap);
-          } else {
-            return this.items.length * (this.listItemHeight + this.listGap);
-          }
-        },
-        render: function() {
-          if (!this.container || this.items.length === 0) return;
-          var range = this.getVisibleRange();
-          var visibleItems = this.items.slice(range.start, range.end);
-          var html = '';
-          var containerClass = this.viewMode === 'grid' ? 'virtual-grid' : 'virtual-list';
-          html += '<div class="virtual-scroll-container">';
-          html += '<div class="virtual-scroll-spacer" style="height:' + this.getTotalHeight() + 'px;"></div>';
-          html += '<div class="virtual-scroll-content" style="transform:translateY(' + range.offsetY + 'px);">';
-          html += '<div class="' + containerClass + '">';
-          for (var i = 0; i < visibleItems.length; i++) {
-            var actualIdx = range.start + i;
-            var mem = visibleItems[i];
-            if (this.viewMode === 'grid') {
-              html += renderCard(mem, actualIdx);
-            } else {
-              html += renderListItem(mem, actualIdx);
-            }
-          }
-          html += '</div></div></div>';
-          this.container.innerHTML = html;
-          bindCardEvents();
-        },
-        destroy: function() {
-          if (this.rafId) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
-          }
-          if (this.resizeObserver) {
-            this.resizeObserver.disconnect();
-            this.resizeObserver = null;
-          }
-        }
-      };
-
       // Initialize static icons
       function initIcons() {
         document.getElementById('logoIcon').innerHTML = icons.hippo;
         document.getElementById('themeIcon').innerHTML = darkMode ? icons.sun : icons.moon;
-        document.getElementById('darkModeBtn').title = darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode';
-        document.getElementById('themeToggleIcon').innerHTML = darkMode ? icons.sun : icons.moon;
+        document.getElementById('themeText').textContent = darkMode ? 'Light Mode' : 'Dark Mode';
         document.getElementById('resetIcon').innerHTML = icons.trash;
         document.getElementById('searchIcon').innerHTML = icons.search;
         document.getElementById('gridIcon').innerHTML = icons.grid;
         document.getElementById('listIcon').innerHTML = icons.list;
-        document.getElementById('graphIcon').innerHTML = icons.graph;
-        document.getElementById('multiSelectIcon').innerHTML = icons.checkSquare;
         document.getElementById('closeIcon').innerHTML = icons.close;
         document.getElementById('starIcon').innerHTML = icons.star;
         document.getElementById('previewIcon').innerHTML = icons.file;
@@ -3179,7 +2061,6 @@
         // Bulk bar icons
         document.getElementById('bulkStarIcon').innerHTML = icons.star;
         document.getElementById('bulkTagIcon').innerHTML = icons.tag;
-        document.getElementById('bulkDeleteIcon').innerHTML = icons.trash;
         document.getElementById('bulkSelectIcon').innerHTML = icons.checkSquare;
         document.getElementById('bulkCloseIcon').innerHTML = icons.close;
         // AI icons
@@ -3190,9 +2071,6 @@
         document.getElementById('searchModeTextIcon').innerHTML = icons.search;
         document.getElementById('searchModeSemanticIcon').innerHTML = icons.brain;
         document.getElementById('searchModeSymbolIcon').innerHTML = icons.terminal;
-        // Export/Import icons
-        document.getElementById('exportIcon').innerHTML = icons.download;
-        document.getElementById('importIcon').innerHTML = icons.upload;
         // Chat icons
         document.getElementById('chatBtnIcon').innerHTML = icons.hippoAI;
         // Chat window icons
@@ -3237,7 +2115,6 @@
         { id: 'toggle-dark', title: 'Toggle Dark Mode', desc: 'Switch between light and dark themes', icon: 'moon', shortcut: ['⌘', 'D'], action: 'toggleDark' },
         { id: 'grid-view', title: 'Grid View', desc: 'Display files as grid', icon: 'grid', action: 'gridView' },
         { id: 'list-view', title: 'List View', desc: 'Display files as list', icon: 'list', action: 'listView' },
-        { id: 'graph-view', title: 'Graph View', desc: 'Visualize connections between files', icon: 'graph', shortcut: ['⌘', 'G'], action: 'graphView' },
         { id: 'show-all', title: 'Show All Files', desc: 'Clear filters and show all', icon: 'eye', action: 'showAll' },
         { id: 'show-images', title: 'Show Images', desc: 'Filter to images only', icon: 'image', action: 'filterImages' },
         { id: 'show-videos', title: 'Show Videos', desc: 'Filter to videos only', icon: 'video', action: 'filterVideos' },
@@ -3397,9 +2274,6 @@
           case 'listView':
             document.getElementById('listViewBtn').click();
             break;
-          case 'graphView':
-            document.getElementById('graphViewBtn').click();
-            break;
           case 'showAll':
             setFilter('all');
             break;
@@ -3496,13 +2370,6 @@
         invoke = window.__TAURI__.core.invoke;
         convertFileSrc = window.__TAURI__.core.convertFileSrc;
 
-        // Initialize virtual scroller
-        var filesContainer = document.getElementById('filesContainer');
-        var scrollParent = document.querySelector('.content');
-        if (filesContainer && scrollParent) {
-          virtualScroller.init(filesContainer, scrollParent);
-        }
-
         invoke('initialize').then(function() {
           loadData();
         }).catch(function(e) {
@@ -3510,165 +2377,29 @@
         });
 
         function loadData() {
-          // Show skeleton loading
-          showLoadingSkeletons();
-
           Promise.all([
             invoke('get_stats'),
             invoke('get_sources'),
             invoke('get_tags'),
-            invoke('search', { query: '', tags: [] }),
-            invoke('list_collections').catch(function() { return []; }),
-            invoke('get_qdrant_stats').catch(function() { return { available: false }; }),
-            invoke('ollama_status').catch(function() { return { available: false }; })
+            invoke('search', { query: '', tags: [] })
           ]).then(function(r) {
             document.getElementById('statsText').textContent = (r[0] ? r[0].total_memories : 0) + ' memories';
             sources = r[1] || [];
             allTags = r[2] || [];
             memories = (r[3].memories || []).map(function(x) { return x.memory; });
-            collections = r[4] || [];
-            qdrantAvailable = r[5] && r[5].available;
-            qdrantVectorCount = (r[5] && r[5].total_vectors) || 0;
-            ollamaAvailable = r[6] && r[6].available;
-
-            // Update status indicators
-            updateStatusIndicators();
-
             renderSources();
             renderTagBar();
             renderFiles();
-            renderCollections();
           }).catch(function(e) {
             showToast('Load failed: ' + e, 'error');
-            renderFiles(); // Show empty state on error
           });
         }
 
-        var searchDebounceTimer = null;
         function search(query) {
-          // Show subtle loading state for search
-          document.getElementById('resultCount').textContent = 'Searching...';
-
           invoke('search', { query: query || '', tags: activeTags }).then(function(r) {
             memories = (r.memories || []).map(function(x) { return x.memory; });
             renderFiles();
-            if (query && query.trim()) { addToHistory(query, memories.length); }
-            var saveBtn = document.getElementById('saveSearchBtn');
-            if (saveBtn) { saveBtn.style.display = (query && query.trim()) ? 'flex' : 'none'; }
           });
-        }
-
-        function addToHistory(query, count) {
-          if (!query || query.trim() === '') return;
-          var timestamp = new Date().toISOString();
-          var entry = { query: query.trim(), count: count, timestamp: timestamp };
-          recentSearches = recentSearches.filter(function(item) { return item.query !== entry.query; });
-          recentSearches.unshift(entry);
-          if (recentSearches.length > 20) recentSearches = recentSearches.slice(0, 20);
-          localStorage.setItem('hippo-recent-searches', JSON.stringify(recentSearches));
-        }
-        function removeFromHistory(index) {
-          recentSearches.splice(index, 1);
-          localStorage.setItem('hippo-recent-searches', JSON.stringify(recentSearches));
-          renderSearchDropdown();
-        }
-        function clearHistory() {
-          recentSearches = [];
-          localStorage.setItem('hippo-recent-searches', JSON.stringify(recentSearches));
-          renderSearchDropdown();
-        }
-        function saveSearch(name, query) {
-          if (!name || !query) return;
-          var count = getFiltered().length;
-          var entry = { name: name.trim(), query: query.trim(), count: count };
-          savedSearches = savedSearches.filter(function(item) { return item.name !== entry.name; });
-          savedSearches.push(entry);
-          localStorage.setItem('hippo-saved-searches', JSON.stringify(savedSearches));
-          renderSearchDropdown();
-          showToast('Search saved as "' + name + '"', 'success');
-        }
-        function removeSavedSearch(index) {
-          var name = savedSearches[index].name;
-          savedSearches.splice(index, 1);
-          localStorage.setItem('hippo-saved-searches', JSON.stringify(savedSearches));
-          renderSearchDropdown();
-          showToast('Removed "' + name + '"', 'info');
-        }
-        function runSavedSearch(query) {
-          document.getElementById('searchInput').value = query;
-          search(query);
-          hideSearchDropdown();
-        }
-        function showSearchDropdown() {
-          showRecentSearches = true;
-          renderSearchDropdown();
-        }
-        function hideSearchDropdown() {
-          showRecentSearches = false;
-          document.getElementById('recentSearchesDropdown').classList.remove('show');
-        }
-        function renderSearchDropdown() {
-          var dropdown = document.getElementById('recentSearchesDropdown');
-          if (!dropdown) return;
-          if (!showRecentSearches || (recentSearches.length === 0 && savedSearches.length === 0)) { dropdown.classList.remove('show'); return; }
-          var html = '';
-          if (savedSearches.length > 0) {
-            html += '<div class="search-dropdown-section"><div class="search-dropdown-header">Saved Searches</div>';
-            savedSearches.forEach(function(item, idx) {
-              html += '<div class="saved-search-item" onclick="runSavedSearch(\'' + escapeHtml(item.query) + '\')">';
-              html += '<span class="icon icon-sm saved-search-icon">&#128278;</span>';
-              html += '<div style="flex:1;min-width:0;"><div class="saved-search-name">' + escapeHtml(item.name) + '</div>';
-              html += '<div class="saved-search-query">' + escapeHtml(item.query) + ' (' + item.count + ' files)</div></div>';
-              html += '<button class="recent-search-remove" onclick="event.stopPropagation();removeSavedSearch(' + idx + ')" title="Remove"><span class="icon icon-sm">&#10005;</span></button></div>';
-            });
-            html += '</div>';
-          }
-          if (recentSearches.length > 0) {
-            html += '<div class="search-dropdown-section"><div class="search-dropdown-header">Recent Searches<button class="search-dropdown-clear" onclick="clearHistory()">Clear All</button></div>';
-            recentSearches.forEach(function(item, idx) {
-              var timeAgo = getTimeAgo(item.timestamp);
-              html += '<div class="recent-search-item" onclick="runSavedSearch(\'' + escapeHtml(item.query) + '\')">';
-              html += '<span class="icon icon-sm recent-search-icon">&#128336;</span><div class="recent-search-text">' + escapeHtml(item.query) + '</div>';
-              html += '<div class="recent-search-meta"><span class="recent-search-count">' + item.count + '</span><span class="recent-search-time">' + timeAgo + '</span></div>';
-              html += '<button class="recent-search-remove" onclick="event.stopPropagation();removeFromHistory(' + idx + ')" title="Remove"><span class="icon icon-sm">&#10005;</span></button></div>';
-            });
-            html += '</div>';
-          }
-          dropdown.innerHTML = html;
-          dropdown.classList.add('show');
-        }
-        function getTimeAgo(timestamp) {
-          var now = new Date();
-          var then = new Date(timestamp);
-          var seconds = Math.floor((now - then) / 1000);
-          if (seconds < 60) return 'just now';
-          if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
-          if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
-          if (seconds < 604800) return Math.floor(seconds / 86400) + 'd ago';
-          return Math.floor(seconds / 604800) + 'w ago';
-        }
-        function escapeHtml(text) {
-          var div = document.createElement('div');
-          div.textContent = text;
-          return div.innerHTML;
-        }
-        function promptSaveSearch() {
-          var query = document.getElementById('searchInput').value.trim();
-          if (!query) { showToast('Enter a search query first', 'info'); return; }
-          var name = prompt('Name this search:', query);
-          if (name) saveSearch(name, query);
-        }
-
-        function updateStatusIndicators() {
-          var qdrantDot = document.getElementById('qdrantDot');
-          var ollamaDot = document.getElementById('ollamaDot');
-
-          if (qdrantDot) {
-            qdrantDot.className = 'status-dot ' + (qdrantAvailable ? 'online' : 'offline');
-          }
-          if (ollamaDot) {
-            ollamaDot.className = 'status-dot ' + (ollamaAvailable ? 'online' : 'offline');
-          }
         }
 
         function renderSources() {
@@ -3728,127 +2459,6 @@
           });
         }
 
-        function renderCollections() {
-          var container = document.getElementById('collectionsSection');
-          if (!container) return;
-
-          if (collections.length === 0) {
-            container.innerHTML = '<div class="section-title">COLLECTIONS</div><p style="font-size:12px;color:#a8a29e;padding:8px 12px;">No collections yet</p>';
-            return;
-          }
-
-          var html = '<div class="section-title">COLLECTIONS</div>';
-          collections.forEach(function(c) {
-            var count = c.memory_ids ? c.memory_ids.length : 0;
-            html += '<div class="source-item collection-item" data-collection="' + c.id + '">';
-            html += '<span class="icon icon-sm" style="color:#8b5cf6;">' + icons.folder + '</span>';
-            html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(c.name) + '</span>';
-            html += '<span style="font-size:11px;color:#a8a29e;">' + count + '</span>';
-            html += '</div>';
-          });
-          container.innerHTML = html;
-
-          document.querySelectorAll('.collection-item').forEach(function(item) {
-            item.onclick = function() {
-              var colId = item.dataset.collection;
-              filterByCollection(colId);
-            };
-          });
-        }
-
-        function filterByCollection(collectionId) {
-          var col = collections.find(function(c) { return c.id === collectionId; });
-          if (!col || !col.memory_ids) return;
-
-          memories = memories.filter(function(m) {
-            return col.memory_ids.indexOf(m.id) !== -1;
-          });
-          renderFiles();
-          showToast('Filtered to "' + col.name + '"', 'success');
-        }
-
-        function loadVirtualPaths(memoryId) {
-          invoke('get_virtual_paths', { memoryId: memoryId }).then(function(paths) {
-            virtualPaths = paths || [];
-            renderVirtualPaths();
-          }).catch(function() {
-            virtualPaths = [];
-          });
-        }
-
-        function loadSimilarMemories(memoryId) {
-          invoke('find_similar_memories', { memoryId: memoryId, limit: 5 }).then(function(results) {
-            similarMemories = results || [];
-            renderSimilarMemories();
-          }).catch(function() {
-            similarMemories = [];
-          });
-        }
-
-        function renderVirtualPaths() {
-          var container = document.getElementById('virtualPathsSection');
-          if (!container) return;
-
-          if (virtualPaths.length === 0) {
-            container.innerHTML = '';
-            return;
-          }
-
-          var html = '<div class="detail-section"><h4>Virtual Paths</h4>';
-          virtualPaths.forEach(function(vp) {
-            html += '<div class="virtual-path" style="font-size:12px;padding:4px 0;color:#57534e;">';
-            html += '<span class="icon icon-sm" style="margin-right:4px;">' + icons.folder + '</span>';
-            html += esc(vp.path);
-            html += ' <span style="color:#a8a29e;">(' + Math.round(vp.confidence * 100) + '%)</span>';
-            html += '</div>';
-          });
-          html += '</div>';
-          container.innerHTML = html;
-        }
-
-        function renderSimilarMemories() {
-          var container = document.getElementById('similarSection');
-          if (!container) return;
-
-          if (similarMemories.length === 0) {
-            container.innerHTML = '';
-            return;
-          }
-
-          var html = '<div class="detail-section"><h4>Similar Files</h4>';
-          similarMemories.forEach(function(item) {
-            var mem = item.memory;
-            var score = Math.round((item.similarity || 0) * 100);
-            var name = mem.path.split('/').pop();
-            html += '<div class="similar-item" style="font-size:12px;padding:4px 0;cursor:pointer;" data-id="' + mem.id + '">';
-            html += '<span class="icon icon-sm" style="margin-right:4px;">' + getTypeIcon(getType(mem.kind)) + '</span>';
-            html += esc(name);
-            html += ' <span style="color:#a8a29e;">(' + score + '% match)</span>';
-            html += '</div>';
-          });
-          html += '</div>';
-          container.innerHTML = html;
-
-          document.querySelectorAll('.similar-item').forEach(function(item) {
-            item.onclick = function() {
-              var memId = item.dataset.id;
-              var mem = memories.find(function(m) { return m.id === memId; });
-              if (mem) selectMemory(mem);
-            };
-          });
-        }
-
-        function discoverCollections() {
-          showToast('Discovering collections...', 'info');
-          invoke('discover_collections').then(function(newCols) {
-            collections = collections.concat(newCols || []);
-            renderCollections();
-            showToast('Discovered ' + (newCols ? newCols.length : 0) + ' collections', 'success');
-          }).catch(function(e) {
-            showToast('Discovery failed: ' + e, 'error');
-          });
-        }
-
         function getFiltered() {
           var filtered = memories;
           if (filterType === 'favorites') {
@@ -3856,106 +2466,7 @@
           } else if (filterType !== 'all') {
             filtered = memories.filter(function(m) { return getType(m.kind) === filterType; });
           }
-          // Apply date filter
-          if (dateFilter !== 'all') {
-            var now = new Date();
-            var cutoff;
-            if (dateFilter === 'today') {
-              cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            } else if (dateFilter === 'week') {
-              cutoff = new Date(now - 7 * 24 * 60 * 60 * 1000);
-            } else if (dateFilter === 'month') {
-              cutoff = new Date(now - 30 * 24 * 60 * 60 * 1000);
-            }
-            if (cutoff) {
-              filtered = filtered.filter(function(m) {
-                var mDate = new Date(m.modified_at || m.created_at);
-                return mDate >= cutoff;
-              });
-            }
-          }
           return filtered;
-        }
-
-        function getDisplayedMemories() {
-          return getFiltered();
-        }
-
-        // Keyboard navigation helpers
-        function handleArrowNavigation(key) {
-          var displayed = getDisplayedMemories();
-          if (displayed.length === 0) return;
-
-          var cols = 1;
-          if (viewMode === 'grid') {
-            var container = document.getElementById('filesContainer');
-            var grid = container.querySelector('.grid');
-            if (grid) {
-              var gridWidth = grid.offsetWidth;
-              cols = Math.floor(gridWidth / 220) || 1; // Approx card width
-            }
-          }
-
-          var newIndex = keyboardFocusIndex;
-          if (key === 'ArrowRight') {
-            newIndex = Math.min(displayed.length - 1, newIndex + 1);
-          } else if (key === 'ArrowLeft') {
-            newIndex = Math.max(0, newIndex - 1);
-          } else if (key === 'ArrowDown') {
-            newIndex = Math.min(displayed.length - 1, newIndex + (viewMode === 'grid' ? cols : 1));
-          } else if (key === 'ArrowUp') {
-            newIndex = Math.max(0, newIndex - (viewMode === 'grid' ? cols : 1));
-          }
-
-          if (keyboardFocusIndex === -1) newIndex = 0;
-          keyboardFocusIndex = newIndex;
-          updateKeyboardFocus();
-        }
-
-        function updateKeyboardFocus() {
-          // Remove previous focus
-          document.querySelectorAll('.keyboard-focused').forEach(function(el) {
-            el.classList.remove('keyboard-focused');
-          });
-
-          if (keyboardFocusIndex < 0) return;
-
-          var selector = viewMode === 'grid' ? '.card' : '.list-item';
-          var items = document.querySelectorAll(selector);
-          if (items[keyboardFocusIndex]) {
-            items[keyboardFocusIndex].classList.add('keyboard-focused');
-            items[keyboardFocusIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
-        }
-
-        // Render skeleton loading cards
-        function renderSkeletons(count) {
-          var html = '';
-          if (viewMode === 'grid') {
-            html = '<div class="grid">';
-            for (var i = 0; i < count; i++) {
-              html += '<div class="skeleton-card" style="animation-delay:' + (i * 50) + 'ms">';
-              html += '<div class="skeleton-preview"></div>';
-              html += '<div class="skeleton-info"><div class="skeleton-title"></div><div class="skeleton-size"></div></div>';
-              html += '</div>';
-            }
-            html += '</div>';
-          } else {
-            html = '<div class="list">';
-            for (var i = 0; i < count; i++) {
-              html += '<div class="skeleton-list-item" style="animation-delay:' + (i * 30) + 'ms">';
-              html += '<div class="skeleton-thumb"></div>';
-              html += '<div class="skeleton-info"><div class="skeleton-title-line"></div><div class="skeleton-path-line"></div></div>';
-              html += '</div>';
-            }
-            html += '</div>';
-          }
-          return html;
-        }
-
-        // Show loading skeletons
-        function showLoadingSkeletons() {
-          document.getElementById('filesContainer').innerHTML = renderSkeletons(12);
         }
 
         function renderFiles() {
@@ -3963,47 +2474,31 @@
           document.getElementById('resultCount').textContent = filtered.length + ' files';
 
           if (filtered.length === 0) {
-            var emptyHtml = '<div class="empty">';
-            emptyHtml += '<div class="empty-mascot">🦛</div>';
-            emptyHtml += '<div class="empty-title">' + (sources.length === 0 ? 'Welcome to Hippo!' : 'No files found') + '</div>';
-            emptyHtml += '<div class="empty-text">' + (sources.length === 0 ? 'Add a folder and I\'ll remember every file for you!' : 'Try a different search or filter') + '</div>';
-            if (sources.length === 0) {
-              emptyHtml += '<div class="empty-action"><button class="empty-action-btn" onclick="addSource()"><span class="icon icon-sm">' + icons.plus + '</span> Add Folder</button></div>';
-            }
-            emptyHtml += '</div>';
-            document.getElementById('filesContainer').innerHTML = emptyHtml;
+            document.getElementById('filesContainer').innerHTML = '<div class="empty"><div class="empty-icon"><span class="icon icon-2xl" style="color:#a8a29e;">' + icons.folderEmpty + '</span></div><div class="empty-title">' +
+              (sources.length === 0 ? 'Add a folder to get started' : 'No files found') +
+              '</div><div class="empty-text">' +
+              (sources.length === 0 ? 'Click "+ Add Folder" to index your files' : 'Try a different search or filter') +
+              '</div></div>';
             return;
           }
 
-          // Handle graph view
-          if (viewMode === 'graph') {
-            renderGraphView(filtered);
-            return;
-          }
-
-          // Use virtual scrolling for large lists (>100 items)
-          if (filtered.length > 100) {
-            virtualScroller.setItems(filtered, viewMode);
+          var html = '';
+          if (viewMode === 'grid') {
+            html = '<div class="grid">';
+            filtered.slice(0, 100).forEach(function(mem, i) {
+              html += renderCard(mem, i);
+            });
+            html += '</div>';
           } else {
-            // For small lists, render normally for simplicity
-            var html = '';
-            if (viewMode === 'grid') {
-              html = '<div class="grid">';
-              filtered.forEach(function(mem, i) {
-                html += renderCard(mem, i);
-              });
-              html += '</div>';
-            } else {
-              html = '<div class="list">';
-              filtered.forEach(function(mem, i) {
-                html += renderListItem(mem, i);
-              });
-              html += '</div>';
-            }
-
-            document.getElementById('filesContainer').innerHTML = html;
-            bindCardEvents();
+            html = '<div class="list">';
+            filtered.slice(0, 100).forEach(function(mem, i) {
+              html += renderListItem(mem, i);
+            });
+            html += '</div>';
           }
+
+          document.getElementById('filesContainer').innerHTML = html;
+          bindCardEvents();
         }
 
         function renderCard(mem, idx) {
@@ -4014,7 +2509,7 @@
           var isSelected = selectedIds.indexOf(mem.id) !== -1;
 
           var html = '<div class="card' + (isSelected ? ' selected' : '') + '" data-idx="' + idx + '" data-id="' + mem.id + '">';
-          html += '<div class="card-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 || isMultiSelectMode ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
+          html += '<div class="card-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
           html += '<span class="icon icon-sm">' + icons.check + '</span>';
           html += '</div>';
           html += '<div class="card-preview" style="background:' + color + '">';
@@ -4022,10 +2517,10 @@
             // Use thumbnail for images and videos (loaded async)
             var thumbSrc = thumbnailCache[mem.path];
             if (thumbSrc) {
-              html += '<img src="' + convertFileSrc(thumbSrc) + '" onload="this.classList.add(\'loaded\')" onerror="this.style.display=\'none\'" loading="lazy">';
+              html += '<img src="' + convertFileSrc(thumbSrc) + '" onerror="this.style.display=\'none\'" loading="lazy">';
             } else {
-              // Show placeholder, thumbnail will load async (hidden via CSS opacity)
-              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" loading="lazy">';
+              // Show placeholder, thumbnail will load async
+              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" style="display:none" loading="lazy">';
             }
           }
           html += getIcon(mem.kind, 'xl');
@@ -4045,16 +2540,16 @@
           var isSelected = selectedIds.indexOf(mem.id) !== -1;
 
           var html = '<div class="list-item' + (isSelected ? ' selected' : '') + '" data-idx="' + idx + '" data-id="' + mem.id + '">';
-          html += '<div class="list-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 || isMultiSelectMode ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
+          html += '<div class="list-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
           html += '<span class="icon icon-sm">' + icons.check + '</span>';
           html += '</div>';
           html += '<div class="list-thumb" style="background:' + color + '">';
           if ((type === 'image' || type === 'video') && convertFileSrc) {
             var thumbSrc = thumbnailCache[mem.path];
             if (thumbSrc) {
-              html += '<img src="' + convertFileSrc(thumbSrc) + '" onload="this.classList.add(\'loaded\')" onerror="this.style.display=\'none\'" loading="lazy">';
+              html += '<img src="' + convertFileSrc(thumbSrc) + '" onerror="this.style.display=\'none\'" loading="lazy">';
             } else {
-              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" loading="lazy">';
+              html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" style="display:none" loading="lazy">';
             }
           }
           html += getIcon(mem.kind, 'lg');
@@ -4082,8 +2577,6 @@
               img.src = convertFileSrc(thumbnailCache[path]);
               img.style.display = '';
               img.classList.remove('thumb-pending');
-              // Smooth fade-in after image loads
-              img.onload = function() { img.classList.add('loaded'); };
               return;
             }
 
@@ -4100,8 +2593,6 @@
                 el.src = convertFileSrc(thumbPath);
                 el.style.display = '';
                 el.classList.remove('thumb-pending');
-                // Smooth fade-in after image loads
-                el.onload = function() { el.classList.add('loaded'); };
               });
             }).catch(function(e) {
               thumbnailPending[path] = false;
@@ -4110,7 +2601,6 @@
                 el.src = convertFileSrc(path);
                 el.style.display = '';
                 el.classList.remove('thumb-pending');
-                el.onload = function() { el.classList.add('loaded'); };
               });
             });
           });
@@ -4177,19 +2667,9 @@
         function updateBulkBar() {
           var bulkBar = document.getElementById('bulkBar');
           var bulkCount = document.getElementById('bulkCount');
-          var bulkSelectText = document.getElementById('bulkSelectText');
-          var filtered = getFiltered();
-
           if (selectedIds.length > 0) {
             bulkBar.classList.add('open');
             bulkCount.textContent = selectedIds.length + ' selected';
-
-            // Update Select All button text
-            if (selectedIds.length === filtered.length) {
-              bulkSelectText.textContent = 'Deselect All';
-            } else {
-              bulkSelectText.textContent = 'Select All';
-            }
           } else {
             bulkBar.classList.remove('open');
           }
@@ -4212,451 +2692,6 @@
           updateBulkBar();
           renderFiles();
         }
-
-        // ===== GRAPH VISUALIZATION FUNCTIONS =====
-        function renderGraphView(memories) {
-          var container = document.getElementById('filesContainer');
-
-          // Create graph container HTML
-          var html = '<div id="graphContainer">';
-          html += '<div class="graph-toolbar">';
-          html += '<button class="graph-toolbar-btn' + (graphMode === 'mindmap' ? ' active' : '') + '" onclick="switchGraphMode(\'mindmap\')">Mind Map</button>';
-          html += '<button class="graph-toolbar-btn' + (graphMode === 'code' ? ' active' : '') + '" onclick="switchGraphMode(\'code\')">Code Graph</button>';
-          html += '</div>';
-          html += '<div class="graph-controls">';
-          html += '<button class="graph-control-btn" onclick="zoomIn()" title="Zoom In"><span class="icon icon-sm">+</span></button>';
-          html += '<button class="graph-control-btn" onclick="zoomOut()" title="Zoom Out"><span class="icon icon-sm">-</span></button>';
-          html += '<button class="graph-control-btn" onclick="resetZoom()" title="Reset"><span class="icon icon-sm">' + icons.refresh + '</span></button>';
-          html += '</div>';
-          html += '<div id="graphSvg"></div>';
-          html += '</div>';
-
-          container.innerHTML = html;
-
-          // If we have a selected memory and it's still in the filtered results, build mind map around it
-          if (selectedMemory && memories.find(function(m) { return m.id === selectedMemory.id; })) {
-            if (graphMode === 'mindmap') {
-              buildMindMap(selectedMemory.id);
-            } else {
-              buildCodeGraph(memories);
-            }
-          } else if (memories.length > 0) {
-            // Otherwise, build graph from available memories
-            if (graphMode === 'code') {
-              buildCodeGraph(memories);
-            } else {
-              // For mindmap, show a message to select a file
-              showGraphEmptyState('Select a file to view its connections');
-            }
-          } else {
-            showGraphEmptyState('No files to visualize');
-          }
-        }
-
-        function showGraphEmptyState(message) {
-          document.getElementById('graphSvg').innerHTML =
-            '<div class="graph-empty">' +
-            '<div class="graph-empty-icon">' + icons.graph + '</div>' +
-            '<div class="graph-empty-title">Graph View</div>' +
-            '<div class="graph-empty-text">' + message + '</div>' +
-            '</div>';
-        }
-
-        function switchGraphMode(mode) {
-          graphMode = mode;
-          renderFiles();
-        }
-
-        function buildMindMap(memoryId) {
-          // Call backend to get mind map data
-          invoke('get_mind_map', { memoryId: memoryId, depth: 2 })
-            .then(function(mindMap) {
-              graphData = mindMap;
-              renderMindMapD3(mindMap);
-            })
-            .catch(function(err) {
-              console.error('Failed to build mind map:', err);
-              showGraphEmptyState('Failed to load mind map: ' + err);
-            });
-        }
-
-        function buildCodeGraph(memories) {
-          // Filter code files only
-          var codeFiles = memories.filter(function(m) {
-            return m.kind && m.kind.Code;
-          });
-
-          if (codeFiles.length === 0) {
-            showGraphEmptyState('No code files found. Switch to Mind Map mode or filter for code files.');
-            return;
-          }
-
-          // Build a simple graph from code files
-          // Create nodes from code files
-          var nodes = codeFiles.map(function(mem) {
-            var fileName = mem.path.split('/').pop();
-            var lang = mem.kind.Code ? mem.kind.Code.language : 'unknown';
-            return {
-              id: mem.id,
-              label: fileName,
-              language: lang,
-              lines: mem.kind.Code ? mem.kind.Code.lines : 0,
-              path: mem.path,
-              color: getCodeColor(lang)
-            };
-          });
-
-          // Create edges based on imports (if available in metadata)
-          var edges = [];
-          codeFiles.forEach(function(mem) {
-            if (mem.metadata && mem.metadata.code_info && mem.metadata.code_info.imports) {
-              var sourceId = mem.id;
-              mem.metadata.code_info.imports.forEach(function(imp) {
-                // Try to find matching file
-                var target = codeFiles.find(function(m) {
-                  return m.path.includes(imp) || imp.includes(m.path.split('/').pop().replace(/\.\w+$/, ''));
-                });
-                if (target) {
-                  edges.push({
-                    source: sourceId,
-                    target: target.id,
-                    kind: 'imports'
-                  });
-                }
-              });
-            }
-          });
-
-          // Group by folder
-          var folders = {};
-          codeFiles.forEach(function(mem) {
-            var parts = mem.path.split('/');
-            var folder = parts.length > 1 ? parts[parts.length - 2] : 'root';
-            if (!folders[folder]) folders[folder] = [];
-            folders[folder].push(mem.id);
-          });
-
-          // Add same-folder edges
-          Object.values(folders).forEach(function(fileIds) {
-            if (fileIds.length > 1 && fileIds.length <= 5) {
-              for (var i = 0; i < fileIds.length; i++) {
-                for (var j = i + 1; j < fileIds.length; j++) {
-                  edges.push({
-                    source: fileIds[i],
-                    target: fileIds[j],
-                    kind: 'same_folder'
-                  });
-                }
-              }
-            }
-          });
-
-          var codeGraph = { nodes: nodes, edges: edges };
-          renderCodeGraphD3(codeGraph);
-        }
-
-        function getCodeColor(language) {
-          var colors = {
-            'rust': '#CE412B',
-            'python': '#3776AB',
-            'javascript': '#F7DF1E',
-            'typescript': '#3178C6',
-            'go': '#00ADD8',
-            'java': '#007396',
-            'cpp': '#00599C',
-            'c': '#A8B9CC'
-          };
-          return colors[language.toLowerCase()] || '#78716c';
-        }
-
-        function renderMindMapD3(mindMap) {
-          if (!window.d3) {
-            showGraphEmptyState('D3.js library not loaded');
-            return;
-          }
-
-          var container = document.getElementById('graphSvg');
-          var width = container.clientWidth || 800;
-          var height = container.clientHeight || 600;
-
-          // Clear previous content
-          container.innerHTML = '';
-
-          // Create SVG
-          var svg = d3.select('#graphSvg')
-            .append('svg')
-            .attr('width', width)
-            .attr('height', height)
-            .attr('viewBox', [0, 0, width, height]);
-
-          // Add zoom behavior
-          var g = svg.append('g');
-          var zoom = d3.zoom()
-            .scaleExtent([0.1, 4])
-            .on('zoom', function(event) {
-              g.attr('transform', event.transform);
-            });
-          svg.call(zoom);
-
-          // Define arrowhead marker
-          svg.append('defs').append('marker')
-            .attr('id', 'arrowhead')
-            .attr('viewBox', '-0 -5 10 10')
-            .attr('refX', 20)
-            .attr('refY', 0)
-            .attr('orient', 'auto')
-            .attr('markerWidth', 8)
-            .attr('markerHeight', 8)
-            .append('path')
-            .attr('d', 'M 0,-5 L 10,0 L 0,5')
-            .attr('fill', '#3b82f6');
-
-          // Use pre-computed positions if available, otherwise use force simulation
-          if (mindMap.nodes.every(function(n) { return n.position; })) {
-            renderWithPositions(g, mindMap, width, height);
-          } else {
-            renderWithForce(g, mindMap, width, height);
-          }
-
-          // Store simulation reference
-          graphSimulation = { svg: svg, zoom: zoom, g: g };
-        }
-
-        function renderWithPositions(g, mindMap, width, height) {
-          // Render edges
-          var link = g.append('g')
-            .selectAll('line')
-            .data(mindMap.edges)
-            .join('line')
-            .attr('class', function(d) { return 'graph-edge ' + d.kind; })
-            .attr('x1', function(d) {
-              var source = mindMap.nodes.find(function(n) { return n.id === d.source; });
-              return source ? source.position.x : 0;
-            })
-            .attr('y1', function(d) {
-              var source = mindMap.nodes.find(function(n) { return n.id === d.source; });
-              return source ? source.position.y : 0;
-            })
-            .attr('x2', function(d) {
-              var target = mindMap.nodes.find(function(n) { return n.id === d.target; });
-              return target ? target.position.x : 0;
-            })
-            .attr('y2', function(d) {
-              var target = mindMap.nodes.find(function(n) { return n.id === d.target; });
-              return target ? target.position.y : 0;
-            });
-
-          // Render nodes
-          var node = g.append('g')
-            .selectAll('g')
-            .data(mindMap.nodes)
-            .join('g')
-            .attr('class', function(d) { return 'graph-node' + (d.is_center ? ' center' : ''); })
-            .attr('transform', function(d) {
-              return 'translate(' + (d.position ? d.position.x : 0) + ',' + (d.position ? d.position.y : 0) + ')';
-            })
-            .on('click', function(event, d) {
-              // Find and select the memory
-              var mem = memories.find(function(m) { return m.id === d.id; });
-              if (mem) selectMemory(mem);
-            });
-
-          node.append('circle')
-            .attr('class', 'node-circle')
-            .attr('r', function(d) { return d.size * 20 + 10; })
-            .attr('fill', function(d) { return d.color; });
-
-          node.append('text')
-            .attr('class', 'node-label')
-            .attr('dy', function(d) { return d.size * 20 + 25; })
-            .text(function(d) { return d.label.length > 20 ? d.label.substring(0, 18) + '...' : d.label; });
-        }
-
-        function renderWithForce(g, mindMap, width, height) {
-          var simulation = d3.forceSimulation(mindMap.nodes)
-            .force('link', d3.forceLink(mindMap.edges).id(function(d) { return d.id; }).distance(100))
-            .force('charge', d3.forceManyBody().strength(-300))
-            .force('center', d3.forceCenter(width / 2, height / 2))
-            .force('collision', d3.forceCollide().radius(40));
-
-          // Render edges
-          var link = g.append('g')
-            .selectAll('line')
-            .data(mindMap.edges)
-            .join('line')
-            .attr('class', function(d) { return 'graph-edge ' + d.kind; });
-
-          // Render nodes
-          var node = g.append('g')
-            .selectAll('g')
-            .data(mindMap.nodes)
-            .join('g')
-            .attr('class', function(d) { return 'graph-node' + (d.is_center ? ' center' : ''); })
-            .on('click', function(event, d) {
-              var mem = memories.find(function(m) { return m.id === d.id; });
-              if (mem) selectMemory(mem);
-            })
-            .call(d3.drag()
-              .on('start', function(event, d) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-              })
-              .on('drag', function(event, d) {
-                d.fx = event.x;
-                d.fy = event.y;
-              })
-              .on('end', function(event, d) {
-                if (!event.active) simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
-              }));
-
-          node.append('circle')
-            .attr('class', 'node-circle')
-            .attr('r', function(d) { return d.size * 20 + 10; })
-            .attr('fill', function(d) { return d.color; });
-
-          node.append('text')
-            .attr('class', 'node-label')
-            .attr('dy', function(d) { return d.size * 20 + 25; })
-            .text(function(d) { return d.label.length > 20 ? d.label.substring(0, 18) + '...' : d.label; });
-
-          simulation.on('tick', function() {
-            link
-              .attr('x1', function(d) { return d.source.x; })
-              .attr('y1', function(d) { return d.source.y; })
-              .attr('x2', function(d) { return d.target.x; })
-              .attr('y2', function(d) { return d.target.y; });
-
-            node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
-          });
-        }
-
-        function renderCodeGraphD3(codeGraph) {
-          if (!window.d3) {
-            showGraphEmptyState('D3.js library not loaded');
-            return;
-          }
-
-          var container = document.getElementById('graphSvg');
-          var width = container.clientWidth || 800;
-          var height = container.clientHeight || 600;
-
-          container.innerHTML = '';
-
-          var svg = d3.select('#graphSvg')
-            .append('svg')
-            .attr('width', width)
-            .attr('height', height)
-            .attr('viewBox', [0, 0, width, height]);
-
-          var g = svg.append('g');
-          var zoom = d3.zoom()
-            .scaleExtent([0.1, 4])
-            .on('zoom', function(event) {
-              g.attr('transform', event.transform);
-            });
-          svg.call(zoom);
-
-          // Define arrowhead marker
-          svg.append('defs').append('marker')
-            .attr('id', 'arrowhead')
-            .attr('viewBox', '-0 -5 10 10')
-            .attr('refX', 20)
-            .attr('refY', 0)
-            .attr('orient', 'auto')
-            .attr('markerWidth', 8)
-            .attr('markerHeight', 8)
-            .append('path')
-            .attr('d', 'M 0,-5 L 10,0 L 0,5')
-            .attr('fill', '#3b82f6');
-
-          var simulation = d3.forceSimulation(codeGraph.nodes)
-            .force('link', d3.forceLink(codeGraph.edges).id(function(d) { return d.id; }).distance(120))
-            .force('charge', d3.forceManyBody().strength(-400))
-            .force('center', d3.forceCenter(width / 2, height / 2))
-            .force('collision', d3.forceCollide().radius(50));
-
-          var link = g.append('g')
-            .selectAll('line')
-            .data(codeGraph.edges)
-            .join('line')
-            .attr('class', function(d) { return 'graph-edge ' + d.kind; });
-
-          var node = g.append('g')
-            .selectAll('g')
-            .data(codeGraph.nodes)
-            .join('g')
-            .attr('class', 'graph-node')
-            .on('click', function(event, d) {
-              var mem = memories.find(function(m) { return m.id === d.id; });
-              if (mem) selectMemory(mem);
-            })
-            .call(d3.drag()
-              .on('start', function(event, d) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-              })
-              .on('drag', function(event, d) {
-                d.fx = event.x;
-                d.fy = event.y;
-              })
-              .on('end', function(event, d) {
-                if (!event.active) simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
-              }));
-
-          node.append('circle')
-            .attr('class', 'node-circle')
-            .attr('r', 25)
-            .attr('fill', function(d) { return d.color; });
-
-          node.append('text')
-            .attr('class', 'node-label')
-            .attr('dy', 40)
-            .text(function(d) { return d.label.length > 15 ? d.label.substring(0, 13) + '...' : d.label; });
-
-          simulation.on('tick', function() {
-            link
-              .attr('x1', function(d) { return d.source.x; })
-              .attr('y1', function(d) { return d.source.y; })
-              .attr('x2', function(d) { return d.target.x; })
-              .attr('y2', function(d) { return d.target.y; });
-
-            node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
-          });
-
-          graphSimulation = { svg: svg, zoom: zoom, simulation: simulation };
-        }
-
-        function zoomIn() {
-          if (graphSimulation && graphSimulation.svg) {
-            graphSimulation.svg.transition().call(
-              graphSimulation.zoom.scaleBy, 1.3
-            );
-          }
-        }
-
-        function zoomOut() {
-          if (graphSimulation && graphSimulation.svg) {
-            graphSimulation.svg.transition().call(
-              graphSimulation.zoom.scaleBy, 0.7
-            );
-          }
-        }
-
-        function resetZoom() {
-          if (graphSimulation && graphSimulation.svg) {
-            graphSimulation.svg.transition().call(
-              graphSimulation.zoom.transform,
-              d3.zoomIdentity
-            );
-          }
-        }
-        // ===== END GRAPH VISUALIZATION FUNCTIONS =====
 
         function bulkToggleFavorite() {
           if (selectedIds.length === 0) return;
@@ -4698,46 +2733,38 @@
           var tag = document.getElementById('bulkTagInput').value.trim().toLowerCase();
           if (!tag || selectedIds.length === 0) return;
 
-          invoke('bulk_add_tag', { memoryIds: selectedIds, tag: tag }).then(function(result) {
-            showToast(result, 'success');
-            // Update local memory objects
-            memories.forEach(function(m) {
-              if (selectedIds.indexOf(m.id) !== -1) {
-                if (!m.tags) m.tags = [];
-                if (!m.tags.some(function(t) { return t.name === tag; })) {
-                  m.tags.push({ name: tag, source: 'User' });
+          var pending = selectedIds.length;
+          var successCount = 0;
+
+          selectedIds.forEach(function(id) {
+            invoke('add_tag', { memoryId: id, tag: tag }).then(function() {
+              memories.forEach(function(m) {
+                if (m.id === id) {
+                  if (!m.tags) m.tags = [];
+                  if (!m.tags.some(function(t) { return t.name === tag; })) {
+                    m.tags.push({ name: tag, source: 'User' });
+                  }
                 }
+              });
+              successCount++;
+              pending--;
+              if (pending === 0) {
+                showToast('Tag added to ' + successCount + ' files', 'success');
+                closeTagModal();
+                clearSelection();
+                invoke('get_tags').then(function(tags) {
+                  allTags = tags || [];
+                  renderTagBar();
+                });
+              }
+            }).catch(function() {
+              pending--;
+              if (pending === 0) {
+                showToast('Tag added to ' + successCount + ' files', 'success');
+                closeTagModal();
+                clearSelection();
               }
             });
-            closeTagModal();
-            clearSelection();
-            invoke('get_tags').then(function(tags) {
-              allTags = tags || [];
-              renderTagBar();
-            });
-          }).catch(function(err) {
-            showToast('Failed to add tag: ' + err, 'error');
-          });
-        }
-
-        function bulkDeleteFiles() {
-          if (selectedIds.length === 0) return;
-
-          var count = selectedIds.length;
-          if (!confirm('Are you sure you want to delete ' + count + ' file' + (count === 1 ? '' : 's') + '? This will remove them from the index.')) {
-            return;
-          }
-
-          invoke('bulk_delete', { memoryIds: selectedIds }).then(function(result) {
-            showToast(result, 'success');
-            // Remove deleted memories from local array
-            memories = memories.filter(function(m) {
-              return selectedIds.indexOf(m.id) === -1;
-            });
-            clearSelection();
-            renderFiles();
-          }).catch(function(err) {
-            showToast('Failed to delete files: ' + err, 'error');
           });
         }
 
@@ -4748,7 +2775,6 @@
           document.getElementById('apiKeyInput').value = apiKey;
           document.getElementById('defaultSearchMode').value = searchMode;
           document.getElementById('aiProvider').value = aiProvider;
-          document.getElementById('autoTagEnabled').checked = autoTagEnabled;
           updateProviderUI();
           checkOllamaStatus();
         }
@@ -4761,11 +2787,9 @@
           apiKey = document.getElementById('apiKeyInput').value.trim();
           searchMode = document.getElementById('defaultSearchMode').value;
           aiProvider = document.getElementById('aiProvider').value;
-          autoTagEnabled = document.getElementById('autoTagEnabled').checked;
           localStorage.setItem('hippo-api-key', apiKey);
           localStorage.setItem('hippo-search-mode', searchMode);
           localStorage.setItem('hippo-ai-provider', aiProvider);
-          localStorage.setItem('hippo-auto-tag', autoTagEnabled.toString());
           setSearchMode(searchMode);
           closeSettings();
           showToast('Settings saved', 'success');
@@ -4967,50 +2991,40 @@
             return;
           }
 
-          // Get memory info for display
-          var fileInfos = filesToAnalyze.map(function(id) {
+          // Get file paths for analysis
+          var filePaths = filesToAnalyze.map(function(id) {
             var mem = memories.find(function(m) { return m.id === id; });
-            return mem ? { id: id, name: mem.path.split('/').pop() } : null;
+            return mem ? mem.path : null;
           }).filter(Boolean);
 
-          if (fileInfos.length === 0) return;
+          if (filePaths.length === 0) return;
 
           // Open chat if not open
           if (!chatOpen) openChat();
 
-          var fileNames = fileInfos.map(function(f) { return f.name; });
-          var query = 'Analyze ' + (fileInfos.length === 1 ? fileNames[0] : fileInfos.length + ' files: ' + fileNames.slice(0, 3).join(', ') + (fileNames.length > 3 ? '...' : ''));
+          var fileNames = filePaths.map(function(p) { return p.split('/').pop(); });
+          var query = 'Analyze ' + (filePaths.length === 1 ? fileNames[0] : filePaths.length + ' files: ' + fileNames.slice(0, 3).join(', ') + (fileNames.length > 3 ? '...' : ''));
           addChatMessage('user', query);
 
           document.getElementById('chatInput').disabled = true;
           document.getElementById('chatSendBtn').disabled = true;
-          showAiProgress('Analyzing ' + fileInfos.length + ' file' + (fileInfos.length > 1 ? 's' : '') + '...');
+          showAiProgress('Analyzing ' + filePaths.length + ' file' + (filePaths.length > 1 ? 's' : '') + '...');
           addChatLoading();
 
-          // Analyze files sequentially, collecting results
-          var results = [];
-          var analyzeNext = function(index) {
-            if (index >= fileInfos.length) {
-              // All done, show combined results
-              hideAiProgress();
-              removeChatLoading();
-              var combined = results.map(function(r, i) {
-                return '**' + fileInfos[i].name + '**\n' + (r.summary || r.description || JSON.stringify(r, null, 2));
-              }).join('\n\n---\n\n');
-              addChatMessage('assistant', combined || 'Analysis complete.');
-              document.getElementById('chatInput').disabled = false;
-              document.getElementById('chatSendBtn').disabled = false;
-              return;
-            }
-            invoke('ollama_analyze', { memoryId: fileInfos[index].id }).then(function(response) {
-              results.push(response);
-              analyzeNext(index + 1);
-            }).catch(function(e) {
-              results.push({ error: e });
-              analyzeNext(index + 1);
-            });
-          };
-          analyzeNext(0);
+          // Use ollama_analyze for file analysis
+          invoke('ollama_analyze', { filePaths: filePaths }).then(function(response) {
+            hideAiProgress();
+            removeChatLoading();
+            addChatMessage('assistant', response);
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('chatSendBtn').disabled = false;
+          }).catch(function(e) {
+            hideAiProgress();
+            removeChatLoading();
+            addChatMessage('assistant', 'Analysis failed: ' + e);
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('chatSendBtn').disabled = false;
+          });
         }
 
         function summarizeSelectedFiles() {
@@ -5020,49 +3034,37 @@
             return;
           }
 
-          // Get memory info for display
-          var fileInfos = filesToSummarize.map(function(id) {
+          var filePaths = filesToSummarize.map(function(id) {
             var mem = memories.find(function(m) { return m.id === id; });
-            return mem ? { id: id, name: mem.path.split('/').pop() } : null;
+            return mem ? mem.path : null;
           }).filter(Boolean);
 
-          if (fileInfos.length === 0) return;
+          if (filePaths.length === 0) return;
 
           if (!chatOpen) openChat();
 
-          var fileNames = fileInfos.map(function(f) { return f.name; });
-          var query = 'Summarize ' + (fileInfos.length === 1 ? fileNames[0] : fileInfos.length + ' files');
+          var fileNames = filePaths.map(function(p) { return p.split('/').pop(); });
+          var query = 'Summarize ' + (filePaths.length === 1 ? fileNames[0] : filePaths.length + ' files');
           addChatMessage('user', query);
 
           document.getElementById('chatInput').disabled = true;
           document.getElementById('chatSendBtn').disabled = true;
-          showAiProgress('Summarizing ' + fileInfos.length + ' file' + (fileInfos.length > 1 ? 's' : '') + '...');
+          showAiProgress('Summarizing ' + filePaths.length + ' file' + (filePaths.length > 1 ? 's' : '') + '...');
           addChatLoading();
 
-          // Summarize files sequentially, collecting results
-          var results = [];
-          var summarizeNext = function(index) {
-            if (index >= fileInfos.length) {
-              // All done, show combined results
-              hideAiProgress();
-              removeChatLoading();
-              var combined = results.map(function(r, i) {
-                return '**' + fileInfos[i].name + '**\n' + (typeof r === 'string' ? r : (r.summary || JSON.stringify(r, null, 2)));
-              }).join('\n\n---\n\n');
-              addChatMessage('assistant', combined || 'Summarization complete.');
-              document.getElementById('chatInput').disabled = false;
-              document.getElementById('chatSendBtn').disabled = false;
-              return;
-            }
-            invoke('ollama_summarize', { memoryId: fileInfos[index].id }).then(function(response) {
-              results.push(response);
-              summarizeNext(index + 1);
-            }).catch(function(e) {
-              results.push({ error: e });
-              summarizeNext(index + 1);
-            });
-          };
-          summarizeNext(0);
+          invoke('ollama_summarize', { filePaths: filePaths }).then(function(response) {
+            hideAiProgress();
+            removeChatLoading();
+            addChatMessage('assistant', response);
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('chatSendBtn').disabled = false;
+          }).catch(function(e) {
+            hideAiProgress();
+            removeChatLoading();
+            addChatMessage('assistant', 'Summarization failed: ' + e);
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('chatSendBtn').disabled = false;
+          });
         }
 
         // AI Progress Indicator Functions
@@ -5572,14 +3574,6 @@
             showToast('Set your API key in AI Settings first', 'error');
             return;
           }
-          if (!qdrantAvailable) {
-            showToast('Semantic search requires Qdrant. Install it in AI Settings.', 'warning');
-            return;
-          }
-          if (qdrantVectorCount === 0) {
-            showToast('No files indexed for semantic search. Index files first.', 'warning');
-            return;
-          }
           showToast('Searching with AI...', 'info');
           invoke('semantic_search', { query: query, limit: 30 }).then(function(results) {
             // Update memories with semantic results
@@ -5603,70 +3597,6 @@
           }).catch(function(e) {
             showToast('Symbol search failed: ' + e, 'error');
           });
-        }
-
-        // Natural Language Search Detection
-        function isNaturalLanguageQuery(query) {
-          if (!query || query.trim().length < 5) return false;
-
-          var lower = query.toLowerCase();
-
-          // Detect NL trigger phrases
-          var triggerPhrases = ['show me', 'find', 'search for', 'get me', 'look for', 'display'];
-          if (triggerPhrases.some(function(phrase) { return lower.includes(phrase); })) {
-            return true;
-          }
-
-          // Detect file type words
-          var fileTypeWords = ['images', 'photos', 'videos', 'documents', 'code', 'music', 'audio', 'pictures', 'pics', 'photo', 'image', 'video', 'doc', 'docs', 'pdf'];
-          var hasFileType = fileTypeWords.some(function(word) { return lower.includes(word); });
-
-          // Detect date words
-          var dateWords = ['today', 'yesterday', 'last week', 'this week', 'last month', 'this month', 'last year', 'this year'];
-          var hasDate = dateWords.some(function(word) { return lower.includes(word); });
-
-          // If query has file type or date words, it's likely NL
-          return hasFileType || hasDate;
-        }
-
-        function performNaturalLanguageSearch(query) {
-          showToast('Parsing your query...', 'info');
-
-          invoke('natural_language_search', { query: query }).then(function(result) {
-            var parsed = result.parsed;
-            var searchResults = result.results;
-
-            // Show interpretation
-            if (parsed && parsed.interpretation) {
-              var interpDiv = document.getElementById('nlInterpretation');
-              interpDiv.innerHTML = '<span class="nl-interpretation-label">Searching for:</span>' + esc(parsed.interpretation);
-              interpDiv.classList.add('show');
-            }
-
-            // Update memories with results
-            if (searchResults && searchResults.memories) {
-              memories = searchResults.memories.map(function(x) { return x.memory; });
-              renderFiles();
-              showToast('Found ' + memories.length + ' files', 'success');
-            } else {
-              memories = [];
-              renderFiles();
-              showToast('No files found', 'info');
-            }
-          }).catch(function(e) {
-            showToast('Natural language search failed: ' + e, 'error');
-            hideNLBadge();
-          });
-        }
-
-        function showNLBadge() {
-          document.getElementById('nlBadge').style.display = 'inline-flex';
-        }
-
-        function hideNLBadge() {
-          document.getElementById('nlBadge').style.display = 'none';
-          var interpDiv = document.getElementById('nlInterpretation');
-          interpDiv.classList.remove('show');
         }
 
         function renderSymbolResults() {
@@ -5908,33 +3838,6 @@
           input.focus();
         }
 
-        function generateCaption() {
-          if (!selectedMemory) return;
-          var btn = document.getElementById('generateCaptionBtn');
-          var captionDiv = document.getElementById('captionText');
-
-          btn.disabled = true;
-          btn.textContent = 'Generating...';
-          captionDiv.textContent = '';
-
-          invoke('caption_image', { path: selectedMemory.path }).then(function(caption) {
-            btn.disabled = false;
-            btn.textContent = 'Generate Caption';
-            captionDiv.textContent = caption;
-
-            // Store caption in memory object
-            if (!selectedMemory.metadata) selectedMemory.metadata = {};
-            selectedMemory.metadata.ai_caption = caption;
-
-            showToast('Caption generated!', 'success');
-          }).catch(function(e) {
-            btn.disabled = false;
-            btn.textContent = 'Generate Caption';
-            captionDiv.textContent = '';
-            showToast('Caption failed: ' + e, 'error');
-          });
-        }
-
         function selectMemory(mem) {
           if (!mem) return;
           selectedMemory = mem;
@@ -5987,25 +3890,6 @@
           } else {
             preview.innerHTML = getIcon(mem.kind, '2xl');
           }
-
-          // Caption section (only for images)
-          var captionSection = document.getElementById('captionSection');
-          var captionText = document.getElementById('captionText');
-          if (type === 'image') {
-            captionSection.style.display = 'block';
-            var existingCaption = mem.metadata && mem.metadata.ai_caption;
-            if (existingCaption) {
-              captionText.textContent = existingCaption;
-            } else {
-              captionText.textContent = '';
-            }
-          } else {
-            captionSection.style.display = 'none';
-          }
-
-          // Load virtual paths and similar files
-          loadVirtualPaths(mem.id);
-          loadSimilarMemories(mem.id);
         }
 
         function toggleFavorite(id) {
@@ -6071,14 +3955,11 @@
           }
         };
 
-        document.getElementById('generateCaptionBtn').onclick = generateCaption;
-
-        // Add source function - made global for empty state button
-        window.addSource = function() {
+        document.getElementById('addBtn').onclick = function() {
           if (window.__TAURI__.dialog) {
             window.__TAURI__.dialog.open({ directory: true }).then(function(path) {
               if (path) {
-                showToast('Indexing folder...', 'info');
+                showToast('Indexing folder...', '');
                 invoke('add_source', { sourceType: 'local', path: path }).then(function() {
                   var count = 0;
                   var interval = setInterval(function() {
@@ -6094,12 +3975,6 @@
               }
             });
           }
-        };
-
-        document.getElementById('addBtn').onclick = window.addSource;
-
-        document.getElementById('discoverBtn').onclick = function() {
-          discoverCollections();
         };
 
         document.getElementById('resetBtn').onclick = function() {
@@ -6118,44 +3993,17 @@
           }
         };
 
-        // Theme toggle function
-        function toggleTheme() {
+        document.getElementById('darkModeBtn').onclick = function() {
           darkMode = !darkMode;
-          localStorage.setItem('hippo-theme', darkMode ? 'dark' : 'light');
+          localStorage.setItem('hippo-dark', darkMode);
           document.body.classList.toggle('dark', darkMode);
-
-          // Update sidebar button
           document.getElementById('themeIcon').innerHTML = darkMode ? icons.sun : icons.moon;
-          document.getElementById('darkModeBtn').title = darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode';
-
-          // Update header button with rotation animation
-          var headerBtn = document.getElementById('themeToggleBtn');
-          var headerIcon = document.getElementById('themeToggleIcon');
-          headerIcon.innerHTML = darkMode ? icons.sun : icons.moon;
-          headerBtn.classList.add('rotating');
-          setTimeout(function() {
-            headerBtn.classList.remove('rotating');
-          }, 500);
-
+          document.getElementById('themeText').textContent = darkMode ? 'Light Mode' : 'Dark Mode';
           showToast(darkMode ? 'Dark mode enabled' : 'Light mode enabled', '');
-        }
-
-        // Sidebar dark mode button
-        document.getElementById('darkModeBtn').onclick = toggleTheme;
-
-        // Header theme toggle button
-        document.getElementById('themeToggleBtn').onclick = toggleTheme;
+        };
 
         document.getElementById('searchInput').oninput = function(e) {
           var query = e.target.value;
-
-          // Detect if query is natural language
-          if (searchMode === 'text' && isNaturalLanguageQuery(query)) {
-            showNLBadge();
-          } else {
-            hideNLBadge();
-          }
-
           if (searchMode === 'text') {
             search(query);
           }
@@ -6163,17 +4011,9 @@
         };
 
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
-          if (e.key === 'Enter') {
-            var query = e.target.value;
-
-            // If in text mode but query looks like NL, use NL search
-            if (searchMode === 'text' && isNaturalLanguageQuery(query)) {
-              e.preventDefault();
-              performNaturalLanguageSearch(query);
-            } else if (searchMode !== 'text') {
-              e.preventDefault();
-              handleAISearch(query);
-            }
+          if (e.key === 'Enter' && searchMode !== 'text') {
+            e.preventDefault();
+            handleAISearch(e.target.value);
           }
         });
 
@@ -6191,60 +4031,11 @@
           }
         };
 
-        document.getElementById('searchInput').addEventListener('focus', function() {
-          if (searchDropdownBlurTimeout) {
-            clearTimeout(searchDropdownBlurTimeout);
-            searchDropdownBlurTimeout = null;
-          }
-          if (!this.value || this.value.trim() === '') {
-            showSearchDropdown();
-          }
-        });
-
-        document.getElementById('searchInput').addEventListener('blur', function() {
-          searchDropdownBlurTimeout = setTimeout(function() {
-            hideSearchDropdown();
-          }, 200);
-        });
-
-        document.getElementById('searchInput').addEventListener('input', function() {
-          if (this.value && this.value.trim()) {
-            hideSearchDropdown();
-            var saveBtn = document.getElementById('saveSearchBtn');
-            if (saveBtn) saveBtn.style.display = 'flex';
-          } else {
-            showSearchDropdown();
-            var saveBtn = document.getElementById('saveSearchBtn');
-            if (saveBtn) saveBtn.style.display = 'none';
-          }
-        });
-
-        document.getElementById('saveSearchBtn').onclick = promptSaveSearch;
-
-        document.getElementById('recentSearchesDropdown').addEventListener('mousedown', function(e) {
-          if (searchDropdownBlurTimeout) {
-            clearTimeout(searchDropdownBlurTimeout);
-            searchDropdownBlurTimeout = null;
-          }
-        });
-
         document.querySelectorAll('.filter-btn').forEach(function(btn) {
           btn.onclick = function() {
             document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
             btn.classList.add('active');
             filterType = btn.dataset.filter;
-            keyboardFocusIndex = -1; // Reset keyboard focus on filter change
-            renderFiles();
-          };
-        });
-
-        // Date filter buttons
-        document.querySelectorAll('.date-filter-btn').forEach(function(btn) {
-          btn.onclick = function() {
-            document.querySelectorAll('.date-filter-btn').forEach(function(b) { b.classList.remove('active'); });
-            btn.classList.add('active');
-            dateFilter = btn.dataset.date;
-            keyboardFocusIndex = -1; // Reset keyboard focus
             renderFiles();
           };
         });
@@ -6253,7 +4044,6 @@
           viewMode = 'grid';
           document.getElementById('gridViewBtn').classList.add('active');
           document.getElementById('listViewBtn').classList.remove('active');
-          document.getElementById('graphViewBtn').classList.remove('active');
           renderFiles();
         };
 
@@ -6261,26 +4051,6 @@
           viewMode = 'list';
           document.getElementById('listViewBtn').classList.add('active');
           document.getElementById('gridViewBtn').classList.remove('active');
-          document.getElementById('graphViewBtn').classList.remove('active');
-          renderFiles();
-        };
-
-        document.getElementById('graphViewBtn').onclick = function() {
-          viewMode = 'graph';
-          document.getElementById('graphViewBtn').classList.add('active');
-          document.getElementById('gridViewBtn').classList.remove('active');
-          document.getElementById('listViewBtn').classList.remove('active');
-          renderFiles();
-        };
-
-        document.getElementById('multiSelectToggle').onclick = function() {
-          isMultiSelectMode = !isMultiSelectMode;
-          if (isMultiSelectMode) {
-            document.getElementById('multiSelectToggle').classList.add('active');
-          } else {
-            document.getElementById('multiSelectToggle').classList.remove('active');
-            clearSelection();
-          }
           renderFiles();
         };
 
@@ -6344,10 +4114,6 @@
 
         document.getElementById('bulkTag').onclick = function() {
           openTagModal();
-        };
-
-        document.getElementById('bulkDelete').onclick = function() {
-          bulkDeleteFiles();
         };
 
         document.getElementById('bulkSelectAll').onclick = function() {
@@ -6422,117 +4188,12 @@
               closeCommandPalette();
             } else if (selectedIds.length > 0) {
               clearSelection();
-            } else if (keyboardFocusIndex >= 0) {
-              keyboardFocusIndex = -1;
-              updateKeyboardFocus();
             } else {
               document.getElementById('detailPanel').classList.remove('open');
               selectedMemory = null;
             }
           }
-          // Arrow key navigation for grid/list
-          if (!isTyping && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-            e.preventDefault();
-            handleArrowNavigation(e.key);
-          }
-          // Enter/Space to open focused item
-          if (!isTyping && (e.key === 'Enter' || e.key === ' ') && keyboardFocusIndex >= 0) {
-            e.preventDefault();
-            var displayed = getDisplayedMemories();
-            if (displayed[keyboardFocusIndex]) {
-              openDetail(displayed[keyboardFocusIndex]);
-            }
-          }
         });
-
-        // Drag and drop file upload
-        var dragCounter = 0;
-        var dropZoneEl = document.getElementById('dropZone');
-        var dropZoneIconEl = document.getElementById('dropZoneIcon');
-
-        document.addEventListener('dragenter', function(e) {
-          e.preventDefault();
-          dragCounter++;
-          if (dragCounter === 1) {
-            dropZoneEl.classList.add('active');
-            dropZoneIconEl.innerHTML = icons.folderPlus;
-          }
-        });
-
-        document.addEventListener('dragover', function(e) {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'copy';
-        });
-
-        document.addEventListener('dragleave', function(e) {
-          e.preventDefault();
-          dragCounter--;
-          if (dragCounter === 0) {
-            dropZoneEl.classList.remove('active');
-          }
-        });
-
-        document.addEventListener('drop', function(e) {
-          e.preventDefault();
-          dragCounter = 0;
-          dropZoneEl.classList.remove('active');
-
-          // In Tauri, we need to use the event system to get dropped file paths
-          // The file paths will be handled by the Tauri window event listener below
-        });
-
-        // Listen for Tauri file drop events
-        if (window.__TAURI__ && window.__TAURI__.event) {
-          window.__TAURI__.event.listen('tauri://file-drop', function(event) {
-            var paths = event.payload;
-            if (paths && paths.length > 0) {
-              handleDroppedPaths(paths);
-            }
-          }).catch(function(err) {
-            console.error('Failed to set up file drop listener:', err);
-          });
-        }
-
-        function handleDroppedPaths(paths) {
-          if (paths.length === 0) return;
-
-          // Filter to only directories - we'll check each path
-          var folderCount = 0;
-          var completed = 0;
-
-          showToast('Processing ' + paths.length + ' item(s)...', 'info');
-
-          paths.forEach(function(path) {
-            // Try to add each path as a source
-            // The backend will validate if it's a directory
-            invoke('add_source', { sourceType: 'local', path: path }).then(function() {
-              folderCount++;
-              completed++;
-
-              if (completed === paths.length) {
-                if (folderCount > 0) {
-                  var count = 0;
-                  var interval = setInterval(function() {
-                    loadData();
-                    if (++count >= 15) {
-                      clearInterval(interval);
-                      showToast('Indexing complete! Added ' + folderCount + ' folder(s)', 'success');
-                    }
-                  }, 2000);
-                } else {
-                  showToast('No valid folders were dropped. Please drop directories to index.', 'error');
-                }
-              }
-            }).catch(function(e) {
-              completed++;
-              console.error('Failed to add source:', path, e);
-
-              if (completed === paths.length && folderCount === 0) {
-                showToast('Please drop folders (not individual files) to index', 'error');
-              }
-            });
-          });
-        }
 
         // Expose for inline handlers
         window.openInFinder = function(path) {
@@ -6608,19 +4269,5 @@
       }
     })();
   </script>
-  <!-- Prism.js scripts -->
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-typescript.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-rust.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-go.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markup.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-css.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markdown.min.js"></script>
 </body>
 </html>
