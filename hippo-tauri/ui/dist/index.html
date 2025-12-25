@@ -2423,6 +2423,12 @@
         convertFileSrc = window.__TAURI__.core.convertFileSrc;
 
         invoke('initialize').then(function() {
+          // Start file watcher after initialization
+          invoke('start_watching').then(function() {
+            console.log('[Hippo] File watcher started');
+          }).catch(function(e) {
+            console.warn('[Hippo] File watcher failed:', e);
+          });
           loadData();
         }).catch(function(e) {
           showToast('Init failed: ' + e, 'error');
@@ -2442,6 +2448,15 @@
             renderSources();
             renderTagBar();
             renderFiles();
+
+            // Check Ollama status in background
+            invoke('ollama_status').then(function(status) {
+              ollamaAvailable = status.available;
+              console.log('[Hippo] Ollama available:', ollamaAvailable);
+            }).catch(function() {
+              ollamaAvailable = false;
+              console.log('[Hippo] Ollama check failed');
+            });
           }).catch(function(e) {
             showToast('Load failed: ' + e, 'error');
           });
@@ -2455,6 +2470,9 @@
             if (query && query.trim().length >= 2) {
               addToSearchHistory(query.trim(), memories.length);
             }
+          }).catch(function(e) {
+            console.error('[Hippo] Search failed:', e);
+            showToast('Search failed: ' + e, 'error');
           });
         }
 
@@ -3282,6 +3300,13 @@
           var input = document.getElementById('chatInput');
           var query = input.value.trim();
           if (!query) return;
+
+          // Check Ollama availability before sending
+          if (!ollamaAvailable) {
+            showToast('Ollama is not running. Start it with: ollama serve', 'error');
+            return;
+          }
+
           sendChatQuery(query);
           input.value = '';
         }
@@ -3724,8 +3749,9 @@
         }
 
         function performSemanticSearch(query) {
-          if (!apiKey) {
-            showToast('Set your API key in AI Settings first', 'error');
+          // Check if Ollama is available for local semantic search
+          if (!ollamaAvailable) {
+            showToast('Ollama not available. Start Ollama for AI search.', 'error');
             return;
           }
           showToast('Searching with AI...', 'info');
@@ -3740,6 +3766,7 @@
               showToast('No similar files found', 'info');
             }
           }).catch(function(e) {
+            console.error('Semantic search error:', e);
             showToast('Semantic search failed: ' + e, 'error');
           });
         }
@@ -3784,9 +3811,8 @@
 
         function analyzeWithAI() {
           if (!selectedMemory) return;
-          if (!apiKey) {
-            showToast('Set your API key in AI Settings first', 'error');
-            openSettings();
+          if (!ollamaAvailable) {
+            showToast('Ollama not available. Start Ollama for AI analysis.', 'error');
             return;
           }
 
@@ -3794,7 +3820,8 @@
           btn.classList.add('loading');
           btn.disabled = true;
 
-          invoke('analyze_file', { memoryId: selectedMemory.id, apiKey: apiKey }).then(function(analysis) {
+          // Use local Ollama for analysis
+          invoke('ollama_analyze', { memoryId: selectedMemory.id }).then(function(analysis) {
             btn.classList.remove('loading');
             btn.disabled = false;
 

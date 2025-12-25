@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Qdrant version to download
 #[allow(dead_code)]
@@ -303,7 +303,7 @@ impl QdrantManager {
 
         // Start Qdrant process with environment variable for storage path
         // Note: Qdrant v1.12+ uses environment variables instead of --storage-path
-        let child = Command::new(&binary_path)
+        let mut child = Command::new(&binary_path)
             .env("QDRANT__STORAGE__STORAGE_PATH", &storage_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -312,14 +312,18 @@ impl QdrantManager {
 
         let pid = child.id();
 
+        // Capture stderr for debugging
+        let stderr = child.stderr.take();
+
         {
             let mut process = self.process.write().await;
             *process = Some(child);
         }
 
-        // Wait for Qdrant to be ready (up to 30 seconds)
+        // Wait for Qdrant to be ready (up to 60 seconds - Qdrant can be slow to initialize)
         let start_time = std::time::Instant::now();
-        let timeout = std::time::Duration::from_secs(30);
+        let timeout = std::time::Duration::from_secs(60);
+        let mut last_log_time = std::time::Instant::now();
 
         while start_time.elapsed() < timeout {
             if self.check_health().await {
@@ -330,10 +334,33 @@ impl QdrantManager {
                 info!("Qdrant started successfully (PID: {})", pid);
                 return Ok(());
             }
+
+            // Log progress every 10 seconds
+            if last_log_time.elapsed() >= std::time::Duration::from_secs(10) {
+                let elapsed = start_time.elapsed().as_secs();
+                info!("Waiting for Qdrant to start... ({}s elapsed)", elapsed);
+                last_log_time = std::time::Instant::now();
+            }
+
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
 
-        // Failed to start
+        // Failed to start - capture stderr for debugging
+        let stderr_output = if let Some(mut stderr) = stderr {
+            use std::io::Read;
+            let mut output = String::new();
+            let _ = stderr.read_to_string(&mut output);
+            output
+        } else {
+            String::new()
+        };
+
+        // Log the error
+        if !stderr_output.is_empty() {
+            warn!("Qdrant stderr output:\n{}", stderr_output);
+        }
+
+        // Kill the process
         {
             let mut process = self.process.write().await;
             if let Some(mut child) = process.take() {
@@ -341,14 +368,21 @@ impl QdrantManager {
             }
         }
 
+        let error_msg = if stderr_output.is_empty() {
+            "Qdrant failed to start within 60 seconds (no error output)".to_string()
+        } else {
+            format!(
+                "Qdrant failed to start within 60 seconds. Error: {}",
+                stderr_output.lines().take(5).collect::<Vec<_>>().join(" | ")
+            )
+        };
+
         {
             let mut status = self.status.write().await;
-            status.message = "Failed to start Qdrant".to_string();
+            status.message = error_msg.clone();
         }
 
-        Err(HippoError::Other(
-            "Qdrant failed to start within 30 seconds".to_string(),
-        ))
+        Err(HippoError::Other(error_msg))
     }
 
     /// Stop Qdrant process (if managed)
