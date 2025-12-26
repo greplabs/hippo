@@ -221,20 +221,52 @@ async fn toggle_favorite(memory_id: String, state: State<'_, AppState>) -> Resul
 
 #[tauri::command]
 async fn get_tags(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting tags...");
+    println!("[Hippo] Getting tags with colors...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    match hippo.list_tags().await {
+    match hippo.storage().list_tags_with_colors().await {
         Ok(tags) => {
             println!("[Hippo] Found {} tags", tags.len());
-            serde_json::to_value(tags).map_err(|e| e.to_string())
+            let tag_objects: Vec<serde_json::Value> = tags
+                .iter()
+                .map(|(name, count, color)| {
+                    serde_json::json!({
+                        "name": name,
+                        "count": count,
+                        "color": color
+                    })
+                })
+                .collect();
+            Ok(serde_json::json!(tag_objects))
         }
         Err(e) => {
             println!("[Hippo] Failed to get tags: {}", e);
             Err(format!("Failed to get tags: {}", e))
         }
     }
+}
+
+#[tauri::command]
+async fn set_tag_color(
+    tag_name: String,
+    color: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    println!("[Hippo] Setting color for tag '{}' to {:?}", tag_name, color);
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    hippo
+        .storage()
+        .set_tag_color(&tag_name, color.as_deref())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(format!(
+        "Set color for tag '{}'",
+        tag_name
+    ))
 }
 
 #[tauri::command]
@@ -2718,6 +2750,7 @@ fn main() {
             bulk_delete,
             toggle_favorite,
             get_tags,
+            set_tag_color,
             get_mind_map,
             get_stats,
             reset_index,

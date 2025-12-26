@@ -1177,6 +1177,82 @@
     .code-stats { display: flex; gap: 12px; margin-top: 8px; font-size: 11px; color: #78716c; }
     body.dark .code-stats { color: #a8a29e; }
     .code-stat { display: flex; align-items: center; gap: 4px; }
+
+    /* Tag Color Picker */
+    .color-picker-dropdown {
+      position: fixed;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: var(--shadow-lg);
+      z-index: 10001;
+      min-width: 200px;
+      animation: fadeInScale 0.15s ease;
+    }
+    .color-picker-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 6px;
+    }
+    .color-swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .color-swatch:hover {
+      transform: scale(1.15);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .color-swatch.selected {
+      border-color: var(--text-primary);
+    }
+    .color-clear-btn {
+      width: 100%;
+      margin-top: 10px;
+      padding: 8px;
+      background: transparent;
+      border: 1px dashed var(--border-primary);
+      border-radius: 8px;
+      color: var(--text-tertiary);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .color-clear-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    /* Colored tag button */
+    .tag-btn.colored {
+      color: white;
+      border: none;
+    }
+    .tag-btn.colored:hover {
+      filter: brightness(1.1);
+    }
+    body.dark .tag-btn.colored {
+      color: white;
+    }
+    /* Tag color indicator dot */
+    .tag-color-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
   </style>
 
   <!-- Prism.js for syntax highlighting -->
@@ -1484,6 +1560,13 @@
         <span class="shortcut-hint">Press <kbd>Esc</kbd> or <kbd>?</kbd> to close</span>
       </div>
     </div>
+  </div>
+
+  <!-- Tag Color Picker Dropdown -->
+  <div class="color-picker-dropdown" id="tagColorPicker" style="display: none;">
+    <div class="color-picker-header">Choose color</div>
+    <div class="color-grid" id="colorGrid"></div>
+    <button class="color-clear-btn" id="colorClearBtn">Remove color</button>
   </div>
 
   <!-- Floating Chat Bubble -->
@@ -2361,6 +2444,30 @@
       var filterType = 'all';
       var activeTags = [];
       var viewMode = 'grid';
+      var colorPickerTag = null; // Currently editing tag
+
+      // Tag color palette
+      var TAG_COLORS = [
+        { name: 'Red', value: '#ef4444' },
+        { name: 'Orange', value: '#f97316' },
+        { name: 'Amber', value: '#f59e0b' },
+        { name: 'Yellow', value: '#eab308' },
+        { name: 'Lime', value: '#84cc16' },
+        { name: 'Green', value: '#22c55e' },
+        { name: 'Emerald', value: '#10b981' },
+        { name: 'Teal', value: '#14b8a6' },
+        { name: 'Cyan', value: '#06b6d4' },
+        { name: 'Sky', value: '#0ea5e9' },
+        { name: 'Blue', value: '#3b82f6' },
+        { name: 'Indigo', value: '#6366f1' },
+        { name: 'Violet', value: '#8b5cf6' },
+        { name: 'Purple', value: '#a855f7' },
+        { name: 'Fuchsia', value: '#d946ef' },
+        { name: 'Pink', value: '#ec4899' },
+        { name: 'Rose', value: '#f43f5e' },
+        { name: 'Gray', value: '#6b7280' }
+      ];
+
       // Dark mode with system preference detection
       var storedTheme = localStorage.getItem('hippo-dark');
       var systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -2959,8 +3066,14 @@
           }
           var html = '<span class="tag-label">Tags:</span>';
           allTags.slice(0, 8).forEach(function(t) {
-            var isActive = activeTags.indexOf(t[0]) !== -1;
-            html += '<button class="tag-btn' + (isActive ? ' active' : '') + '" data-tag="' + esc(t[0]) + '">' + esc(t[0]) + ' (' + t[1] + ')</button>';
+            // Support both old format [name, count] and new format {name, count, color}
+            var tagName = t.name || t[0];
+            var tagCount = t.count !== undefined ? t.count : t[1];
+            var tagColor = t.color || null;
+            var isActive = activeTags.indexOf(tagName) !== -1;
+            var colorStyle = tagColor ? ' style="background:' + tagColor + ';"' : '';
+            var colorClass = tagColor ? ' colored' : '';
+            html += '<button class="tag-btn' + (isActive ? ' active' : '') + colorClass + '" data-tag="' + esc(tagName) + '"' + colorStyle + '>' + esc(tagName) + ' (' + tagCount + ')</button>';
           });
           document.getElementById('tagBar').innerHTML = html;
           document.querySelectorAll('.tag-btn').forEach(function(btn) {
@@ -2974,6 +3087,11 @@
               renderActiveTags();
               renderTagBar();
               search(document.getElementById('searchInput').value);
+            };
+            // Right-click to open color picker
+            btn.oncontextmenu = function(e) {
+              e.preventDefault();
+              showTagColorPicker(btn.dataset.tag, e);
             };
           });
         }
@@ -2995,6 +3113,98 @@
             };
           });
         }
+
+        // ==================== Tag Color Picker ====================
+
+        function showTagColorPicker(tagName, event) {
+          colorPickerTag = tagName;
+          var picker = document.getElementById('tagColorPicker');
+          var grid = document.getElementById('colorGrid');
+
+          // Find current tag color
+          var currentTag = allTags.find(function(t) {
+            return (t.name || t[0]) === tagName;
+          });
+          var currentColor = currentTag ? currentTag.color : null;
+
+          // Render color swatches
+          grid.innerHTML = TAG_COLORS.map(function(c) {
+            var selected = currentColor === c.value ? ' selected' : '';
+            return '<div class="color-swatch' + selected + '" style="background:' + c.value + ';" data-color="' + c.value + '" title="' + c.name + '"></div>';
+          }).join('');
+
+          // Position picker near cursor
+          var x = Math.min(event.clientX, window.innerWidth - 220);
+          var y = Math.min(event.clientY, window.innerHeight - 300);
+          picker.style.left = x + 'px';
+          picker.style.top = y + 'px';
+          picker.style.display = 'block';
+
+          // Handle swatch clicks
+          grid.querySelectorAll('.color-swatch').forEach(function(swatch) {
+            swatch.onclick = function() {
+              setTagColor(colorPickerTag, swatch.dataset.color);
+            };
+          });
+        }
+
+        function hideTagColorPicker() {
+          document.getElementById('tagColorPicker').style.display = 'none';
+          colorPickerTag = null;
+        }
+
+        function setTagColor(tagName, color) {
+          invoke('set_tag_color', { tagName: tagName, color: color }).then(function() {
+            // Update local state
+            allTags = allTags.map(function(t) {
+              if ((t.name || t[0]) === tagName) {
+                if (t.name) {
+                  t.color = color;
+                } else {
+                  // Convert old format to new
+                  t = { name: t[0], count: t[1], color: color };
+                }
+              }
+              return t;
+            });
+            renderTagBar();
+            hideTagColorPicker();
+            showToast('Tag color updated', 'success');
+          }).catch(function(e) {
+            showToast('Failed to update color: ' + e, 'error');
+          });
+        }
+
+        function clearTagColor() {
+          if (!colorPickerTag) return;
+          invoke('set_tag_color', { tagName: colorPickerTag, color: null }).then(function() {
+            // Update local state - remove color
+            allTags = allTags.map(function(t) {
+              if ((t.name || t[0]) === colorPickerTag) {
+                if (t.name) {
+                  t.color = null;
+                }
+              }
+              return t;
+            });
+            renderTagBar();
+            hideTagColorPicker();
+            showToast('Tag color removed', 'success');
+          }).catch(function(e) {
+            showToast('Failed to remove color: ' + e, 'error');
+          });
+        }
+
+        // Initialize color picker event listeners
+        document.getElementById('colorClearBtn').onclick = clearTagColor;
+
+        // Close color picker when clicking outside
+        document.addEventListener('click', function(e) {
+          var picker = document.getElementById('tagColorPicker');
+          if (picker.style.display === 'block' && !picker.contains(e.target) && !e.target.classList.contains('tag-btn')) {
+            hideTagColorPicker();
+          }
+        });
 
         function getFiltered() {
           var filtered = memories;
@@ -4218,7 +4428,13 @@
             var tagsHtml = '';
             if (selectedMemory.tags) {
               selectedMemory.tags.forEach(function(t) {
-                tagsHtml += '<span class="detail-tag">' + esc(t.name) + '</span>';
+                // Look up color from allTags
+                var tagInfo = allTags.find(function(at) {
+                  return (at.name || at[0]) === t.name;
+                });
+                var tagColor = tagInfo ? tagInfo.color : null;
+                var colorStyle = tagColor ? ' style="background:' + tagColor + ';color:white;"' : '';
+                tagsHtml += '<span class="detail-tag"' + colorStyle + '>' + esc(t.name) + '</span>';
               });
             }
             document.getElementById('detailTags').innerHTML = tagsHtml || '<span style="color:#a8a29e;font-size:12px;">No tags</span>';
@@ -4412,7 +4628,13 @@
           var tagsHtml = '';
           if (mem.tags && mem.tags.length > 0) {
             mem.tags.forEach(function(t) {
-              tagsHtml += '<span class="detail-tag" data-tag="' + esc(t.name) + '">' + esc(t.name) + '</span>';
+              // Look up color from allTags
+              var tagInfo = allTags.find(function(at) {
+                return (at.name || at[0]) === t.name;
+              });
+              var tagColor = tagInfo ? tagInfo.color : null;
+              var colorStyle = tagColor ? ' style="background:' + tagColor + ';color:white;"' : '';
+              tagsHtml += '<span class="detail-tag" data-tag="' + esc(t.name) + '"' + colorStyle + '>' + esc(t.name) + '</span>';
             });
           } else {
             tagsHtml = '<span style="color:#a8a29e;font-size:12px;">No tags</span>';
