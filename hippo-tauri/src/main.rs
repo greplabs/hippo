@@ -14,7 +14,10 @@ use hippo_core::{
 };
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::State;
+use tauri::image::Image;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager, State};
 use tokio::sync::RwLock;
 
 struct AppState {
@@ -2589,6 +2592,90 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
+/// Set up system tray with menu and event handlers
+fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    // Create tray menu items
+    let show_item = MenuItemBuilder::with_id("show", "Show Hippo").build(app)?;
+    let search_item = MenuItemBuilder::with_id("search", "Quick Search...").build(app)?;
+    let separator1 = tauri::menu::PredefinedMenuItem::separator(app)?;
+    let stats_item = MenuItemBuilder::with_id("stats", "View Stats").build(app)?;
+    let separator2 = tauri::menu::PredefinedMenuItem::separator(app)?;
+    let quit_item = MenuItemBuilder::with_id("quit", "Quit Hippo").build(app)?;
+
+    // Build menu
+    let menu = MenuBuilder::new(app)
+        .item(&show_item)
+        .item(&search_item)
+        .item(&separator1)
+        .item(&stats_item)
+        .item(&separator2)
+        .item(&quit_item)
+        .build()?;
+
+    // Load tray icon from embedded bytes
+    let icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
+        .unwrap_or_else(|_| Image::new_owned(vec![0, 0, 0, 255], 1, 1));
+
+    // Build tray icon
+    let _tray = TrayIconBuilder::new()
+        .icon(icon)
+        .menu(&menu)
+        .tooltip("Hippo - The Memory That Never Forgets")
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            match event {
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } => {
+                    // Left click: show/focus the main window
+                    if let Some(window) = tray.app_handle().get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+                _ => {}
+            }
+        })
+        .on_menu_event(|app, event| {
+            match event.id.as_ref() {
+                "show" => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+                "search" => {
+                    // Show window and trigger search focus
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                        // Emit event to focus search input
+                        let _ = window.emit("focus-search", ());
+                    }
+                }
+                "stats" => {
+                    // Show window and trigger stats view
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                        // Emit event to show stats
+                        let _ = window.emit("show-stats", ());
+                    }
+                }
+                "quit" => {
+                    app.exit(0);
+                }
+                _ => {}
+            }
+        })
+        .build(app)?;
+
+    println!("[Hippo] System tray initialized");
+    Ok(())
+}
+
 fn main() {
     println!("[Hippo] Starting application...");
     tracing_subscriber::fmt::init();
@@ -2609,8 +2696,12 @@ fn main() {
             hippo: Arc::new(RwLock::new(None)),
             qdrant_manager,
         })
-        .setup(|_app| {
+        .setup(|app| {
             println!("[Hippo] Application started. Qdrant will be auto-managed.");
+
+            // Set up system tray
+            setup_system_tray(app)?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
