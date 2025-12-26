@@ -19,7 +19,7 @@ pub use analysis::{
 use crate::ollama::{
     ChatMessage, LocalAnalysis, OllamaClient, OllamaConfig, RagContext, RagDocument,
 };
-use crate::{HippoError, Memory, MemoryKind, Result, Tag, TagSource};
+use crate::{HippoError, Memory, MemoryKind, Result, Tag};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -617,11 +617,8 @@ Tag guidelines:
 /// Convert AI suggestions to Tag structs
 impl TagSuggestion {
     pub fn to_tag(&self) -> Tag {
-        Tag {
-            name: self.name.clone(),
-            source: TagSource::Ai,
-            confidence: Some(self.confidence),
-        }
+        // Use Tag::ai() which handles hierarchical parsing automatically
+        Tag::ai(&self.name, self.confidence)
     }
 }
 

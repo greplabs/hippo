@@ -4,9 +4,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use dialoguer::Confirm;
-use hippo_core::{
-    ClaudeClient, Hippo, SearchQuery, Source, Tag, TagFilter, TagFilterMode, TagSource,
-};
+use hippo_core::{ClaudeClient, Hippo, SearchQuery, Source, Tag, TagFilter, TagFilterMode};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::PathBuf;
 use tabled::{Table, Tabled};
@@ -874,11 +872,8 @@ async fn main() -> Result<()> {
 
             if let Some(result) = results.memories.first() {
                 for tag_name in &tags {
-                    let tag = Tag {
-                        name: tag_name.clone(),
-                        source: TagSource::User,
-                        confidence: None,
-                    };
+                    // Use Tag::user() which handles hierarchical tags automatically
+                    let tag = Tag::user(tag_name);
                     hippo.add_tag(result.memory.id, tag).await?;
                     print_success(&format!("Added tag: {}", tag_name.bright_yellow()));
                 }
