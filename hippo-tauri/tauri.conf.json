@@ -38,6 +38,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "publisher": "GrepLabs",
+    "copyright": "Copyright (c) 2024-2025 GrepLabs",
+    "category": "Productivity",
+    "shortDescription": "The Memory That Never Forgets",
+    "longDescription": "Hippo is a local-first, AI-powered file organizer built with Rust and Tauri. It indexes your files, extracts metadata, and uses local AI to help you search, organize, and understand your digital life. No cloud. No subscriptions. Your files, your data, your control.",
     "iOS": {
       "minimumSystemVersion": "13.0",
       "developmentTeam": ""
@@ -45,6 +50,9 @@
     "android": {
       "minSdkVersion": 24,
       "versionCode": 1
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
     }
   },
   "plugins": {}

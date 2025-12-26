@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-/// Qdrant version to download
+/// Qdrant version to download (for reference - actual URLs include version)
 #[allow(dead_code)]
 const QDRANT_VERSION: &str = "v1.12.4";
 

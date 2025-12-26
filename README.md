@@ -422,11 +422,24 @@ git push origin feature/amazing-feature
 - [Contributing Guidelines](CONTRIBUTING.md) - How to contribute
 - [Architecture Overview](CLAUDE.md) - Detailed project structure
 
+## Acknowledgements
+
+Hippo is built on the shoulders of giants. Special thanks to:
+
+- [Tauri](https://tauri.app/) - Cross-platform desktop framework
+- [Rust](https://www.rust-lang.org/) - Systems programming language
+- [SQLite](https://www.sqlite.org/) - Embedded database
+- [Qdrant](https://qdrant.tech/) - Vector search engine
+- [Ollama](https://ollama.ai/) - Local AI model runner
+- [Prism.js](https://prismjs.com/) - Syntax highlighting
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
-**Built with love by the Hippo community.**
+Copyright (c) 2024-2025 [GrepLabs](https://github.com/greplabs)
+
+**Built with love by the GrepLabs team.**
 
 ---
 

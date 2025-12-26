@@ -149,7 +149,7 @@ fn levenshtein_distance_bounded(s1: &str, s2: &str, max_distance: usize) -> usiz
     }
 
     // Early termination: if length difference exceeds max, skip computation
-    let len_diff = if len1 > len2 { len1 - len2 } else { len2 - len1 };
+    let len_diff = len1.abs_diff(len2);
     if len_diff > max_distance {
         return max_distance + 1;
     }

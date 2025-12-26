@@ -11,9 +11,13 @@ members = [
 [workspace.package]
 version = "0.2.0"
 edition = "2021"
-authors = ["Hippo Contributors"]
+authors = ["GrepLabs <hello@greplabs.com>"]
 license = "MIT"
-repository = "https://github.com/user/hippo"
+repository = "https://github.com/greplabs/hippo"
+homepage = "https://github.com/greplabs/hippo"
+description = "The Memory That Never Forgets - A local-first, AI-powered file organizer"
+keywords = ["file-organizer", "search", "ai", "rust", "tauri"]
+categories = ["command-line-utilities", "filesystem"]
 
 [workspace.dependencies]
 # Async runtime

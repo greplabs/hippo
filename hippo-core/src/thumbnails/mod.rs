@@ -550,7 +550,13 @@ impl ThumbnailManager {
 
 impl Default for ThumbnailManager {
     fn default() -> Self {
-        Self::new().expect("Failed to create default ThumbnailManager")
+        Self::new().unwrap_or_else(|e| {
+            warn!("Failed to create ThumbnailManager with default cache: {}. Using temp directory.", e);
+            // Fallback to temp directory if default cache creation fails
+            let temp_cache = std::env::temp_dir().join("hippo_thumbnails");
+            Self::with_cache_dir(temp_cache)
+                .expect("Failed to create ThumbnailManager even with temp directory")
+        })
     }
 }
 
