@@ -447,6 +447,168 @@ pub struct SearchQuery {
     pub sort: SortOrder,
     pub limit: usize,
     pub offset: usize,
+    #[serde(default)]
+    pub parsed_terms: Option<ParsedSearchTerms>, // Parsed search with operators
+}
+
+/// Parsed search terms with operator support
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ParsedSearchTerms {
+    /// Terms that must all match (AND)
+    pub must_match: Vec<SearchTerm>,
+    /// Terms where at least one must match (OR)
+    pub should_match: Vec<SearchTerm>,
+    /// Terms that must NOT match
+    pub must_not_match: Vec<SearchTerm>,
+}
+
+/// A single search term
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchTerm {
+    pub value: String,
+    /// If true, must match exactly as a phrase
+    pub is_phrase: bool,
+}
+
+impl SearchTerm {
+    pub fn word(value: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            is_phrase: false,
+        }
+    }
+
+    pub fn phrase(value: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            is_phrase: true,
+        }
+    }
+}
+
+impl ParsedSearchTerms {
+    /// Parse a query string with operators:
+    /// - "quoted phrase" for exact phrase matching
+    /// - AND or space for required terms (implicit)
+    /// - OR for alternative terms
+    /// - NOT or - prefix for exclusion
+    pub fn parse(query: &str) -> Self {
+        let mut terms = ParsedSearchTerms::default();
+        let mut chars = query.chars().peekable();
+        let mut current_token = String::new();
+        let mut in_quotes = false;
+        let mut negate_next = false;
+        let mut or_mode = false;
+
+        while let Some(ch) = chars.next() {
+            match ch {
+                '"' => {
+                    if in_quotes {
+                        // End of quoted phrase
+                        if !current_token.is_empty() {
+                            let term = SearchTerm::phrase(&current_token);
+                            if negate_next {
+                                terms.must_not_match.push(term);
+                                negate_next = false;
+                            } else if or_mode {
+                                terms.should_match.push(term);
+                                or_mode = false;
+                            } else {
+                                terms.must_match.push(term);
+                            }
+                            current_token.clear();
+                        }
+                        in_quotes = false;
+                    } else {
+                        // Start of quoted phrase - save any pending token first
+                        if !current_token.is_empty() {
+                            Self::add_token(&mut terms, &current_token, negate_next, or_mode);
+                            current_token.clear();
+                            negate_next = false;
+                            or_mode = false;
+                        }
+                        in_quotes = true;
+                    }
+                }
+                ' ' | '\t' if !in_quotes => {
+                    if !current_token.is_empty() {
+                        // Check for operators
+                        let upper = current_token.to_uppercase();
+                        if upper == "AND" {
+                            // AND is implicit, just clear
+                            current_token.clear();
+                        } else if upper == "OR" {
+                            or_mode = true;
+                            current_token.clear();
+                        } else if upper == "NOT" {
+                            negate_next = true;
+                            current_token.clear();
+                        } else {
+                            Self::add_token(&mut terms, &current_token, negate_next, or_mode);
+                            current_token.clear();
+                            negate_next = false;
+                            or_mode = false;
+                        }
+                    }
+                }
+                '-' if !in_quotes && current_token.is_empty() => {
+                    // Minus at start of token means NOT
+                    negate_next = true;
+                }
+                _ => {
+                    current_token.push(ch);
+                }
+            }
+        }
+
+        // Handle remaining token
+        if !current_token.is_empty() {
+            if in_quotes {
+                // Unclosed quote, treat as phrase anyway
+                let term = SearchTerm::phrase(&current_token);
+                if negate_next {
+                    terms.must_not_match.push(term);
+                } else if or_mode {
+                    terms.should_match.push(term);
+                } else {
+                    terms.must_match.push(term);
+                }
+            } else {
+                Self::add_token(&mut terms, &current_token, negate_next, or_mode);
+            }
+        }
+
+        terms
+    }
+
+    fn add_token(terms: &mut ParsedSearchTerms, token: &str, negate: bool, or_mode: bool) {
+        let term = SearchTerm::word(token);
+        if negate {
+            terms.must_not_match.push(term);
+        } else if or_mode {
+            terms.should_match.push(term);
+        } else {
+            terms.must_match.push(term);
+        }
+    }
+
+    /// Check if the parsed terms are empty
+    pub fn is_empty(&self) -> bool {
+        self.must_match.is_empty()
+            && self.should_match.is_empty()
+            && self.must_not_match.is_empty()
+    }
+
+    /// Get all positive terms (must + should) for semantic search
+    pub fn positive_terms(&self) -> String {
+        let terms: Vec<&str> = self
+            .must_match
+            .iter()
+            .chain(self.should_match.iter())
+            .map(|t| t.value.as_str())
+            .collect();
+        terms.join(" ")
+    }
 }
 
 impl Default for SearchQuery {
@@ -461,6 +623,19 @@ impl Default for SearchQuery {
             sort: SortOrder::Relevance,
             limit: 50,
             offset: 0,
+            parsed_terms: None,
+        }
+    }
+}
+
+impl SearchQuery {
+    /// Create a search query with parsed operators
+    pub fn with_operators(query: &str) -> Self {
+        let parsed = ParsedSearchTerms::parse(query);
+        Self {
+            text: Some(query.to_string()),
+            parsed_terms: if parsed.is_empty() { None } else { Some(parsed) },
+            ..Default::default()
         }
     }
 }
@@ -653,5 +828,69 @@ mod tests {
         assert_eq!(tag.parent, Some("category/subcategory".to_string()));
         assert_eq!(tag.confidence, Some(85));
         assert_eq!(tag.source, TagSource::Ai);
+    }
+
+    // Search operator tests
+    #[test]
+    fn test_parse_simple_terms() {
+        let parsed = ParsedSearchTerms::parse("hello world");
+        assert_eq!(parsed.must_match.len(), 2);
+        assert_eq!(parsed.must_match[0].value, "hello");
+        assert_eq!(parsed.must_match[1].value, "world");
+        assert!(!parsed.must_match[0].is_phrase);
+    }
+
+    #[test]
+    fn test_parse_quoted_phrase() {
+        let parsed = ParsedSearchTerms::parse("\"hello world\"");
+        assert_eq!(parsed.must_match.len(), 1);
+        assert_eq!(parsed.must_match[0].value, "hello world");
+        assert!(parsed.must_match[0].is_phrase);
+    }
+
+    #[test]
+    fn test_parse_not_operator() {
+        let parsed = ParsedSearchTerms::parse("apple NOT orange");
+        assert_eq!(parsed.must_match.len(), 1);
+        assert_eq!(parsed.must_match[0].value, "apple");
+        assert_eq!(parsed.must_not_match.len(), 1);
+        assert_eq!(parsed.must_not_match[0].value, "orange");
+    }
+
+    #[test]
+    fn test_parse_minus_prefix() {
+        let parsed = ParsedSearchTerms::parse("apple -orange");
+        assert_eq!(parsed.must_match.len(), 1);
+        assert_eq!(parsed.must_match[0].value, "apple");
+        assert_eq!(parsed.must_not_match.len(), 1);
+        assert_eq!(parsed.must_not_match[0].value, "orange");
+    }
+
+    #[test]
+    fn test_parse_or_operator() {
+        let parsed = ParsedSearchTerms::parse("cat OR dog");
+        assert_eq!(parsed.must_match.len(), 1);
+        assert_eq!(parsed.must_match[0].value, "cat");
+        assert_eq!(parsed.should_match.len(), 1);
+        assert_eq!(parsed.should_match[0].value, "dog");
+    }
+
+    #[test]
+    fn test_parse_complex_query() {
+        let parsed = ParsedSearchTerms::parse("\"vacation photos\" beach OR mountain -work");
+        assert_eq!(parsed.must_match.len(), 2);
+        assert!(parsed.must_match[0].is_phrase);
+        assert_eq!(parsed.must_match[0].value, "vacation photos");
+        assert_eq!(parsed.must_match[1].value, "beach");
+        assert_eq!(parsed.should_match.len(), 1);
+        assert_eq!(parsed.should_match[0].value, "mountain");
+        assert_eq!(parsed.must_not_match.len(), 1);
+        assert_eq!(parsed.must_not_match[0].value, "work");
+    }
+
+    #[test]
+    fn test_positive_terms() {
+        let parsed = ParsedSearchTerms::parse("apple orange -banana");
+        assert_eq!(parsed.positive_terms(), "apple orange");
     }
 }
