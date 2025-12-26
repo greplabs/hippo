@@ -1,28 +1,38 @@
 name: Feature Request
 description: Suggest a new feature for Hippo
 title: "[Feature]: "
-labels: ["enhancement", "triage"]
+labels: ["enhancement"]
 body:
-  - type: markdown
+  - type: dropdown
+    id: phase
     attributes:
-      value: |
-        Thanks for suggesting a feature! We love hearing ideas from the community.
-
-  - type: textarea
-    id: problem
-    attributes:
-      label: Problem Statement
-      description: Is your feature request related to a problem? Describe it.
-      placeholder: I'm frustrated when...
+      label: Development Phase
+      description: Which phase does this feature belong to?
+      options:
+        - Phase 1: Visual Polish & Consistency
+        - Phase 2: Smart Tagging & Organization
+        - Phase 3: Advanced Search & Discovery
+        - Phase 4: Smart Automation
+        - Phase 5: Platform & Integrations
+        - Other / Not Sure
     validations:
       required: true
 
   - type: textarea
-    id: solution
+    id: description
     attributes:
-      label: Proposed Solution
-      description: Describe the solution you'd like to see.
-      placeholder: It would be great if Hippo could...
+      label: Feature Description
+      description: A clear and concise description of the feature
+      placeholder: I would like Hippo to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: How would you use this feature?
+      placeholder: This would help me...
     validations:
       required: true
 
@@ -30,49 +40,17 @@ body:
     id: alternatives
     attributes:
       label: Alternatives Considered
-      description: Have you considered any alternative solutions or workarounds?
-      placeholder: I've tried...
-
-  - type: dropdown
-    id: component
-    attributes:
-      label: Component
-      description: Which part of Hippo would this affect?
-      options:
-        - Desktop App (UI)
-        - CLI
-        - Search
-        - Indexing
-        - AI Features
-        - New Integration
-        - Documentation
-        - Other
+      description: Any alternative solutions you've considered?
+      placeholder: I tried...
     validations:
-      required: true
-
-  - type: dropdown
-    id: priority
-    attributes:
-      label: How important is this feature to you?
-      options:
-        - Nice to have
-        - Would significantly improve my workflow
-        - Critical - blocking my use of Hippo
-    validations:
-      required: true
+      required: false
 
   - type: checkboxes
     id: contribution
     attributes:
       label: Contribution
-      description: Would you be willing to help implement this feature?
+      description: Would you be willing to contribute to this feature?
       options:
-        - label: I would be willing to submit a PR for this feature
+        - label: I would like to work on this feature
         - label: I can help test this feature
         - label: I can help document this feature
-
-  - type: textarea
-    id: additional
-    attributes:
-      label: Additional Context
-      description: Add any mockups, screenshots, or additional context here.

@@ -1,27 +1,22 @@
 name: Bug Report
-description: Report a bug to help us improve Hippo
+description: Report a bug in Hippo
 title: "[Bug]: "
-labels: ["bug", "triage"]
+labels: ["bug"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Thanks for taking the time to report a bug! Please fill out the form below.
-
   - type: textarea
     id: description
     attributes:
       label: Bug Description
-      description: A clear and concise description of what the bug is.
-      placeholder: Describe the bug...
+      description: A clear and concise description of the bug
+      placeholder: What happened?
     validations:
       required: true
 
   - type: textarea
-    id: reproduce
+    id: steps
     attributes:
       label: Steps to Reproduce
-      description: Steps to reproduce the behavior.
+      description: Steps to reproduce the behavior
       placeholder: |
         1. Go to '...'
         2. Click on '...'
@@ -34,33 +29,18 @@ body:
     attributes:
       label: Expected Behavior
       description: What did you expect to happen?
-      placeholder: Describe what should happen...
-    validations:
-      required: true
-
-  - type: textarea
-    id: actual
-    attributes:
-      label: Actual Behavior
-      description: What actually happened?
-      placeholder: Describe what happened...
     validations:
       required: true
 
   - type: dropdown
-    id: os
+    id: platform
     attributes:
-      label: Operating System
-      description: What OS are you running?
+      label: Platform
       options:
-        - macOS (Intel)
         - macOS (Apple Silicon)
-        - Windows 10
-        - Windows 11
-        - Ubuntu/Debian
-        - Fedora/RHEL
-        - Arch Linux
-        - Other Linux
+        - macOS (Intel)
+        - Windows
+        - Linux
     validations:
       required: true
 
@@ -68,41 +48,13 @@ body:
     id: version
     attributes:
       label: Hippo Version
-      description: What version of Hippo are you using? (Run `hippo --version` or check About)
-      placeholder: "0.1.0"
-    validations:
-      required: true
-
-  - type: dropdown
-    id: component
-    attributes:
-      label: Component
-      description: Which part of Hippo is affected?
-      options:
-        - Desktop App (Tauri)
-        - CLI
-        - Search
-        - Indexing
-        - AI/Ollama Integration
-        - Other
+      placeholder: "0.2.0"
     validations:
       required: true
 
   - type: textarea
     id: logs
     attributes:
-      label: Logs
-      description: Please paste any relevant log output or error messages.
+      label: Relevant Logs
+      description: Please paste any relevant log output
       render: shell
-
-  - type: textarea
-    id: screenshots
-    attributes:
-      label: Screenshots
-      description: If applicable, add screenshots to help explain the problem.
-
-  - type: textarea
-    id: additional
-    attributes:
-      label: Additional Context
-      description: Add any other context about the problem here.
