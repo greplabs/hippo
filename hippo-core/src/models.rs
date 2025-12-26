@@ -269,37 +269,107 @@ pub struct FunctionInfo {
 }
 
 /// A tag that can be applied to memories
-/// A tag that can be applied to memories
+/// Supports hierarchical tags with "/" separator (e.g., "project/hippo/frontend")
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Tag {
     pub name: String,
     pub source: TagSource,
     pub confidence: Option<u8>, // 0-100 percentage for AI tags
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>, // Parent tag name for hierarchical organization
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>, // Optional color for visual distinction
 }
 
 impl Tag {
     pub fn user(name: impl Into<String>) -> Self {
+        let name_str = name.into();
+        let (parsed_name, parent) = Self::parse_hierarchical(&name_str);
         Self {
-            name: name.into(),
+            name: parsed_name,
             source: TagSource::User,
             confidence: None,
+            parent,
+            color: None,
         }
     }
 
     pub fn ai(name: impl Into<String>, confidence: u8) -> Self {
+        let name_str = name.into();
+        let (parsed_name, parent) = Self::parse_hierarchical(&name_str);
         Self {
-            name: name.into(),
+            name: parsed_name,
             source: TagSource::Ai,
             confidence: Some(confidence.min(100)),
+            parent,
+            color: None,
         }
     }
 
     pub fn system(name: impl Into<String>) -> Self {
+        let name_str = name.into();
+        let (parsed_name, parent) = Self::parse_hierarchical(&name_str);
         Self {
-            name: name.into(),
+            name: parsed_name,
             source: TagSource::System,
             confidence: None,
+            parent,
+            color: None,
         }
+    }
+
+    /// Parse a hierarchical tag path like "project/hippo/frontend"
+    /// Returns (leaf_name, parent_path)
+    fn parse_hierarchical(path: &str) -> (String, Option<String>) {
+        let parts: Vec<&str> = path.split('/').collect();
+        if parts.len() > 1 {
+            let leaf = parts.last().unwrap().to_string();
+            let parent = parts[..parts.len() - 1].join("/");
+            (leaf, Some(parent))
+        } else {
+            (path.to_string(), None)
+        }
+    }
+
+    /// Get the full path of the tag (including parent hierarchy)
+    pub fn full_path(&self) -> String {
+        match &self.parent {
+            Some(parent) => format!("{}/{}", parent, self.name),
+            None => self.name.clone(),
+        }
+    }
+
+    /// Check if this tag is a child of the given parent path
+    pub fn is_child_of(&self, parent_path: &str) -> bool {
+        match &self.parent {
+            Some(parent) => parent == parent_path || parent.starts_with(&format!("{}/", parent_path)),
+            None => false,
+        }
+    }
+
+    /// Get the depth of this tag in the hierarchy (0 for root tags)
+    pub fn depth(&self) -> usize {
+        match &self.parent {
+            Some(parent) => parent.matches('/').count() + 1,
+            None => 0,
+        }
+    }
+
+    /// Create a child tag under this tag
+    pub fn child(&self, name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            source: self.source.clone(),
+            confidence: None,
+            parent: Some(self.full_path()),
+            color: None,
+        }
+    }
+
+    /// Set a custom color for this tag
+    pub fn with_color(mut self, color: impl Into<String>) -> Self {
+        self.color = Some(color.into());
+        self
     }
 }
 
@@ -522,5 +592,66 @@ impl VacuumStats {
         } else {
             (self.bytes_reclaimed as f64 / self.size_before as f64) * 100.0
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tag_simple() {
+        let tag = Tag::user("simple");
+        assert_eq!(tag.name, "simple");
+        assert_eq!(tag.parent, None);
+        assert_eq!(tag.full_path(), "simple");
+        assert_eq!(tag.depth(), 0);
+    }
+
+    #[test]
+    fn test_tag_hierarchical() {
+        let tag = Tag::user("project/hippo/frontend");
+        assert_eq!(tag.name, "frontend");
+        assert_eq!(tag.parent, Some("project/hippo".to_string()));
+        assert_eq!(tag.full_path(), "project/hippo/frontend");
+        assert_eq!(tag.depth(), 2);
+    }
+
+    #[test]
+    fn test_tag_is_child_of() {
+        let tag = Tag::user("project/hippo/frontend");
+        assert!(tag.is_child_of("project/hippo"));
+        assert!(tag.is_child_of("project"));
+        assert!(!tag.is_child_of("other"));
+        assert!(!tag.is_child_of("frontend"));
+    }
+
+    #[test]
+    fn test_tag_child_creation() {
+        let parent = Tag::user("project");
+        let child = parent.child("hippo");
+        assert_eq!(child.name, "hippo");
+        assert_eq!(child.parent, Some("project".to_string()));
+        assert_eq!(child.full_path(), "project/hippo");
+
+        let grandchild = child.child("frontend");
+        assert_eq!(grandchild.name, "frontend");
+        assert_eq!(grandchild.parent, Some("project/hippo".to_string()));
+        assert_eq!(grandchild.full_path(), "project/hippo/frontend");
+    }
+
+    #[test]
+    fn test_tag_with_color() {
+        let tag = Tag::user("important").with_color("#ff0000");
+        assert_eq!(tag.color, Some("#ff0000".to_string()));
+    }
+
+    #[test]
+    fn test_tag_ai_hierarchical() {
+        let tag = Tag::ai("category/subcategory/item", 85);
+        assert_eq!(tag.name, "item");
+        assert_eq!(tag.parent, Some("category/subcategory".to_string()));
+        assert_eq!(tag.confidence, Some(85));
+        assert_eq!(tag.source, TagSource::Ai);
     }
 }
