@@ -9,6 +9,18 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use uuid::Uuid;
 
+// === Storage optimization constants ===
+// These limits reduce database size by truncating large text fields
+
+/// Maximum characters for AI-generated summary (200 chars = ~40 words)
+pub const MAX_AI_SUMMARY_CHARS: usize = 200;
+
+/// Maximum characters for AI-generated caption (150 chars = ~25 words)
+pub const MAX_AI_CAPTION_CHARS: usize = 150;
+
+/// Maximum characters for text preview (256 chars)
+pub const MAX_TEXT_PREVIEW_CHARS: usize = 256;
+
 /// Unique identifier for any memory
 pub type MemoryId = Uuid;
 
@@ -492,4 +504,23 @@ pub struct ImportStats {
     pub clusters_imported: usize,
     pub duplicates_skipped: usize,
     pub errors: Vec<String>,
+}
+
+/// Database vacuum statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VacuumStats {
+    pub size_before: u64,
+    pub size_after: u64,
+    pub bytes_reclaimed: u64,
+}
+
+impl VacuumStats {
+    /// Get the percentage of space reclaimed
+    pub fn reclaim_percentage(&self) -> f64 {
+        if self.size_before == 0 {
+            0.0
+        } else {
+            (self.bytes_reclaimed as f64 / self.size_before as f64) * 100.0
+        }
+    }
 }

@@ -4,6 +4,7 @@
 //! Includes support for high-quality models like Gemma2, Llama3.2, and Qwen2.5.
 
 use crate::error::{HippoError, Result};
+use crate::models::{MAX_AI_CAPTION_CHARS, MAX_AI_SUMMARY_CHARS};
 use base64::Engine;
 use futures_util::stream::StreamExt;
 use reqwest::Client;
@@ -861,11 +862,14 @@ Always cite which document(s) you used for your answer."#;
 
         match serde_json::from_str::<serde_json::Value>(json_str) {
             Ok(json) => Ok(LocalAnalysis {
+                // Truncate summary to save storage space
                 summary: json
                     .get("summary")
                     .and_then(|v| v.as_str())
                     .unwrap_or("No summary available")
-                    .to_string(),
+                    .chars()
+                    .take(MAX_AI_SUMMARY_CHARS)
+                    .collect(),
                 key_topics: json
                     .get("key_topics")
                     .and_then(|v| v.as_array())
@@ -895,9 +899,9 @@ Always cite which document(s) you used for your answer."#;
             }),
             Err(e) => {
                 warn!("Failed to parse analysis JSON: {}", e);
-                // Return a basic analysis from the raw response
+                // Return a basic analysis from the raw response (truncated for storage)
                 Ok(LocalAnalysis {
-                    summary: response.chars().take(500).collect(),
+                    summary: response.chars().take(MAX_AI_SUMMARY_CHARS).collect(),
                     key_topics: vec![],
                     suggested_tags: vec![],
                     document_type: None,
@@ -985,7 +989,14 @@ Always cite which document(s) you used for your answer."#;
             .await
             .map_err(|e| HippoError::Other(format!("Failed to parse vision response: {}", e)))?;
 
-        Ok(chat_resp.message.content)
+        // Truncate caption for storage optimization
+        let caption: String = chat_resp
+            .message
+            .content
+            .chars()
+            .take(MAX_AI_CAPTION_CHARS)
+            .collect();
+        Ok(caption)
     }
 }
 

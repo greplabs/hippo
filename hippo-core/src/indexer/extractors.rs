@@ -6,6 +6,9 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
+/// Maximum characters for text preview (storage optimization)
+pub const MAX_TEXT_PREVIEW_CHARS: usize = 256;
+
 /// Extract metadata from a file based on its type
 pub fn extract_metadata(path: &Path, kind: &MemoryKind) -> Result<MemoryMetadata> {
     let mut metadata = MemoryMetadata {
@@ -338,7 +341,7 @@ fn extract_document_metadata(
         DocumentFormat::PlainText | DocumentFormat::Markdown => {
             let content = std::fs::read_to_string(path)?;
             metadata.word_count = Some(content.split_whitespace().count() as u32);
-            metadata.text_preview = Some(content.chars().take(500).collect());
+            metadata.text_preview = Some(content.chars().take(MAX_TEXT_PREVIEW_CHARS).collect());
         }
         DocumentFormat::Pdf => {
             // PDF extraction would use pdf-extract crate
@@ -419,7 +422,7 @@ fn extract_code_metadata(path: &Path, language: &str, metadata: &mut MemoryMetad
     }
 
     metadata.code_info = Some(code_info);
-    metadata.text_preview = Some(content.chars().take(500).collect());
+    metadata.text_preview = Some(content.chars().take(MAX_TEXT_PREVIEW_CHARS).collect());
 
     Ok(())
 }
