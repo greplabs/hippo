@@ -76,6 +76,146 @@
       background: rgba(15, 14, 13, 0.7);
     }
 
+    /* Search loading animation */
+    @keyframes searchPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .search-icon.searching svg {
+      animation: searchPulse 1s ease-in-out infinite;
+      color: #6366f1;
+    }
+    .search-input.searching {
+      background: linear-gradient(90deg, #f5f5f4 0%, #e7e5e4 50%, #f5f5f4 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+    body.dark .search-input.searching {
+      background: linear-gradient(90deg, #1c1917 0%, #292524 50%, #1c1917 100%);
+      background-size: 200% 100%;
+    }
+
+    /* Keyboard shortcut help modal */
+    .shortcut-help-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.15s ease;
+    }
+    .shortcut-help-overlay.open { display: flex; }
+    .shortcut-help-modal {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+      animation: fadeInScale 0.2s ease;
+    }
+    body.dark .shortcut-help-modal { background: #1c1917; }
+    .shortcut-help-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1c1917;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    body.dark .shortcut-help-title { color: #fafaf9; }
+    .shortcut-section { margin-bottom: 20px; }
+    .shortcut-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #a8a29e;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+    .shortcut-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+    body.dark .shortcut-row { border-color: rgba(255,255,255,0.05); }
+    .shortcut-row:last-child { border-bottom: none; }
+    .shortcut-label { font-size: 13px; color: #57534e; }
+    body.dark .shortcut-label { color: #a8a29e; }
+    .shortcut-keys { display: flex; gap: 4px; }
+    .shortcut-key {
+      background: #f5f5f4;
+      border: 1px solid #e7e5e4;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #292524;
+      font-family: ui-monospace, monospace;
+    }
+    body.dark .shortcut-key { background: #292524; border-color: #44403c; color: #fafaf9; }
+    .shortcut-sections {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+    @media (max-width: 500px) { .shortcut-sections { grid-template-columns: 1fr; } }
+    .shortcut-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      gap: 12px;
+    }
+    .shortcut-desc {
+      font-size: 13px;
+      color: #57534e;
+      flex: 1;
+    }
+    body.dark .shortcut-desc { color: #a8a29e; }
+    .shortcut-keys kbd {
+      background: #f5f5f4;
+      border: 1px solid #e7e5e4;
+      border-radius: 5px;
+      padding: 3px 7px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #292524;
+      font-family: ui-monospace, monospace;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    body.dark .shortcut-keys kbd { background: #292524; border-color: #44403c; color: #fafaf9; }
+    .shortcut-footer {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    body.dark .shortcut-footer { border-color: rgba(255,255,255,0.08); }
+    .shortcut-hint {
+      font-size: 12px;
+      color: #78716c;
+    }
+    .shortcut-hint kbd {
+      background: transparent;
+      border: 1px solid #d6d3d1;
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 10px;
+      font-weight: 500;
+      color: #78716c;
+      font-family: ui-monospace, monospace;
+    }
+    body.dark .shortcut-hint kbd { border-color: #57534e; color: #a8a29e; }
+
     /* Custom icon styles */
     .icon { display: inline-flex; align-items: center; justify-content: center; width: 1em; height: 1em; flex-shrink: 0; }
     .icon svg { width: 100%; height: 100%; }
@@ -1016,6 +1156,7 @@
         <button class="sidebar-btn ai-chat-btn" id="chatBtn"><span class="icon icon-sm" id="chatBtnIcon"></span> Ask Hippo</button>
         <button class="sidebar-btn" id="settingsBtn"><span class="icon icon-sm" id="settingsIcon"></span> AI Settings</button>
         <button class="sidebar-btn" id="darkModeBtn"><span class="icon icon-sm" id="themeIcon"></span> <span id="themeText">Dark Mode</span></button>
+        <button class="sidebar-btn" id="shortcutsBtn" onclick="toggleShortcutHelp()"><span class="icon icon-sm" id="shortcutsIcon"></span> Shortcuts <kbd style="margin-left:auto;background:#f5f5f4;border:1px solid #e7e5e4;border-radius:4px;padding:1px 5px;font-size:10px;font-family:ui-monospace,monospace;">?</kbd></button>
         <button class="sidebar-btn danger" id="resetBtn"><span class="icon icon-sm" id="resetIcon"></span> Reset Index</button>
       </div>
     </aside>
@@ -1024,10 +1165,11 @@
       <div class="search-bar">
         <div style="display:flex;align-items:center;gap:0;">
           <div class="search-container" style="flex:1;position:relative;">
-            <span class="icon icon-md" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
+            <span class="icon icon-md search-icon-wrapper" id="searchIcon" style="color:#a8a29e;flex-shrink:0;"></span>
             <div class="active-tags" id="activeTags"></div>
-            <input type="text" class="search-input" id="searchInput" placeholder="Search files... (Tab to add tag)" autocomplete="off">
+            <input type="text" class="search-input" id="searchInput" placeholder="Search files... (press / to focus)" autocomplete="off">
             <div class="search-history-dropdown" id="searchHistoryDropdown"></div>
+            <span class="search-hint" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;color:#a8a29e;pointer-events:none;opacity:0.6;">Tab to add tag</span>
           </div>
           <div class="search-mode">
             <button class="search-mode-btn active" id="searchModeText" data-mode="text" title="Search by filename, path, and tags (instant results as you type)"><span class="icon icon-sm" id="searchModeTextIcon"></span> Text</button>
@@ -1255,6 +1397,48 @@
       <div class="settings-footer">
         <button class="modal-btn secondary" id="settingsCancel">Cancel</button>
         <button class="modal-btn primary" id="settingsSave">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Help Modal -->
+  <div class="shortcut-help-overlay" id="shortcutHelpOverlay">
+    <div class="shortcut-help-modal">
+      <h3 class="shortcut-help-title">Keyboard Shortcuts</h3>
+      <div class="shortcut-sections">
+        <div class="shortcut-section">
+          <h4 class="shortcut-section-title">Navigation</h4>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>K</kbd></span><span class="shortcut-desc">Command palette</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>F</kbd></span><span class="shortcut-desc">Focus search</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>O</kbd></span><span class="shortcut-desc">Add folder</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>,</kbd></span><span class="shortcut-desc">Open settings</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>Esc</kbd></span><span class="shortcut-desc">Close / Deselect</span></div>
+        </div>
+        <div class="shortcut-section">
+          <h4 class="shortcut-section-title">Selection</h4>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>A</kbd></span><span class="shortcut-desc">Select all files</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>Click</kbd></span><span class="shortcut-desc">Multi-select</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>⇧</kbd><kbd>Click</kbd></span><span class="shortcut-desc">Range select</span></div>
+        </div>
+        <div class="shortcut-section">
+          <h4 class="shortcut-section-title">View</h4>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>D</kbd></span><span class="shortcut-desc">Toggle dark mode</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>G</kbd></span><span class="shortcut-desc">Grid view</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>L</kbd></span><span class="shortcut-desc">List view</span></div>
+        </div>
+        <div class="shortcut-section">
+          <h4 class="shortcut-section-title">Search</h4>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>Tab</kbd></span><span class="shortcut-desc">Convert to tag filter</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>Enter</kbd></span><span class="shortcut-desc">Execute search</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>/</kbd></span><span class="shortcut-desc">Quick search</span></div>
+        </div>
+        <div class="shortcut-section">
+          <h4 class="shortcut-section-title">Help</h4>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>?</kbd></span><span class="shortcut-desc">Show this help</span></div>
+        </div>
+      </div>
+      <div class="shortcut-footer">
+        <span class="shortcut-hint">Press <kbd>Esc</kbd> or <kbd>?</kbd> to close</span>
       </div>
     </div>
   </div>
@@ -2121,7 +2305,9 @@
         // Clock icon for history
         clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
         // Organize/magic wand icon
-        organize: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 4-1 1 4 4 1-1a2.83 2.83 0 1 0-4-4Z"/><path d="m13 6-8.5 8.5a2.12 2.12 0 1 0 3 3L16 9"/><path d="m8 15 2 2"/><path d="M3 21h4"/><path d="M17 21h4"/><path d="M19 17v4"/><path d="M5 17v4"/></svg>'
+        organize: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 4-1 1 4 4 1-1a2.83 2.83 0 1 0-4-4Z"/><path d="m13 6-8.5 8.5a2.12 2.12 0 1 0 3 3L16 9"/><path d="m8 15 2 2"/><path d="M3 21h4"/><path d="M17 21h4"/><path d="M19 17v4"/><path d="M5 17v4"/></svg>',
+        // Keyboard shortcuts icon
+        keyboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M6 12h.01"/><path d="M10 12h.01"/><path d="M14 12h.01"/><path d="M18 12h.01"/><path d="M6 16h12"/></svg>'
       };
 
       // State
@@ -2158,6 +2344,15 @@
       var searchHistory = JSON.parse(localStorage.getItem('hippo-search-history') || '[]');
       var maxHistoryItems = 10;
 
+      // Search optimization
+      var searchDebounceTimer = null;
+      var searchDebounceMs = 300;
+      var isSearching = false;
+      var lastSearchQuery = '';
+
+      // Keyboard shortcut help
+      var shortcutHelpOpen = false;
+
       // Apply dark mode on load
       if (darkMode) document.body.classList.add('dark');
 
@@ -2186,6 +2381,7 @@
         document.getElementById('bulkCloseIcon').innerHTML = icons.close;
         // AI icons
         document.getElementById('settingsIcon').innerHTML = icons.settings;
+        document.getElementById('shortcutsIcon').innerHTML = icons.keyboard;
         document.getElementById('settingsModalIcon').innerHTML = icons.sparkles;
         document.getElementById('closeSettingsIcon').innerHTML = icons.close;
         document.getElementById('aiIcon').innerHTML = icons.sparkles;
@@ -2261,6 +2457,25 @@
       function closeCommandPalette() {
         document.getElementById('cmdOverlay').classList.remove('open');
         document.getElementById('cmdInput').value = '';
+      }
+
+      // Shortcut help modal functions
+      function openShortcutHelp() {
+        shortcutHelpOpen = true;
+        document.getElementById('shortcutHelpOverlay').classList.add('open');
+      }
+
+      function closeShortcutHelp() {
+        shortcutHelpOpen = false;
+        document.getElementById('shortcutHelpOverlay').classList.remove('open');
+      }
+
+      function toggleShortcutHelp() {
+        if (shortcutHelpOpen) {
+          closeShortcutHelp();
+        } else {
+          openShortcutHelp();
+        }
       }
 
       function renderCommandPalette(query) {
@@ -2531,18 +2746,59 @@
           });
         }
 
-        function search(query) {
+        function search(query, immediate) {
+          // Cancel pending search
+          if (searchDebounceTimer) {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = null;
+          }
+
+          // Immediate search (for programmatic calls) or debounced (for typing)
+          if (immediate) {
+            executeSearch(query);
+          } else {
+            // Show loading state immediately for visual feedback
+            if (query !== lastSearchQuery) {
+              setSearchLoading(true);
+            }
+            searchDebounceTimer = setTimeout(function() {
+              executeSearch(query);
+            }, searchDebounceMs);
+          }
+        }
+
+        function executeSearch(query) {
+          lastSearchQuery = query || '';
+          isSearching = true;
+          setSearchLoading(true);
+
           invoke('search', { query: query || '', tags: activeTags }).then(function(r) {
             memories = (r.memories || []).map(function(x) { return x.memory; });
+            isSearching = false;
+            setSearchLoading(false);
             renderFiles();
             // Add to history if query is meaningful
             if (query && query.trim().length >= 2) {
               addToSearchHistory(query.trim(), memories.length);
             }
           }).catch(function(e) {
+            isSearching = false;
+            setSearchLoading(false);
             console.error('[Hippo] Search failed:', e);
             showToast('Search failed: ' + e, 'error');
           });
+        }
+
+        function setSearchLoading(loading) {
+          var searchIcon = document.querySelector('.search-icon');
+          var searchInput = document.getElementById('searchInput');
+          if (loading) {
+            if (searchIcon) searchIcon.classList.add('searching');
+            if (searchInput) searchInput.classList.add('searching');
+          } else {
+            if (searchIcon) searchIcon.classList.remove('searching');
+            if (searchInput) searchInput.classList.remove('searching');
+          }
         }
 
         // Search history functions
@@ -4485,23 +4741,34 @@
 
         // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
-          // Command palette
+          // Command palette - always available
           if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
             e.preventDefault();
             openCommandPalette();
             return;
           }
+
+          // Settings - always available
+          if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+            e.preventDefault();
+            openSettings();
+            return;
+          }
+
           // Quick shortcuts (only when not typing)
           var isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
           if (!isTyping) {
+            // Toggle dark mode
             if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
               e.preventDefault();
               document.getElementById('darkModeBtn').click();
             }
+            // Add folder
             if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
               e.preventDefault();
               document.getElementById('addBtn').click();
             }
+            // Focus search
             if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
               e.preventDefault();
               document.getElementById('searchInput').focus();
@@ -4511,10 +4778,37 @@
               e.preventDefault();
               selectAll();
             }
+            // Quick search with /
+            if (e.key === '/') {
+              e.preventDefault();
+              document.getElementById('searchInput').focus();
+            }
+            // Toggle shortcut help with ?
+            if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+              e.preventDefault();
+              toggleShortcutHelp();
+            }
+            // Grid view with G
+            if (e.key === 'g' || e.key === 'G') {
+              if (!e.metaKey && !e.ctrlKey) {
+                document.querySelector('.view-btn:first-child').click();
+              }
+            }
+            // List view with L
+            if (e.key === 'l' || e.key === 'L') {
+              if (!e.metaKey && !e.ctrlKey) {
+                document.querySelector('.view-btn:last-child').click();
+              }
+            }
           }
+
+          // Escape - close modals in order of priority
           if (e.key === 'Escape') {
-            // Close modals in order of priority
-            if (document.getElementById('tagModal').classList.contains('open')) {
+            if (shortcutHelpOpen) {
+              closeShortcutHelp();
+            } else if (document.getElementById('settingsOverlay').classList.contains('open')) {
+              closeSettings();
+            } else if (document.getElementById('tagModal').classList.contains('open')) {
               closeTagModal();
             } else if (document.getElementById('cmdOverlay').classList.contains('open')) {
               closeCommandPalette();
@@ -4526,6 +4820,11 @@
             }
           }
         });
+
+        // Shortcut help overlay click to close
+        document.getElementById('shortcutHelpOverlay').onclick = function(e) {
+          if (e.target === this) closeShortcutHelp();
+        };
 
         // Expose for inline handlers
         window.openInFinder = function(path) {
