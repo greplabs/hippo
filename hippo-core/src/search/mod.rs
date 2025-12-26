@@ -1,4 +1,9 @@
 //! Search engine combining SQL search, fuzzy matching, and semantic search
+//!
+//! Performance optimizations:
+//! - Search result caching with 30-second TTL
+//! - Embedding caching for semantic search
+//! - Optimized scoring algorithms
 
 mod advanced_filter;
 
@@ -12,9 +17,27 @@ use crate::models::*;
 use crate::storage::Storage;
 use crate::HippoConfig;
 use chrono::{Duration, Utc};
+use lru::LruCache;
+use parking_lot::RwLock;
 use regex::Regex;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::time::Instant;
 use tracing::warn;
+
+/// Search cache TTL in seconds (30 seconds for UI responsiveness)
+const SEARCH_CACHE_TTL_SECS: u64 = 30;
+
+/// Maximum cached search results
+const SEARCH_CACHE_SIZE: usize = 100;
+
+/// Cached search result with timestamp
+struct SearchCacheEntry {
+    results: SearchResults,
+    cached_at: Instant,
+}
 
 /// Configuration for hybrid search scoring weights
 #[derive(Debug, Clone)]
@@ -184,6 +207,8 @@ pub struct Searcher {
     storage: Arc<Storage>,
     embedder: Arc<Embedder>,
     hybrid_config: HybridSearchConfig,
+    // Performance cache for search results
+    search_cache: Arc<RwLock<LruCache<u64, SearchCacheEntry>>>,
 }
 
 impl Searcher {
@@ -196,6 +221,9 @@ impl Searcher {
             storage,
             embedder,
             hybrid_config: HybridSearchConfig::default(),
+            search_cache: Arc::new(RwLock::new(LruCache::new(
+                NonZeroUsize::new(SEARCH_CACHE_SIZE).unwrap(),
+            ))),
         })
     }
 
@@ -210,11 +238,46 @@ impl Searcher {
             storage,
             embedder,
             hybrid_config,
+            search_cache: Arc::new(RwLock::new(LruCache::new(
+                NonZeroUsize::new(SEARCH_CACHE_SIZE).unwrap(),
+            ))),
         })
     }
 
-    /// Perform a search with the given query - uses SQL for performance
+    /// Generate a cache key for a search query
+    fn cache_key(query: &SearchQuery) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        query.text.hash(&mut hasher);
+        query.limit.hash(&mut hasher);
+        query.offset.hash(&mut hasher);
+        for tag in &query.tags {
+            tag.tag.hash(&mut hasher);
+        }
+        for kind in &query.kinds {
+            std::mem::discriminant(kind).hash(&mut hasher);
+        }
+        hasher.finish()
+    }
+
+    /// Invalidate the search cache (call after modifications)
+    pub fn invalidate_cache(&self) {
+        let mut cache = self.search_cache.write();
+        cache.clear();
+    }
+
+    /// Perform a search with the given query - uses SQL for performance (with caching)
     pub async fn search(&self, query: SearchQuery) -> Result<SearchResults> {
+        // Check cache first
+        let cache_key = Self::cache_key(&query);
+        {
+            let cache = self.search_cache.read();
+            if let Some(entry) = cache.peek(&cache_key) {
+                if entry.cached_at.elapsed().as_secs() < SEARCH_CACHE_TTL_SECS {
+                    return Ok(entry.results.clone());
+                }
+            }
+        }
+
         let limit = if query.limit > 0 { query.limit } else { 100 };
         let offset = query.offset;
 
@@ -515,12 +578,26 @@ impl Searcher {
             vec![]
         };
 
-        Ok(SearchResults {
+        let search_results = SearchResults {
             memories: results,
             total_count,
             suggested_tags,
             clusters: vec![],
-        })
+        };
+
+        // Cache the results
+        {
+            let mut cache = self.search_cache.write();
+            cache.put(
+                cache_key,
+                SearchCacheEntry {
+                    results: search_results.clone(),
+                    cached_at: Instant::now(),
+                },
+            );
+        }
+
+        Ok(search_results)
     }
 
     /// Perform semantic search using embeddings (Qdrant or SQLite fallback)
