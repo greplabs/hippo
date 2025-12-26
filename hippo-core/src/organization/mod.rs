@@ -694,6 +694,350 @@ fn capitalize_first(s: &str) -> String {
     }
 }
 
+/// Automation rules for automatic file organization
+///
+/// Rules consist of:
+/// - Trigger: When the rule should be evaluated
+/// - Conditions: What must be true for the rule to fire
+/// - Actions: What happens when the rule fires
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutomationRule {
+    pub id: uuid::Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub enabled: bool,
+    pub trigger: RuleTrigger,
+    pub conditions: Vec<RuleCondition>,
+    pub condition_operator: ConditionOperator,
+    pub actions: Vec<RuleAction>,
+    pub priority: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub run_count: u64,
+    pub last_run: Option<DateTime<Utc>>,
+}
+
+impl AutomationRule {
+    pub fn new(name: impl Into<String>, trigger: RuleTrigger) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4(),
+            name: name.into(),
+            description: None,
+            enabled: true,
+            trigger,
+            conditions: Vec::new(),
+            condition_operator: ConditionOperator::All,
+            actions: Vec::new(),
+            priority: 0,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            run_count: 0,
+            last_run: None,
+        }
+    }
+
+    pub fn with_description(mut self, desc: impl Into<String>) -> Self {
+        self.description = Some(desc.into());
+        self
+    }
+
+    pub fn add_condition(mut self, condition: RuleCondition) -> Self {
+        self.conditions.push(condition);
+        self
+    }
+
+    pub fn add_action(mut self, action: RuleAction) -> Self {
+        self.actions.push(action);
+        self
+    }
+
+    pub fn with_priority(mut self, priority: i32) -> Self {
+        self.priority = priority;
+        self
+    }
+
+    pub fn any_condition(mut self) -> Self {
+        self.condition_operator = ConditionOperator::Any;
+        self
+    }
+}
+
+/// When the rule should be evaluated
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RuleTrigger {
+    /// When a new file is indexed
+    OnFileAdded,
+    /// When a file is modified
+    OnFileModified,
+    /// When tags are changed on a file
+    OnTagChanged,
+    /// When AI analysis completes
+    OnAiAnalysisComplete,
+    /// When a file is moved
+    OnFileMoved,
+    /// On a schedule (cron-like expression)
+    Scheduled { cron: String },
+    /// Manual trigger only
+    Manual,
+}
+
+/// How to combine multiple conditions
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ConditionOperator {
+    /// All conditions must match (AND)
+    All,
+    /// Any condition can match (OR)
+    Any,
+    /// No conditions must match (NOT - used with All/Any)
+    None,
+}
+
+/// A condition that must be met for the rule to fire
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleCondition {
+    pub field: ConditionField,
+    pub operator: ConditionOp,
+    pub value: ConditionValue,
+    pub negate: bool,
+}
+
+impl RuleCondition {
+    pub fn new(field: ConditionField, operator: ConditionOp, value: ConditionValue) -> Self {
+        Self {
+            field,
+            operator,
+            value,
+            negate: false,
+        }
+    }
+
+    pub fn not(mut self) -> Self {
+        self.negate = true;
+        self
+    }
+}
+
+/// What field to check in the condition
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ConditionField {
+    /// File extension (e.g., "jpg", "pdf")
+    Extension,
+    /// File type/kind (e.g., "image", "document")
+    FileType,
+    /// File name (without path)
+    FileName,
+    /// Full file path
+    FilePath,
+    /// File size in bytes
+    FileSize,
+    /// File creation date
+    CreatedDate,
+    /// File modification date
+    ModifiedDate,
+    /// Any tag on the file
+    Tag,
+    /// Source folder
+    SourcePath,
+    /// AI-generated tag
+    AiTag,
+    /// AI confidence score
+    AiConfidence,
+    /// EXIF camera make/model
+    CameraMake,
+    /// GPS location
+    HasLocation,
+    /// Code language (for code files)
+    CodeLanguage,
+    /// Custom metadata field
+    CustomField(String),
+}
+
+/// Comparison operator for conditions
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ConditionOp {
+    Equals,
+    NotEquals,
+    Contains,
+    StartsWith,
+    EndsWith,
+    Matches,      // Regex match
+    GreaterThan,
+    LessThan,
+    GreaterOrEqual,
+    LessOrEqual,
+    Between,
+    InList,
+    IsEmpty,
+    IsNotEmpty,
+    Exists,
+}
+
+/// Value for condition comparison
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ConditionValue {
+    String(String),
+    StringList(Vec<String>),
+    Number(f64),
+    NumberRange { min: f64, max: f64 },
+    Boolean(bool),
+    Date(DateTime<Utc>),
+    DateRange { start: DateTime<Utc>, end: DateTime<Utc> },
+    Null,
+}
+
+/// Action to perform when rule fires
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleAction {
+    pub action_type: ActionType,
+    pub parameters: HashMap<String, serde_json::Value>,
+}
+
+impl RuleAction {
+    pub fn new(action_type: ActionType) -> Self {
+        Self {
+            action_type,
+            parameters: HashMap::new(),
+        }
+    }
+
+    pub fn with_param(mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
+        self.parameters.insert(key.into(), value.into());
+        self
+    }
+}
+
+/// Types of actions that can be performed
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ActionType {
+    /// Add a tag to the file
+    AddTag,
+    /// Remove a tag from the file
+    RemoveTag,
+    /// Add file to a collection
+    AddToCollection,
+    /// Remove file from a collection
+    RemoveFromCollection,
+    /// Set a metadata field
+    SetMetadata,
+    /// Run AI analysis on the file
+    RunAiAnalysis,
+    /// Generate AI tags
+    GenerateAiTags,
+    /// Send a notification
+    SendNotification,
+    /// Run a custom script/command
+    RunCommand,
+    /// Mark as favorite
+    SetFavorite,
+    /// Log an event
+    LogEvent,
+    /// Chain to another rule
+    TriggerRule,
+}
+
+/// Result of running an automation rule
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleExecutionResult {
+    pub rule_id: uuid::Uuid,
+    pub memory_id: MemoryId,
+    pub success: bool,
+    pub actions_executed: usize,
+    pub errors: Vec<String>,
+    pub executed_at: DateTime<Utc>,
+    pub duration_ms: u64,
+}
+
+/// Predefined rule templates for common automation patterns
+pub struct RuleTemplates;
+
+impl RuleTemplates {
+    /// Tag photos with location when GPS data is present
+    pub fn tag_photos_with_location() -> AutomationRule {
+        AutomationRule::new("Tag photos with location", RuleTrigger::OnFileAdded)
+            .with_description("Automatically tag photos that have GPS coordinates")
+            .add_condition(RuleCondition::new(
+                ConditionField::FileType,
+                ConditionOp::Equals,
+                ConditionValue::String("image".to_string()),
+            ))
+            .add_condition(RuleCondition::new(
+                ConditionField::HasLocation,
+                ConditionOp::Equals,
+                ConditionValue::Boolean(true),
+            ))
+            .add_action(
+                RuleAction::new(ActionType::AddTag)
+                    .with_param("tag", "has-location")
+            )
+    }
+
+    /// Auto-tag screenshots
+    pub fn tag_screenshots() -> AutomationRule {
+        AutomationRule::new("Tag screenshots", RuleTrigger::OnFileAdded)
+            .with_description("Automatically tag files that look like screenshots")
+            .add_condition(RuleCondition::new(
+                ConditionField::FileType,
+                ConditionOp::Equals,
+                ConditionValue::String("image".to_string()),
+            ))
+            .add_condition(RuleCondition::new(
+                ConditionField::FileName,
+                ConditionOp::Contains,
+                ConditionValue::String("screenshot".to_string()),
+            ))
+            .add_action(
+                RuleAction::new(ActionType::AddTag)
+                    .with_param("tag", "screenshot")
+            )
+    }
+
+    /// Run AI analysis on new documents
+    pub fn analyze_new_documents() -> AutomationRule {
+        AutomationRule::new("Analyze new documents", RuleTrigger::OnFileAdded)
+            .with_description("Run AI analysis on new PDF and document files")
+            .add_condition(RuleCondition::new(
+                ConditionField::FileType,
+                ConditionOp::InList,
+                ConditionValue::StringList(vec![
+                    "document".to_string(),
+                    "pdf".to_string(),
+                ]),
+            ))
+            .add_action(RuleAction::new(ActionType::RunAiAnalysis))
+            .add_action(RuleAction::new(ActionType::GenerateAiTags))
+    }
+
+    /// Organize code by language
+    pub fn organize_code_by_language() -> AutomationRule {
+        AutomationRule::new("Organize code by language", RuleTrigger::OnFileAdded)
+            .with_description("Add language tag to code files")
+            .add_condition(RuleCondition::new(
+                ConditionField::FileType,
+                ConditionOp::Equals,
+                ConditionValue::String("code".to_string()),
+            ))
+            .add_action(
+                RuleAction::new(ActionType::AddTag)
+                    .with_param("tag_template", "lang:{{language}}")
+            )
+    }
+
+    /// Mark large files
+    pub fn mark_large_files() -> AutomationRule {
+        AutomationRule::new("Mark large files", RuleTrigger::OnFileAdded)
+            .with_description("Tag files larger than 100MB")
+            .add_condition(RuleCondition::new(
+                ConditionField::FileSize,
+                ConditionOp::GreaterThan,
+                ConditionValue::Number(100.0 * 1024.0 * 1024.0), // 100MB
+            ))
+            .add_action(
+                RuleAction::new(ActionType::AddTag)
+                    .with_param("tag", "large-file")
+            )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -832,5 +1176,102 @@ mod tests {
         let parsed: OrganizationStats = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.total_files, 100);
         assert_eq!(parsed.average_organization_score, 0.75);
+    }
+
+    // Automation rule tests
+    #[test]
+    fn test_automation_rule_builder() {
+        let rule = AutomationRule::new("Test Rule", RuleTrigger::OnFileAdded)
+            .with_description("A test rule")
+            .add_condition(RuleCondition::new(
+                ConditionField::Extension,
+                ConditionOp::Equals,
+                ConditionValue::String("jpg".to_string()),
+            ))
+            .add_action(RuleAction::new(ActionType::AddTag).with_param("tag", "photo"))
+            .with_priority(10);
+
+        assert_eq!(rule.name, "Test Rule");
+        assert_eq!(rule.description, Some("A test rule".to_string()));
+        assert_eq!(rule.trigger, RuleTrigger::OnFileAdded);
+        assert_eq!(rule.conditions.len(), 1);
+        assert_eq!(rule.actions.len(), 1);
+        assert_eq!(rule.priority, 10);
+        assert!(rule.enabled);
+    }
+
+    #[test]
+    fn test_rule_condition() {
+        let condition = RuleCondition::new(
+            ConditionField::FileSize,
+            ConditionOp::GreaterThan,
+            ConditionValue::Number(1000.0),
+        );
+        assert!(!condition.negate);
+
+        let negated = condition.not();
+        assert!(negated.negate);
+    }
+
+    #[test]
+    fn test_rule_action_with_params() {
+        let action = RuleAction::new(ActionType::AddTag)
+            .with_param("tag", "important")
+            .with_param("confidence", 95);
+
+        assert_eq!(action.action_type, ActionType::AddTag);
+        assert_eq!(action.parameters.len(), 2);
+        assert_eq!(action.parameters.get("tag").unwrap(), "important");
+    }
+
+    #[test]
+    fn test_rule_templates() {
+        let rule = RuleTemplates::tag_photos_with_location();
+        assert_eq!(rule.trigger, RuleTrigger::OnFileAdded);
+        assert_eq!(rule.conditions.len(), 2);
+        assert_eq!(rule.actions.len(), 1);
+
+        let rule = RuleTemplates::tag_screenshots();
+        assert!(rule.conditions.iter().any(|c| c.field == ConditionField::FileName));
+
+        let rule = RuleTemplates::analyze_new_documents();
+        assert!(rule.actions.iter().any(|a| a.action_type == ActionType::RunAiAnalysis));
+
+        let rule = RuleTemplates::mark_large_files();
+        assert!(rule.conditions.iter().any(|c| c.field == ConditionField::FileSize));
+    }
+
+    #[test]
+    fn test_automation_rule_serialization() {
+        let rule = RuleTemplates::tag_screenshots();
+        let json = serde_json::to_string(&rule).unwrap();
+        let parsed: AutomationRule = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.name, rule.name);
+        assert_eq!(parsed.trigger, rule.trigger);
+        assert_eq!(parsed.conditions.len(), rule.conditions.len());
+        assert_eq!(parsed.actions.len(), rule.actions.len());
+    }
+
+    #[test]
+    fn test_condition_operators() {
+        assert!(matches!(ConditionOp::Equals, ConditionOp::Equals));
+        assert!(matches!(ConditionOp::Contains, ConditionOp::Contains));
+        assert!(matches!(ConditionOp::Between, ConditionOp::Between));
+        assert!(matches!(ConditionOp::Matches, ConditionOp::Matches));
+    }
+
+    #[test]
+    fn test_condition_values() {
+        let str_val = ConditionValue::String("test".to_string());
+        let num_val = ConditionValue::Number(42.0);
+        let bool_val = ConditionValue::Boolean(true);
+        let list_val = ConditionValue::StringList(vec!["a".to_string(), "b".to_string()]);
+
+        // Test serialization
+        let _ = serde_json::to_string(&str_val).unwrap();
+        let _ = serde_json::to_string(&num_val).unwrap();
+        let _ = serde_json::to_string(&bool_val).unwrap();
+        let _ = serde_json::to_string(&list_val).unwrap();
     }
 }
