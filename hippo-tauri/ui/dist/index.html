@@ -1387,12 +1387,128 @@
       height: 8px;
       border-radius: 50%;
     }
+
+    /* File Type Icons */
+    .file-type-icon {
+      width: 48px;
+      height: 48px;
+      opacity: 0.7;
+      flex-shrink: 0;
+    }
+    .file-type-icon.small {
+      width: 32px;
+      height: 32px;
+    }
+    .file-type-icon.icon-image { color: #22c55e; }
+    .file-type-icon.icon-video { color: #ef4444; }
+    .file-type-icon.icon-audio { color: #f97316; }
+    .file-type-icon.icon-document { color: #3b82f6; }
+    .file-type-icon.icon-code { color: #8b5cf6; }
+    .file-type-icon.icon-archive { color: #eab308; }
+    .file-type-icon.icon-pdf { color: #dc2626; }
+    .file-type-icon.icon-spreadsheet { color: #22c55e; }
+    .file-type-icon.icon-presentation { color: #f97316; }
+    .file-type-icon.icon-database { color: #6366f1; }
+    .file-type-icon.icon-folder { color: #f59e0b; }
+    .file-type-icon.icon-file { color: #6b7280; }
+
+    /* Card placeholder for non-image files */
+    .card-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: var(--bg-tertiary);
+    }
+    body.dark .card-placeholder {
+      background: var(--bg-tertiary);
+    }
   </style>
 
   <!-- Prism.js for syntax highlighting -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
 <body>
+  <!-- File Type Icon Symbols -->
+  <svg style="display: none;">
+    <defs>
+      <!-- Image icon -->
+      <symbol id="icon-image" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+        <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+
+      <!-- Video icon -->
+      <symbol id="icon-video" viewBox="0 0 24 24">
+        <rect x="2" y="4" width="15" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M17 8l5-3v14l-5-3V8z" fill="none" stroke="currentColor" stroke-width="2"/>
+      </symbol>
+
+      <!-- Audio icon -->
+      <symbol id="icon-audio" viewBox="0 0 24 24">
+        <path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="2"/>
+        <circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+        <circle cx="18" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+      </symbol>
+
+      <!-- Document icon -->
+      <symbol id="icon-document" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+
+      <!-- Code icon -->
+      <symbol id="icon-code" viewBox="0 0 24 24">
+        <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Archive icon -->
+      <symbol id="icon-archive" viewBox="0 0 24 24">
+        <path d="M21 8v13H3V8M23 3H1v5h22V3z" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M10 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+
+      <!-- Folder icon -->
+      <symbol id="icon-folder" viewBox="0 0 24 24">
+        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" fill="none" stroke="currentColor" stroke-width="2"/>
+      </symbol>
+
+      <!-- PDF icon -->
+      <symbol id="icon-pdf" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M14 2v6h6" stroke="currentColor" stroke-width="2"/>
+        <text x="12" y="17" text-anchor="middle" fill="currentColor" font-size="5" font-weight="bold">PDF</text>
+      </symbol>
+
+      <!-- Spreadsheet icon -->
+      <symbol id="icon-spreadsheet" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke="currentColor" stroke-width="2"/>
+      </symbol>
+
+      <!-- Presentation icon -->
+      <symbol id="icon-presentation" viewBox="0 0 24 24">
+        <rect x="2" y="3" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M12 17v4M8 21h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+
+      <!-- Unknown/Generic file icon -->
+      <symbol id="icon-file" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M14 2v6h6" stroke="currentColor" stroke-width="2"/>
+      </symbol>
+
+      <!-- Database icon -->
+      <symbol id="icon-database" viewBox="0 0 24 24">
+        <ellipse cx="12" cy="5" rx="9" ry="3" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" fill="none" stroke="currentColor" stroke-width="2"/>
+      </symbol>
+    </defs>
+  </svg>
+
   <div class="app">
     <aside class="sidebar">
       <div class="sidebar-header">
@@ -3402,11 +3518,12 @@
           var isFav = mem.is_favorite;
           var isSelected = selectedIds.indexOf(mem.id) !== -1;
 
+          var ext = mem.path.split('.').pop();
           var html = '<div class="card' + (isSelected ? ' selected' : '') + '" data-idx="' + idx + '" data-id="' + mem.id + '">';
           html += '<div class="card-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
           html += '<span class="icon icon-sm">' + icons.check + '</span>';
           html += '</div>';
-          html += '<div class="card-preview" style="background:' + color + '">';
+          html += '<div class="card-preview">';
           if ((type === 'image' || type === 'video') && convertFileSrc) {
             // Use thumbnail for images and videos (loaded async)
             var thumbSrc = thumbnailCache[mem.path];
@@ -3416,8 +3533,12 @@
               // Show placeholder, thumbnail will load async
               html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" style="display:none" loading="lazy">';
             }
+            // Still show icon as fallback
+            html += '<div class="card-placeholder">' + getFileTypeIcon(mem.kind, ext) + '</div>';
+          } else {
+            // Non-image files: show file type icon
+            html += '<div class="card-placeholder">' + getFileTypeIcon(mem.kind, ext) + '</div>';
           }
-          html += getIcon(mem.kind, 'xl');
           html += '</div>';
           html += '<button class="card-star' + (isFav ? ' active' : '') + '" data-id="' + mem.id + '"><span class="icon icon-sm">' + (isFav ? icons.starFilled : icons.star) + '</span></button>';
           html += '<div class="card-info">';
@@ -3429,15 +3550,15 @@
 
         function renderListItem(mem, idx) {
           var title = (mem.metadata && mem.metadata.title) || mem.path.split('/').pop();
-          var color = getColor(mem.kind);
           var type = getType(mem.kind);
           var isSelected = selectedIds.indexOf(mem.id) !== -1;
+          var ext = mem.path.split('.').pop();
 
           var html = '<div class="list-item' + (isSelected ? ' selected' : '') + '" data-idx="' + idx + '" data-id="' + mem.id + '">';
           html += '<div class="list-checkbox' + (isSelected ? ' checked visible' : '') + (selectedIds.length > 0 ? ' visible' : '') + '" data-id="' + mem.id + '" data-idx="' + idx + '">';
           html += '<span class="icon icon-sm">' + icons.check + '</span>';
           html += '</div>';
-          html += '<div class="list-thumb" style="background:' + color + '">';
+          html += '<div class="list-thumb">';
           if ((type === 'image' || type === 'video') && convertFileSrc) {
             var thumbSrc = thumbnailCache[mem.path];
             if (thumbSrc) {
@@ -3446,7 +3567,7 @@
               html += '<img class="thumb-pending" data-path="' + esc(mem.path) + '" style="display:none" loading="lazy">';
             }
           }
-          html += getIcon(mem.kind, 'lg');
+          html += getFileTypeIcon(mem.kind, ext, 'small');
           html += '</div>';
           html += '<div class="list-info">';
           html += '<div class="list-title">' + esc(title) + '</div>';
@@ -5441,7 +5562,51 @@
         if (kind.Audio) return 'audio';
         if (kind.Code) return 'code';
         if (kind.Document) return 'document';
+        if (kind.Archive) return 'archive';
+        if (kind.Spreadsheet) return 'spreadsheet';
+        if (kind.Presentation) return 'presentation';
+        if (kind.Database) return 'database';
+        if (kind.Folder) return 'folder';
         return 'other';
+      }
+
+      // Get file type icon SVG based on kind and extension
+      function getFileTypeIcon(kind, extension, size) {
+        var sizeClass = size === 'small' ? ' small' : '';
+        var ext = (extension || '').toLowerCase();
+
+        // Extension-specific icons
+        var extIcons = {
+          'pdf': 'pdf',
+          'doc': 'document', 'docx': 'document', 'odt': 'document', 'rtf': 'document',
+          'xls': 'spreadsheet', 'xlsx': 'spreadsheet', 'csv': 'spreadsheet', 'ods': 'spreadsheet',
+          'ppt': 'presentation', 'pptx': 'presentation', 'odp': 'presentation',
+          'zip': 'archive', 'tar': 'archive', 'gz': 'archive', 'rar': 'archive', '7z': 'archive',
+          'db': 'database', 'sqlite': 'database', 'sql': 'database'
+        };
+
+        if (extIcons[ext]) {
+          var iconType = extIcons[ext];
+          return '<svg class="file-type-icon icon-' + iconType + sizeClass + '"><use href="#icon-' + iconType + '"/></svg>';
+        }
+
+        // Kind-based icons
+        var kindIcons = {
+          'image': 'image',
+          'video': 'video',
+          'audio': 'audio',
+          'document': 'document',
+          'code': 'code',
+          'archive': 'archive',
+          'folder': 'folder',
+          'spreadsheet': 'spreadsheet',
+          'presentation': 'presentation',
+          'database': 'database'
+        };
+
+        var type = getType(kind);
+        var iconName = kindIcons[type] || 'file';
+        return '<svg class="file-type-icon icon-' + iconName + sizeClass + '"><use href="#icon-' + iconName + '"/></svg>';
       }
 
       function getTypeName(kind) {
