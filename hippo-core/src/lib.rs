@@ -177,12 +177,16 @@ impl Default for HippoConfig {
             .map(|d| d.data_dir().to_path_buf())
             .unwrap_or_else(|| PathBuf::from(".hippo"));
 
+        // Allow up to 16 cores for I/O-bound file indexing operations
+        // Most operations are I/O bound, so higher parallelism helps
+        let parallelism = num_cpus::get().min(16);
+
         Self {
             data_dir,
             local_embeddings: true,
             ai_api_key: None,
             qdrant_url: "http://localhost:6334".into(),
-            indexing_parallelism: num_cpus::get().min(8),
+            indexing_parallelism: parallelism,
             auto_tag_enabled: true,
         }
     }

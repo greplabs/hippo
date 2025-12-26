@@ -22,14 +22,14 @@ use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
-/// Cache TTL for model list (5 minutes)
-const MODEL_CACHE_TTL_SECS: u64 = 300;
+/// Cache TTL for model list (15 minutes - models rarely change during session)
+const MODEL_CACHE_TTL_SECS: u64 = 900;
 
-/// Cache TTL for embeddings (1 hour)
-const EMBEDDING_CACHE_TTL_SECS: u64 = 3600;
+/// Cache TTL for embeddings (2 hours - embeddings are deterministic)
+const EMBEDDING_CACHE_TTL_SECS: u64 = 7200;
 
-/// Maximum cached embeddings
-const EMBEDDING_CACHE_SIZE: usize = 1000;
+/// Maximum cached embeddings (increased for better hit rate with large indexes)
+const EMBEDDING_CACHE_SIZE: usize = 5000;
 
 /// Stream chunk from Ollama
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,7 +149,8 @@ impl Default for OllamaConfig {
             base_url: DEFAULT_OLLAMA_URL.to_string(),
             embedding_model: DEFAULT_EMBEDDING_MODEL.to_string(),
             generation_model: DEFAULT_GENERATION_MODEL.to_string(),
-            timeout_secs: 120,
+            // 3 minute timeout for generation (larger models may take longer)
+            timeout_secs: 180,
         }
     }
 }
@@ -328,12 +329,13 @@ impl OllamaClient {
 
     /// Create a new Ollama client with custom configuration
     pub fn with_config(config: OllamaConfig) -> Self {
-        // Optimized HTTP client with connection pooling
+        // Optimized HTTP client with aggressive connection pooling
         let client = Client::builder()
             .timeout(Duration::from_secs(config.timeout_secs))
-            .pool_max_idle_per_host(10) // Keep connections alive
-            .pool_idle_timeout(Duration::from_secs(90))
-            .tcp_keepalive(Duration::from_secs(60))
+            .pool_max_idle_per_host(20) // More idle connections for high throughput
+            .pool_idle_timeout(Duration::from_secs(120)) // Longer idle timeout
+            .tcp_keepalive(Duration::from_secs(30)) // More frequent keepalive
+            .tcp_nodelay(true) // Disable Nagle for lower latency
             .build()
             .unwrap_or_else(|_| Client::new());
 
@@ -677,7 +679,7 @@ impl OllamaClient {
             .client
             .post(&url)
             .json(&request)
-            .timeout(Duration::from_secs(300)) // 5 minute timeout for streaming
+            .timeout(Duration::from_secs(600)) // 10 minute timeout for streaming (large models)
             .send()
             .await
             .map_err(|e| HippoError::Other(format!("Chat request failed: {}", e)))?;
@@ -771,7 +773,7 @@ impl OllamaClient {
             .client
             .post(&url)
             .json(&request)
-            .timeout(Duration::from_secs(300)) // 5 minute timeout for streaming
+            .timeout(Duration::from_secs(600)) // 10 minute timeout for streaming (large models)
             .send()
             .await
             .map_err(|e| HippoError::Other(format!("Generate request failed: {}", e)))?;
