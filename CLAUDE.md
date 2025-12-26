@@ -1574,11 +1574,36 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 25, 2025)
+### Latest Checkpoint (December 25, 2025 - Session 2)
 
-**Commit**: `main` branch - All PRs merged
+**Commit**: `c6f5e37` on `main` branch - All PRs merged through #38
 
-**Recent Performance Optimizations** (Latest):
+**Latest Changes - Search UX & Keyboard Shortcuts (PR #38)**:
+- ✅ Search input debouncing (300ms delay to reduce backend calls)
+- ✅ Keyboard shortcuts help modal (press `?` to open)
+- ✅ New keyboard shortcuts: `/`, `G`, `L`, `Cmd+,`, `Cmd+F`, `Cmd+D`, `Cmd+A`, `Cmd+O`
+- ✅ Shortcuts button with keyboard icon in sidebar footer
+- ✅ Updated search placeholder with "/" shortcut hint
+- ✅ CSS animations for search loading states
+- ✅ Click-outside-to-close for shortcut help modal
+
+**New Keyboard Shortcuts Available**:
+| Shortcut | Action |
+|----------|--------|
+| `?` | Open keyboard shortcuts help |
+| `/` | Focus search input (quick search) |
+| `G` | Switch to grid view |
+| `L` | Switch to list view |
+| `Cmd+,` | Open settings |
+| `Cmd+F` | Focus search |
+| `Cmd+D` | Toggle dark mode |
+| `Cmd+A` | Select all files |
+| `Cmd+O` | Add folder |
+| `Cmd+K` | Command palette |
+| `Esc` | Close modals / Deselect |
+| `Tab` | Convert search text to tag filter |
+
+**Previous Session - Performance Optimizations (PR #36, #37)**:
 - ✅ SQLite: 1GB cache, 1GB mmap, WAL optimizations (5-10x faster queries)
 - ✅ Search cache: 500 entries with 60s TTL (2-3x better hit rate)
 - ✅ Levenshtein: Single-row algorithm with early termination (3-5x faster)
@@ -1586,6 +1611,8 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 - ✅ Indexer: 16-core parallelism, 200-file batches (1.5-2x faster)
 - ✅ Ollama: 5000 embedding cache, 15-min model cache, 10-min streaming timeout
 - ✅ Thumbnails: 2000 LRU entries, 100MB memory limit (2-4x hit rate)
+- ✅ Updated app icons with proper hippo mascot
+- ✅ Version bumped to 0.2.0
 
 **AI Quality Improvements**:
 - ✅ Switched default model to `gemma2:2b` (better quality/speed ratio)
@@ -1594,15 +1621,6 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 - ✅ Enhanced prompts for better AI responses
 - ✅ Lower temperature (0.3) for more focused answers
 - ✅ Increased token limit (2048) for detailed responses
-
-**Previous Changes**:
-- ✅ Enabled auto-tagging by default with Ollama
-- ✅ Added Prism.js syntax highlighting for code files (20+ languages)
-- ✅ Added code preview panel in detail view
-- ✅ CI parallelized with 3 independent jobs (lint, test, build-check)
-- ✅ Qdrant server startup - Extended timeout to 60s
-- ✅ File watcher auto-start - Now starts automatically after initialization
-- ✅ Search error handling - Shows toast notifications on failure
 
 ### Current AI Configuration
 
