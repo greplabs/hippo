@@ -559,56 +559,90 @@ impl Indexer {
                 }
             }
 
-            // Generate and store embeddings
-            for memory in &memories {
-                state
-                    .update_progress(|p| {
-                        p.current_file = Some(
-                            memory
-                                .path
-                                .file_name()
-                                .map(|n| n.to_string_lossy().to_string())
-                                .unwrap_or_default(),
-                        );
-                    })
-                    .await;
+            // Generate and store embeddings in batch (much faster)
+            state
+                .update_progress(|p| {
+                    p.current_file = Some(format!("Embedding batch of {} files...", memories.len()));
+                })
+                .await;
 
-                match embedder.embed_memory(memory).await {
-                    Ok(embedding) => {
-                        let model_name = match &memory.kind {
-                            MemoryKind::Image { .. } => "image_embedding",
-                            MemoryKind::Code { .. } => "code_embedding",
-                            _ => "text_embedding",
-                        };
-                        if let Err(e) = storage
-                            .store_embedding_with_qdrant(
-                                memory.id,
-                                &embedding,
-                                model_name,
-                                &memory.kind,
-                            )
-                            .await
-                        {
-                            debug!("Failed to store embedding for {}: {}", memory.id, e);
+            // Use batch embedding for efficiency
+            match embedder.embed_memories_batch(&memories).await {
+                Ok(embeddings) => {
+                    for (memory_id, embedding, model_name) in embeddings {
+                        // Check for pause
+                        while state.is_paused.load(Ordering::SeqCst) {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        }
+
+                        // Find the memory to get its kind
+                        if let Some(memory) = memories.iter().find(|m| m.id == memory_id) {
+                            if let Err(e) = storage
+                                .store_embedding_with_qdrant(
+                                    memory_id,
+                                    &embedding,
+                                    model_name,
+                                    &memory.kind,
+                                )
+                                .await
+                            {
+                                debug!("Failed to store embedding for {}: {}", memory_id, e);
+                            }
+
+                            // Update progress counter
+                            state.files_processed_count.fetch_add(1, Ordering::SeqCst);
+                            state
+                                .update_progress(|p| {
+                                    p.processed += 1;
+                                    p.current_file = Some(
+                                        memory
+                                            .path
+                                            .file_name()
+                                            .map(|n| n.to_string_lossy().to_string())
+                                            .unwrap_or_default(),
+                                    );
+                                })
+                                .await;
+                            let _ = progress_tx.send(state.progress.read().await.clone());
                         }
                     }
-                    Err(e) => {
-                        debug!("Failed to embed memory {}: {}", memory.id, e);
-                    }
                 }
+                Err(e) => {
+                    warn!("Batch embedding failed: {}, falling back to individual", e);
+                    // Fallback to individual embedding if batch fails
+                    for memory in &memories {
+                        match embedder.embed_memory(memory).await {
+                            Ok(embedding) => {
+                                let model_name = match &memory.kind {
+                                    MemoryKind::Image { .. } => "image_embedding",
+                                    MemoryKind::Code { .. } => "code_embedding",
+                                    _ => "text_embedding",
+                                };
+                                if let Err(e) = storage
+                                    .store_embedding_with_qdrant(
+                                        memory.id,
+                                        &embedding,
+                                        model_name,
+                                        &memory.kind,
+                                    )
+                                    .await
+                                {
+                                    debug!("Failed to store embedding for {}: {}", memory.id, e);
+                                }
+                            }
+                            Err(e) => {
+                                debug!("Failed to embed memory {}: {}", memory.id, e);
+                            }
+                        }
 
-                // Update progress counter
-                state.files_processed_count.fetch_add(1, Ordering::SeqCst);
-                state
-                    .update_progress(|p| {
-                        p.processed += 1;
-                    })
-                    .await;
-                let _ = progress_tx.send(state.progress.read().await.clone());
-
-                // Check for pause
-                while state.is_paused.load(Ordering::SeqCst) {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        state.files_processed_count.fetch_add(1, Ordering::SeqCst);
+                        state
+                            .update_progress(|p| {
+                                p.processed += 1;
+                            })
+                            .await;
+                        let _ = progress_tx.send(state.progress.read().await.clone());
+                    }
                 }
             }
 

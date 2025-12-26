@@ -2,16 +2,34 @@
 //!
 //! Supports local embeddings, text generation, and RAG pipelines.
 //! Includes support for high-quality models like Gemma2, Llama3.2, and Qwen2.5.
+//!
+//! Performance optimizations:
+//! - Model availability caching (5-minute TTL)
+//! - Embedding response caching (1-hour TTL, 1000 entries)
+//! - Connection pooling with keep-alive
 
 use crate::error::{HippoError, Result};
 use crate::models::{MAX_AI_CAPTION_CHARS, MAX_AI_SUMMARY_CHARS};
 use base64::Engine;
 use futures_util::stream::StreamExt;
+use lru::LruCache;
+use parking_lot::RwLock;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
+
+/// Cache TTL for model list (5 minutes)
+const MODEL_CACHE_TTL_SECS: u64 = 300;
+
+/// Cache TTL for embeddings (1 hour)
+const EMBEDDING_CACHE_TTL_SECS: u64 = 3600;
+
+/// Maximum cached embeddings
+const EMBEDDING_CACHE_SIZE: usize = 1000;
 
 /// Stream chunk from Ollama
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,12 +110,28 @@ impl RecommendedModels {
 /// Embedding dimension for nomic-embed-text
 pub const NOMIC_EMBED_DIM: usize = 768;
 
-/// Ollama client for local AI operations
+/// Cached model list with timestamp
+struct ModelCache {
+    models: Vec<OllamaModel>,
+    cached_at: Instant,
+}
+
+/// Cached embedding with timestamp
+struct EmbeddingCacheEntry {
+    embedding: Vec<f32>,
+    cached_at: Instant,
+}
+
+/// Ollama client for local AI operations with caching
 pub struct OllamaClient {
     client: Client,
     base_url: String,
     embedding_model: String,
     generation_model: String,
+    // Performance caches
+    model_cache: Arc<RwLock<Option<ModelCache>>>,
+    embedding_cache: Arc<RwLock<LruCache<String, EmbeddingCacheEntry>>>,
+    availability_cache: Arc<RwLock<Option<(Instant, bool)>>>,
 }
 
 /// Configuration for Ollama client
@@ -294,8 +328,12 @@ impl OllamaClient {
 
     /// Create a new Ollama client with custom configuration
     pub fn with_config(config: OllamaConfig) -> Self {
+        // Optimized HTTP client with connection pooling
         let client = Client::builder()
             .timeout(Duration::from_secs(config.timeout_secs))
+            .pool_max_idle_per_host(10) // Keep connections alive
+            .pool_idle_timeout(Duration::from_secs(90))
+            .tcp_keepalive(Duration::from_secs(60))
             .build()
             .unwrap_or_else(|_| Client::new());
 
@@ -304,15 +342,39 @@ impl OllamaClient {
             base_url: config.base_url,
             embedding_model: config.embedding_model,
             generation_model: config.generation_model,
+            model_cache: Arc::new(RwLock::new(None)),
+            embedding_cache: Arc::new(RwLock::new(LruCache::new(
+                NonZeroUsize::new(EMBEDDING_CACHE_SIZE).unwrap(),
+            ))),
+            availability_cache: Arc::new(RwLock::new(None)),
         }
     }
 
-    /// Check if Ollama is running and accessible
+    /// Check if Ollama is running and accessible (cached for 30 seconds)
     pub async fn is_available(&self) -> bool {
-        match self.client.get(&self.base_url).send().await {
+        // Check cache first (30-second TTL for availability)
+        {
+            let cache = self.availability_cache.read();
+            if let Some((cached_at, available)) = *cache {
+                if cached_at.elapsed().as_secs() < 30 {
+                    return available;
+                }
+            }
+        }
+
+        // Cache miss - check availability
+        let available = match self.client.get(&self.base_url).send().await {
             Ok(resp) => resp.status().is_success(),
             Err(_) => false,
+        };
+
+        // Update cache
+        {
+            let mut cache = self.availability_cache.write();
+            *cache = Some((Instant::now(), available));
         }
+
+        available
     }
 
     /// Get Ollama version info
@@ -334,8 +396,20 @@ impl OllamaClient {
         }
     }
 
-    /// List available models
+    /// List available models (cached for 5 minutes)
     pub async fn list_models(&self) -> Result<Vec<OllamaModel>> {
+        // Check cache first
+        {
+            let cache = self.model_cache.read();
+            if let Some(cached) = cache.as_ref() {
+                if cached.cached_at.elapsed().as_secs() < MODEL_CACHE_TTL_SECS {
+                    debug!("Returning cached model list ({} models)", cached.models.len());
+                    return Ok(cached.models.clone());
+                }
+            }
+        }
+
+        // Cache miss - fetch from API
         let url = format!("{}/api/tags", self.base_url);
         let resp = self
             .client
@@ -353,6 +427,16 @@ impl OllamaClient {
             .await
             .map_err(|e| HippoError::Other(format!("Failed to parse models: {}", e)))?;
 
+        // Update cache
+        {
+            let mut cache = self.model_cache.write();
+            *cache = Some(ModelCache {
+                models: models.models.clone(),
+                cached_at: Instant::now(),
+            });
+        }
+
+        debug!("Cached {} models from Ollama", models.models.len());
         Ok(models.models)
     }
 
@@ -434,13 +518,51 @@ impl OllamaClient {
         Ok(embed_resp.embeddings)
     }
 
-    /// Generate embedding for a single text
+    /// Generate embedding for a single text (with caching)
     pub async fn embed_single(&self, text: &str) -> Result<Vec<f32>> {
+        // Create cache key from text hash
+        let cache_key = format!("{}:{:x}", &self.embedding_model, Self::hash_text(text));
+
+        // Check cache first
+        {
+            let cache = self.embedding_cache.read();
+            if let Some(entry) = cache.peek(&cache_key) {
+                if entry.cached_at.elapsed().as_secs() < EMBEDDING_CACHE_TTL_SECS {
+                    debug!("Embedding cache hit for text hash");
+                    return Ok(entry.embedding.clone());
+                }
+            }
+        }
+
+        // Cache miss - generate embedding
         let embeddings = self.embed(&[text.to_string()]).await?;
-        embeddings
+        let embedding = embeddings
             .into_iter()
             .next()
-            .ok_or_else(|| HippoError::Other("No embedding returned".to_string()))
+            .ok_or_else(|| HippoError::Other("No embedding returned".to_string()))?;
+
+        // Update cache
+        {
+            let mut cache = self.embedding_cache.write();
+            cache.put(
+                cache_key,
+                EmbeddingCacheEntry {
+                    embedding: embedding.clone(),
+                    cached_at: Instant::now(),
+                },
+            );
+        }
+
+        Ok(embedding)
+    }
+
+    /// Simple hash function for cache keys
+    fn hash_text(text: &str) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        hasher.finish()
     }
 
     /// Generate text completion

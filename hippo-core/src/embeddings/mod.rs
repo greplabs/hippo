@@ -283,6 +283,120 @@ impl Embedder {
             .collect())
     }
 
+    /// Batch embed multiple memories efficiently
+    /// Groups memories by type and uses batch API for text-based content
+    pub async fn embed_memories_batch(
+        &self,
+        memories: &[Memory],
+    ) -> Result<Vec<(MemoryId, Vec<f32>, &'static str)>> {
+        let mut results: Vec<(MemoryId, Vec<f32>, &'static str)> = Vec::with_capacity(memories.len());
+
+        // Separate memories by type for optimized processing
+        let mut text_memories: Vec<(usize, &Memory)> = Vec::new();
+        let mut image_memories: Vec<(usize, &Memory)> = Vec::new();
+        let mut code_memories: Vec<(usize, &Memory)> = Vec::new();
+
+        for (idx, memory) in memories.iter().enumerate() {
+            match &memory.kind {
+                MemoryKind::Image { .. } => image_memories.push((idx, memory)),
+                MemoryKind::Code { .. } => code_memories.push((idx, memory)),
+                _ => text_memories.push((idx, memory)),
+            }
+        }
+
+        // Process images individually (local computation, fast)
+        for (_idx, memory) in &image_memories {
+            match self.embed_image(&memory.path).await {
+                Ok(embedding) => {
+                    results.push((memory.id, embedding, "image_embedding"));
+                }
+                Err(e) => {
+                    warn!("Failed to embed image {}: {}", memory.id, e);
+                }
+            }
+        }
+
+        // Batch process code files if we have Ollama, otherwise use hash
+        if !code_memories.is_empty() {
+            let code_texts: Vec<String> = code_memories
+                .iter()
+                .map(|(_, m)| {
+                    std::fs::read_to_string(&m.path)
+                        .unwrap_or_else(|_| m.path.display().to_string())
+                        .chars()
+                        .take(4000) // Limit for efficiency
+                        .collect()
+                })
+                .collect();
+
+            if let Some(ollama) = &self.ollama {
+                // Batch embed code with Ollama
+                match ollama.embed(&code_texts).await {
+                    Ok(embeddings) => {
+                        for (embedding, (_, memory)) in embeddings.into_iter().zip(code_memories.iter()) {
+                            results.push((memory.id, embedding, "code_embedding"));
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Ollama batch code embedding failed, using fallback: {}", e);
+                        for (text, (_, memory)) in code_texts.iter().zip(code_memories.iter()) {
+                            results.push((memory.id, self.hash_embed(text, CODE_EMBEDDING_DIM), "code_embedding"));
+                        }
+                    }
+                }
+            } else {
+                // Fallback to hash embeddings
+                for (text, (_, memory)) in code_texts.iter().zip(code_memories.iter()) {
+                    results.push((memory.id, self.hash_embed(text, CODE_EMBEDDING_DIM), "code_embedding"));
+                }
+            }
+        }
+
+        // Batch process text/document memories
+        if !text_memories.is_empty() {
+            let texts: Vec<String> = text_memories
+                .iter()
+                .map(|(_, m)| {
+                    // Get text content for embedding
+                    let tags: Vec<String> = m.tags.iter().map(|t| t.name.clone()).collect();
+                    let content = std::fs::read_to_string(&m.path)
+                        .ok()
+                        .map(|s| s.chars().take(4000).collect::<String>())
+                        .unwrap_or_default();
+
+                    format!("{} {} {}", m.path.display(), tags.join(" "), content)
+                })
+                .collect();
+
+            if let Some(ollama) = &self.ollama {
+                // Batch embed with Ollama
+                match ollama.embed(&texts).await {
+                    Ok(embeddings) => {
+                        for (embedding, (_, memory)) in embeddings.into_iter().zip(text_memories.iter()) {
+                            results.push((memory.id, embedding, "text_embedding"));
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Ollama batch text embedding failed, using fallback: {}", e);
+                        for (text, (_, memory)) in texts.iter().zip(text_memories.iter()) {
+                            results.push((memory.id, self.hash_embed(text, TEXT_EMBEDDING_DIM), "text_embedding"));
+                        }
+                    }
+                }
+            } else {
+                // Fallback to hash embeddings
+                for (text, (_, memory)) in texts.iter().zip(text_memories.iter()) {
+                    results.push((memory.id, self.hash_embed(text, TEXT_EMBEDDING_DIM), "text_embedding"));
+                }
+            }
+        }
+
+        debug!("Batch embedded {} memories ({} images, {} code, {} text)",
+            results.len(), image_memories.len(), code_memories.len(), text_memories.len());
+
+        Ok(results)
+    }
+
     /// Embed text using OpenAI API
     async fn embed_with_openai(&self, text: &str, api_key: &str) -> Result<Vec<f32>> {
         #[derive(Serialize)]
