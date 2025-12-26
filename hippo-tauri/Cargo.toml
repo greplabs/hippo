@@ -9,7 +9,7 @@ tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
 hippo-core = { path = "../hippo-core" }
-tauri = { version = "2.1", features = ["protocol-asset"] }
+tauri = { version = "2.1", features = ["protocol-asset", "tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
