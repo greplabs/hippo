@@ -25,10 +25,12 @@ pub const THUMBNAIL_SIZE: u32 = 256;
 pub const THUMBNAIL_JPEG_QUALITY: u8 = 60;
 
 /// Default LRU cache capacity (number of thumbnails to keep in memory)
-pub const DEFAULT_CACHE_CAPACITY: usize = 500;
+/// Increased for better hit rate on large photo libraries
+pub const DEFAULT_CACHE_CAPACITY: usize = 2000;
 
-/// Maximum memory usage for in-memory cache (30MB - reduced for efficiency)
-pub const MAX_CACHE_MEMORY_BYTES: usize = 30 * 1024 * 1024;
+/// Maximum memory usage for in-memory cache (100MB - modern systems can handle this)
+/// Each thumbnail is ~5KB, so 100MB = ~20,000 thumbnails
+pub const MAX_CACHE_MEMORY_BYTES: usize = 100 * 1024 * 1024;
 
 /// Thumbnail manager for generating and caching image thumbnails
 pub struct ThumbnailManager {

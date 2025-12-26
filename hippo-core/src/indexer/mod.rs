@@ -159,8 +159,13 @@ pub struct IndexerConfig {
 impl Default for IndexerConfig {
     fn default() -> Self {
         Self {
-            parallelism: 4,
-            batch_size: 100,
+            // Higher parallelism for I/O-bound operations
+            parallelism: std::thread::available_parallelism()
+                .map(|p| p.get())
+                .unwrap_or(4)
+                .min(16),
+            // Larger batch size for better throughput (memory is cheap, latency is expensive)
+            batch_size: 200,
             supported_extensions: vec![
                 // Images
                 "jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "heic", "heif", "raw", "cr2",
