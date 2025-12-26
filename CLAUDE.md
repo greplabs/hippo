@@ -1574,11 +1574,19 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 25, 2025 - Session 3)
+### Latest Checkpoint (December 25, 2025 - Session 4)
 
-**Commit**: `82b1dc3` on `main` branch - All PRs merged through #39
+**Commit**: `64ac428` on `main` branch - All PRs merged through #40
 
-**Latest Changes - Code Cleanup & Quality (This Session)**:
+**Release**: v0.2.0 published with macOS aarch64 build
+
+**Latest Changes - Release & Distribution (This Session)**:
+- ✅ Created v0.2.0 release on GitHub
+- ✅ Built production macOS app (28MB)
+- ✅ Uploaded `Hippo_0.2.0_macos_aarch64.zip` to release
+- ✅ Code cleanup and credits (PR #40)
+
+**Previous Session - Code Cleanup & Quality (PR #40)**:
 - ✅ Fixed clippy warning (abs_diff)
 - ✅ Removed empty cloud source stub files (google_drive.rs, icloud.rs, s3.rs, local.rs)
 - ✅ Fixed dangerous `.expect()` in ThumbnailManager::default() with fallback
@@ -1733,51 +1741,132 @@ ollama pull llava:7b          # Optional for image analysis
 
 ## Elite Project Roadmap 🚀
 
-### Phase 1: Polish & Stability (Current Focus)
-- [ ] Add loading states and skeleton UI during searches
-- [ ] Implement proper error boundaries in UI
-- [ ] Add keyboard shortcuts cheat sheet (Cmd+/)
-- [ ] Improve onboarding experience for new users
-- [ ] Add dark mode theme toggle
+### Phase 1: Visual Polish & Consistency (Next Priority)
 
-### Phase 2: Advanced Search & Discovery
-- [ ] Natural language date parsing ("files from last week")
+#### Icons & Branding
+- [ ] Unified icon set across app, CLI, and system tray
+- [ ] SVG icons for all UI elements (replace emoji where needed)
+- [ ] Consistent hippo mascot in sidebar, about dialog, empty states
+- [ ] App icon variants: light mode, dark mode, monochrome for menu bar
+
+#### Theme System
+- [ ] Complete dark mode implementation
+- [ ] Theme toggle with system preference detection
+- [ ] Consistent color palette (primary, secondary, accent)
+- [ ] Typography improvements (font weights, sizes, line heights)
+- [ ] Smooth theme transitions with CSS variables
+
+#### UI Refinements
+- [ ] Loading skeletons during search/indexing
+- [ ] Empty state illustrations
+- [ ] Improved file type icons (custom SVGs per type)
+- [ ] Better thumbnail placeholders
+- [ ] Polished modal designs
+
+### Phase 2: Smart Tagging & Organization
+
+#### Enhanced Tagging
+- [ ] Tag autocomplete with frequency ranking
+- [ ] Hierarchical tags (parent/child: `photos/vacation/beach`)
+- [ ] Tag colors and icons
+- [ ] Bulk tagging UI (select multiple files, apply tags)
+- [ ] Tag merge/rename across all files
+- [ ] Smart tag suggestions based on content similarity
+
+#### Auto-Tagging Intelligence
+- [ ] Improved AI tagging with confidence scores
+- [ ] Content-based auto-tags (detect faces, objects, scenes)
+- [ ] Location-based tags from EXIF GPS data
+- [ ] Date-based tags (season, year, event detection)
+- [ ] Code-specific tags (language, framework, patterns)
+- [ ] Document classification (invoice, receipt, contract, etc.)
+
+#### Auto-Organization
+- [ ] Smart folders based on rules (type, date, tags)
+- [ ] AI-suggested folder structures
+- [ ] One-click organize by date/type/project
+- [ ] Virtual collections (non-destructive grouping)
+- [ ] Duplicate detection UI with merge/delete options
+
+### Phase 3: Advanced Search & Discovery
+
+#### Search Enhancements
+- [ ] Natural language queries ("photos from last summer")
+- [ ] Search operators (AND, OR, NOT, quotes for exact)
+- [ ] Date range picker in search UI
+- [ ] File size filters
 - [ ] Saved searches / smart folders
 - [ ] Search history with quick access
-- [ ] Duplicate file detection UI with merge options
-- [ ] Similar file clusters visualization
+- [ ] Search within results (refine)
 
-### Phase 3: AI Enhancements
-- [ ] Streaming AI responses (real-time typing effect)
-- [ ] AI-powered file organization suggestions
+#### Discovery Features
+- [ ] "Similar files" one-click from any file
+- [ ] Content clusters visualization
+- [ ] Timeline view (scroll through time)
+- [ ] Location map for geotagged files
+- [ ] Recently modified / recently added views
+- [ ] Trending tags (most used this week)
+
+### Phase 4: Smart Automation
+
+#### Background Intelligence
+- [ ] Scheduled auto-indexing (hourly/daily)
+- [ ] Smart re-indexing (only changed files)
+- [ ] Background embedding generation
+- [ ] Automatic duplicate cleanup suggestions
+- [ ] Storage usage reports and cleanup suggestions
+
+#### Workflows & Rules
+- [ ] Custom automation rules (if X then Y)
+- [ ] Auto-move files based on type/content
+- [ ] Auto-tag rules (filename patterns, folders)
+- [ ] Notification triggers (new duplicates, large files)
+- [ ] Export/import rule configurations
+
+#### AI Assistants
+- [ ] Streaming AI responses (real-time typing)
+- [ ] Context-aware file suggestions
+- [ ] Natural language file operations ("move all PDFs to Documents")
 - [ ] Batch AI analysis for selected files
-- [ ] Custom prompt templates for power users
-- [ ] Multi-modal search (text + image query)
+- [ ] Custom prompt templates
 
-### Phase 4: Collaboration & Cloud
-- [ ] Google Drive integration
+### Phase 5: Platform & Integrations
+
+#### Cross-Platform
+- [ ] Windows build and testing
+- [ ] Linux AppImage/Flatpak
+- [ ] Menu bar / system tray mode
+- [ ] Global hotkey for quick search
+- [ ] Drag and drop from Finder/Explorer
+
+#### Cloud Integrations (Future)
+- [ ] Google Drive sync
 - [ ] iCloud Drive integration
-- [ ] Dropbox integration
-- [ ] S3 bucket integration
-- [ ] Shareable search links
+- [ ] Dropbox connector
+- [ ] S3 bucket browser
+- [ ] WebDAV support
 
-### Phase 5: Advanced Visualization
-- [ ] Knowledge graph with D3.js
-- [ ] Timeline view for temporal exploration
-- [ ] Geographic map for geotagged photos
-- [ ] File relationship explorer
-- [ ] Statistics dashboard
+### Quality Standards
 
-### Quality Checklist for Elite Status
-- [ ] 90%+ test coverage on hippo-core
+#### Code Quality
+- [ ] 80%+ test coverage on hippo-core
+- [ ] Integration tests for Tauri commands
+- [ ] E2E tests for critical user flows
 - [ ] Performance benchmarks documented
-- [ ] Comprehensive API documentation
+- [ ] Memory profiling and leak detection
+
+#### Documentation
 - [ ] User guide with screenshots
 - [ ] Video tutorials for key features
-- [ ] Accessibility audit (WCAG 2.1)
+- [ ] API documentation for developers
+- [ ] Architecture decision records (ADRs)
+
+#### Accessibility & Security
+- [ ] Keyboard navigation audit
+- [ ] Screen reader compatibility
+- [ ] Color contrast compliance
 - [ ] Security audit for file handling
-- [ ] Memory profiling and optimization
-- [ ] Bundle size optimization for UI
+- [ ] Sandboxed file access
 
 ### Commands for Testing
 
