@@ -1253,6 +1253,140 @@
       display: inline-block;
       margin-right: 6px;
     }
+
+    /* Tag Autocomplete */
+    .tag-autocomplete {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      box-shadow: var(--shadow-md);
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 100;
+      display: none;
+      margin-top: 4px;
+    }
+    .tag-autocomplete.open { display: block; }
+    .autocomplete-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .autocomplete-item:hover,
+    .autocomplete-item.selected {
+      background: var(--bg-hover);
+    }
+    .autocomplete-item .tag-name {
+      font-size: 13px;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+    }
+    .autocomplete-item .tag-count {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--bg-tertiary);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .autocomplete-create {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border-secondary);
+      color: var(--accent-primary);
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .autocomplete-create:hover {
+      background: var(--bg-hover);
+    }
+
+    /* Selected tags in modal */
+    .selected-tags-container {
+      margin-top: 12px;
+    }
+    .selected-tags-label,
+    .common-tags-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .selected-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .selected-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: var(--accent-primary);
+      color: white;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .selected-tag button {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.7);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      margin-left: 2px;
+    }
+    .selected-tag button:hover {
+      color: white;
+    }
+
+    /* Common tags section */
+    .common-tags-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-secondary);
+    }
+    .common-tags-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .common-tag-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .common-tag-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent-primary);
+      color: var(--text-primary);
+    }
+    .common-tag-btn .tag-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
   </style>
 
   <!-- Prism.js for syntax highlighting -->
@@ -1404,12 +1538,23 @@
 
   <!-- Bulk Tag Modal -->
   <div class="modal-overlay" id="tagModal">
-    <div class="modal">
-      <h3 class="modal-title">Add Tag to Selected Files</h3>
-      <input type="text" class="modal-input" id="bulkTagInput" placeholder="Enter tag name...">
+    <div class="modal" style="min-width: 400px;">
+      <h3 class="modal-title">Add Tags to <span id="tagModalCount">0</span> Files</h3>
+      <div class="tag-input-wrapper" style="position: relative;">
+        <input type="text" class="modal-input" id="bulkTagInput" placeholder="Type to search or create tags..." autocomplete="off">
+        <div class="tag-autocomplete" id="tagAutocomplete"></div>
+      </div>
+      <div class="selected-tags-container" id="selectedTagsContainer" style="display:none;">
+        <div class="selected-tags-label">Tags to add:</div>
+        <div class="selected-tags" id="selectedTagsList"></div>
+      </div>
+      <div class="common-tags-section">
+        <div class="common-tags-label">Common tags:</div>
+        <div class="common-tags-list" id="commonTagsList"></div>
+      </div>
       <div class="modal-actions">
         <button class="modal-btn secondary" id="tagModalCancel">Cancel</button>
-        <button class="modal-btn primary" id="tagModalConfirm">Add Tag</button>
+        <button class="modal-btn primary" id="tagModalConfirm">Add Tags</button>
       </div>
     </div>
   </div>
@@ -2445,6 +2590,8 @@
       var activeTags = [];
       var viewMode = 'grid';
       var colorPickerTag = null; // Currently editing tag
+      var bulkTagsToAdd = []; // Tags selected in bulk modal
+      var autocompleteSelectedIndex = -1; // For keyboard navigation
 
       // Tag color palette
       var TAG_COLORS = [
@@ -3468,49 +3615,171 @@
 
         function openTagModal() {
           document.getElementById('tagModal').classList.add('open');
+          document.getElementById('tagModalCount').textContent = selectedIds.length;
           document.getElementById('bulkTagInput').value = '';
+          bulkTagsToAdd = [];
+          autocompleteSelectedIndex = -1;
+          renderSelectedTags();
+          renderCommonTags();
           document.getElementById('bulkTagInput').focus();
         }
 
         function closeTagModal() {
           document.getElementById('tagModal').classList.remove('open');
+          document.getElementById('tagAutocomplete').classList.remove('open');
+          bulkTagsToAdd = [];
+        }
+
+        function renderSelectedTags() {
+          var container = document.getElementById('selectedTagsContainer');
+          var list = document.getElementById('selectedTagsList');
+          if (bulkTagsToAdd.length === 0) {
+            container.style.display = 'none';
+            return;
+          }
+          container.style.display = 'block';
+          list.innerHTML = bulkTagsToAdd.map(function(tag) {
+            return '<span class="selected-tag">' + esc(tag) + '<button data-tag="' + esc(tag) + '">&times;</button></span>';
+          }).join('');
+          list.querySelectorAll('button').forEach(function(btn) {
+            btn.onclick = function() {
+              var t = btn.dataset.tag;
+              bulkTagsToAdd = bulkTagsToAdd.filter(function(x) { return x !== t; });
+              renderSelectedTags();
+            };
+          });
+        }
+
+        function renderCommonTags() {
+          var list = document.getElementById('commonTagsList');
+          var topTags = allTags.slice(0, 8);
+          list.innerHTML = topTags.map(function(t) {
+            var tagName = t.name || t[0];
+            var tagColor = t.color || null;
+            var dotHtml = tagColor ? '<span class="tag-dot" style="background:' + tagColor + ';"></span>' : '';
+            return '<button class="common-tag-btn" data-tag="' + esc(tagName) + '">' + dotHtml + esc(tagName) + '</button>';
+          }).join('');
+          list.querySelectorAll('.common-tag-btn').forEach(function(btn) {
+            btn.onclick = function() {
+              addBulkTag(btn.dataset.tag);
+            };
+          });
+        }
+
+        function addBulkTag(tag) {
+          tag = tag.trim().toLowerCase();
+          if (!tag || bulkTagsToAdd.indexOf(tag) !== -1) return;
+          bulkTagsToAdd.push(tag);
+          renderSelectedTags();
+          document.getElementById('bulkTagInput').value = '';
+          hideTagAutocomplete();
+        }
+
+        function showTagAutocomplete(query) {
+          var dropdown = document.getElementById('tagAutocomplete');
+          if (!query) {
+            dropdown.classList.remove('open');
+            return;
+          }
+          query = query.toLowerCase();
+          var matches = allTags
+            .filter(function(t) {
+              var name = (t.name || t[0]).toLowerCase();
+              return name.indexOf(query) !== -1;
+            })
+            .sort(function(a, b) {
+              var aName = (a.name || a[0]).toLowerCase();
+              var bName = (b.name || b[0]).toLowerCase();
+              var aStarts = aName.indexOf(query) === 0;
+              var bStarts = bName.indexOf(query) === 0;
+              if (aStarts && !bStarts) return -1;
+              if (!aStarts && bStarts) return 1;
+              var aCount = a.count !== undefined ? a.count : a[1];
+              var bCount = b.count !== undefined ? b.count : b[1];
+              return bCount - aCount;
+            })
+            .slice(0, 6);
+
+          var exactMatch = matches.some(function(t) { return (t.name || t[0]).toLowerCase() === query; });
+          var html = matches.map(function(t, i) {
+            var tagName = t.name || t[0];
+            var tagCount = t.count !== undefined ? t.count : t[1];
+            var tagColor = t.color || null;
+            var dotHtml = tagColor ? '<span class="tag-color-dot" style="background:' + tagColor + ';"></span>' : '';
+            var selected = i === autocompleteSelectedIndex ? ' selected' : '';
+            return '<div class="autocomplete-item' + selected + '" data-tag="' + esc(tagName) + '">' +
+              '<span class="tag-name">' + dotHtml + esc(tagName) + '</span>' +
+              '<span class="tag-count">' + tagCount + '</span>' +
+              '</div>';
+          }).join('');
+
+          if (!exactMatch && query.length >= 2) {
+            html += '<div class="autocomplete-create" data-tag="' + esc(query) + '">+ Create tag "' + esc(query) + '"</div>';
+          }
+
+          dropdown.innerHTML = html;
+          dropdown.classList.add('open');
+
+          dropdown.querySelectorAll('.autocomplete-item, .autocomplete-create').forEach(function(item) {
+            item.onclick = function() {
+              addBulkTag(item.dataset.tag);
+            };
+          });
+        }
+
+        function hideTagAutocomplete() {
+          document.getElementById('tagAutocomplete').classList.remove('open');
+          autocompleteSelectedIndex = -1;
         }
 
         function bulkAddTag() {
-          var tag = document.getElementById('bulkTagInput').value.trim().toLowerCase();
-          if (!tag || selectedIds.length === 0) return;
+          // First add any text in the input
+          var inputTag = document.getElementById('bulkTagInput').value.trim().toLowerCase();
+          if (inputTag && bulkTagsToAdd.indexOf(inputTag) === -1) {
+            bulkTagsToAdd.push(inputTag);
+          }
 
-          var pending = selectedIds.length;
+          if (bulkTagsToAdd.length === 0 || selectedIds.length === 0) return;
+
+          var totalOps = selectedIds.length * bulkTagsToAdd.length;
+          var pending = totalOps;
           var successCount = 0;
+          var fileCount = selectedIds.length;
+          var tagCount = bulkTagsToAdd.length;
 
           selectedIds.forEach(function(id) {
-            invoke('add_tag', { memoryId: id, tag: tag }).then(function() {
-              memories.forEach(function(m) {
-                if (m.id === id) {
-                  if (!m.tags) m.tags = [];
-                  if (!m.tags.some(function(t) { return t.name === tag; })) {
-                    m.tags.push({ name: tag, source: 'User' });
+            bulkTagsToAdd.forEach(function(tag) {
+              invoke('add_tag', { memoryId: id, tag: tag }).then(function() {
+                memories.forEach(function(m) {
+                  if (m.id === id) {
+                    if (!m.tags) m.tags = [];
+                    if (!m.tags.some(function(t) { return t.name === tag; })) {
+                      m.tags.push({ name: tag, source: 'User' });
+                    }
                   }
+                });
+                successCount++;
+                pending--;
+                if (pending === 0) {
+                  var msg = tagCount > 1
+                    ? tagCount + ' tags added to ' + fileCount + ' files'
+                    : 'Tag added to ' + fileCount + ' files';
+                  showToast(msg, 'success');
+                  closeTagModal();
+                  clearSelection();
+                  invoke('get_tags').then(function(tags) {
+                    allTags = tags || [];
+                    renderTagBar();
+                  });
+                }
+              }).catch(function() {
+                pending--;
+                if (pending === 0) {
+                  showToast('Tags added (some may have failed)', 'success');
+                  closeTagModal();
+                  clearSelection();
                 }
               });
-              successCount++;
-              pending--;
-              if (pending === 0) {
-                showToast('Tag added to ' + successCount + ' files', 'success');
-                closeTagModal();
-                clearSelection();
-                invoke('get_tags').then(function(tags) {
-                  allTags = tags || [];
-                  renderTagBar();
-                });
-              }
-            }).catch(function() {
-              pending--;
-              if (pending === 0) {
-                showToast('Tag added to ' + successCount + ' files', 'success');
-                closeTagModal();
-                clearSelection();
-              }
             });
           });
         }
@@ -5013,14 +5282,52 @@
           bulkAddTag();
         };
 
+        document.getElementById('bulkTagInput').oninput = function() {
+          showTagAutocomplete(this.value);
+        };
+
         document.getElementById('bulkTagInput').onkeydown = function(e) {
-          if (e.key === 'Enter') {
+          var dropdown = document.getElementById('tagAutocomplete');
+          var items = dropdown.querySelectorAll('.autocomplete-item, .autocomplete-create');
+          var isOpen = dropdown.classList.contains('open');
+
+          if (e.key === 'ArrowDown' && isOpen) {
             e.preventDefault();
-            bulkAddTag();
+            autocompleteSelectedIndex = Math.min(autocompleteSelectedIndex + 1, items.length - 1);
+            updateAutocompleteSelection(items);
+          } else if (e.key === 'ArrowUp' && isOpen) {
+            e.preventDefault();
+            autocompleteSelectedIndex = Math.max(autocompleteSelectedIndex - 1, 0);
+            updateAutocompleteSelection(items);
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (isOpen && autocompleteSelectedIndex >= 0 && items[autocompleteSelectedIndex]) {
+              addBulkTag(items[autocompleteSelectedIndex].dataset.tag);
+            } else if (this.value.trim()) {
+              addBulkTag(this.value);
+            } else if (bulkTagsToAdd.length > 0) {
+              bulkAddTag();
+            }
           } else if (e.key === 'Escape') {
-            closeTagModal();
+            if (isOpen) {
+              hideTagAutocomplete();
+            } else {
+              closeTagModal();
+            }
+          } else if (e.key === 'Tab') {
+            e.preventDefault();
+            if (isOpen && items.length > 0) {
+              var idx = autocompleteSelectedIndex >= 0 ? autocompleteSelectedIndex : 0;
+              addBulkTag(items[idx].dataset.tag);
+            }
           }
         };
+
+        function updateAutocompleteSelection(items) {
+          items.forEach(function(item, i) {
+            item.classList.toggle('selected', i === autocompleteSelectedIndex);
+          });
+        }
 
         document.getElementById('tagModal').onclick = function(e) {
           if (e.target === this) closeTagModal();
