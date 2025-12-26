@@ -138,10 +138,11 @@ impl IndexingState {
 }
 
 /// The main indexer that orchestrates file discovery and processing
-#[allow(dead_code)]
 pub struct Indexer {
     storage: Arc<Storage>,
+    #[allow(dead_code)] // Reserved for embedding generation during indexing
     embedder: Arc<Embedder>,
+    #[allow(dead_code)] // Configuration is passed at construction, stored for future use
     config: IndexerConfig,
     task_tx: mpsc::Sender<IndexTask>,
     state: Arc<IndexingState>,
@@ -189,10 +190,11 @@ impl Default for IndexerConfig {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 enum IndexTask {
     IndexPath(PathBuf, Source),
+    #[allow(dead_code)] // Planned for selective re-indexing feature
     Reindex(MemoryId),
+    #[allow(dead_code)] // Planned for graceful shutdown
     Shutdown,
 }
 

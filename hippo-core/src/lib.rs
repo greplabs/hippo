@@ -134,11 +134,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Main Hippo instance
-#[allow(dead_code)]
 pub struct Hippo {
     storage: Arc<storage::Storage>,
     /// The file indexer for scanning and processing files
     pub indexer: Arc<indexer::Indexer>,
+    #[allow(dead_code)] // Reserved for direct embedding access
     embedder: Arc<embeddings::Embedder>,
     searcher: Arc<search::Searcher>,
     graph: Arc<RwLock<graph::KnowledgeGraph>>,
@@ -146,6 +146,7 @@ pub struct Hippo {
     pub watcher: Option<Arc<RwLock<watcher::FileWatcher>>>,
     thumbnail_manager: Arc<thumbnails::ThumbnailManager>,
     organizer: Arc<organization::Organizer>,
+    #[allow(dead_code)] // Stored for runtime configuration access
     config: HippoConfig,
 }
 
