@@ -2513,6 +2513,50 @@ async fn unwatch_source_path(path: String, state: State<'_, AppState>) -> Result
     Ok("Source path unwatched".to_string())
 }
 
+#[tauri::command]
+async fn optimize_storage(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Optimizing storage...");
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    match hippo.optimize_storage().await {
+        Ok(stats) => {
+            println!(
+                "[Hippo] Storage optimized: {} bytes reclaimed ({:.1}%)",
+                stats.bytes_reclaimed,
+                stats.reclaim_percentage()
+            );
+            serde_json::to_value(&stats).map_err(|e| e.to_string())
+        }
+        Err(e) => {
+            println!("[Hippo] Storage optimization failed: {}", e);
+            Err(format!("Storage optimization failed: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+async fn vacuum_database(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    println!("[Hippo] Vacuuming database...");
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    match hippo.vacuum().await {
+        Ok(stats) => {
+            println!(
+                "[Hippo] Database vacuumed: {} bytes reclaimed ({:.1}%)",
+                stats.bytes_reclaimed,
+                stats.reclaim_percentage()
+            );
+            serde_json::to_value(&stats).map_err(|e| e.to_string())
+        }
+        Err(e) => {
+            println!("[Hippo] Vacuum failed: {}", e);
+            Err(format!("Vacuum failed: {}", e))
+        }
+    }
+}
+
 // Helper function for cosine similarity (kept for future semantic search)
 #[allow(dead_code)]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
@@ -2663,6 +2707,9 @@ fn main() {
             get_watcher_stats,
             watch_source_path,
             unwatch_source_path,
+            // Storage Optimization
+            optimize_storage,
+            vacuum_database,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

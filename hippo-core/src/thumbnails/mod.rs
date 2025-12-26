@@ -7,7 +7,7 @@
 //! - Support for images, videos (via ffmpeg), PDFs (via pdfium), and Office documents
 
 use crate::error::{HippoError, Result};
-use image::{DynamicImage, ImageFormat};
+use image::DynamicImage;
 use lru::LruCache;
 use parking_lot::Mutex;
 use std::fs;
@@ -20,11 +20,15 @@ use tracing::{debug, warn};
 /// Default thumbnail size (width and height)
 pub const THUMBNAIL_SIZE: u32 = 256;
 
+/// JPEG quality for thumbnails (60% provides good balance of size/quality)
+/// Default ~75% creates 8-12KB thumbnails, 60% creates 4-6KB (~50% smaller)
+pub const THUMBNAIL_JPEG_QUALITY: u8 = 60;
+
 /// Default LRU cache capacity (number of thumbnails to keep in memory)
 pub const DEFAULT_CACHE_CAPACITY: usize = 500;
 
-/// Maximum memory usage for in-memory cache (50MB)
-pub const MAX_CACHE_MEMORY_BYTES: usize = 50 * 1024 * 1024;
+/// Maximum memory usage for in-memory cache (30MB - reduced for efficiency)
+pub const MAX_CACHE_MEMORY_BYTES: usize = 30 * 1024 * 1024;
 
 /// Thumbnail manager for generating and caching image thumbnails
 pub struct ThumbnailManager {
@@ -183,11 +187,12 @@ impl ThumbnailManager {
         // Create thumbnail (maintains aspect ratio)
         let thumbnail = self.create_thumbnail(&img);
 
-        // Save thumbnail as JPEG for consistent format and good compression
+        // Save thumbnail as JPEG with optimized quality (60% = ~50% smaller files)
         let mut output = fs::File::create(&thumbnail_path)?;
-
-        thumbnail
-            .write_to(&mut output, ImageFormat::Jpeg)
+        let rgb = thumbnail.to_rgb8();
+        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, THUMBNAIL_JPEG_QUALITY);
+        encoder
+            .encode(&rgb, rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
             .map_err(|e| HippoError::Other(format!("Failed to save thumbnail: {}", e)))?;
 
         debug!("Thumbnail saved: {:?}", thumbnail_path);
@@ -436,13 +441,15 @@ impl ThumbnailManager {
             )
             .map_err(|e| HippoError::Other(format!("Failed to render page: {}", e)))?;
 
-        // Convert to image and save
+        // Convert to image and save with optimized quality
         let dynamic_image = bitmap.as_image();
         let thumbnail = self.create_thumbnail(&dynamic_image);
 
         let mut output = fs::File::create(output_path)?;
-        thumbnail
-            .write_to(&mut output, ImageFormat::Jpeg)
+        let rgb = thumbnail.to_rgb8();
+        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, THUMBNAIL_JPEG_QUALITY);
+        encoder
+            .encode(&rgb, rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
             .map_err(|e| HippoError::Other(format!("Failed to save PDF thumbnail: {}", e)))?;
 
         Ok(())
@@ -521,8 +528,10 @@ impl ThumbnailManager {
                 if let Ok(img) = image::load_from_memory(&buffer) {
                     let thumbnail = self.create_thumbnail(&img);
                     let mut output = fs::File::create(output_path)?;
-                    thumbnail
-                        .write_to(&mut output, ImageFormat::Jpeg)
+                    let rgb = thumbnail.to_rgb8();
+                    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, THUMBNAIL_JPEG_QUALITY);
+                    encoder
+                        .encode(&rgb, rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
                         .map_err(|e| {
                             HippoError::Other(format!("Failed to save Office thumbnail: {}", e))
                         })?;

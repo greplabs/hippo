@@ -303,6 +303,45 @@ impl QdrantStorage {
         Ok(results)
     }
 
+    /// Retrieve embedding for a memory from Qdrant
+    pub async fn get_embedding(
+        &self,
+        memory_id: MemoryId,
+        kind: &MemoryKind,
+    ) -> Result<Option<Vec<f32>>> {
+        let client = match &self.client {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+
+        let collection = Self::get_collection_for_kind(kind);
+        let point_id = PointId::from(memory_id.to_string());
+
+        use qdrant_client::qdrant::GetPointsBuilder;
+        let request = GetPointsBuilder::new(collection, vec![point_id])
+            .with_vectors(true)
+            .with_payload(true);
+
+        match client.get_points(request).await {
+            Ok(response) => {
+                if let Some(point) = response.result.first() {
+                    if let Some(vectors) = &point.vectors {
+                        if let Some(qdrant_client::qdrant::vectors::VectorsOptions::Vector(v)) =
+                            &vectors.vectors_options
+                        {
+                            return Ok(Some(v.data.clone()));
+                        }
+                    }
+                }
+                Ok(None)
+            }
+            Err(e) => {
+                debug!("Failed to get embedding from Qdrant: {}", e);
+                Ok(None)
+            }
+        }
+    }
+
     /// Delete a vector from Qdrant
     pub async fn delete(&self, memory_id: MemoryId, kind: &MemoryKind) -> Result<()> {
         let client = match &self.client {

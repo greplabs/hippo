@@ -650,6 +650,33 @@ impl Hippo {
     pub async fn import_index(&self, data: IndexExport) -> Result<ImportStats> {
         self.storage.import_index(data).await
     }
+
+    // === Storage Optimization ===
+
+    /// Vacuum and optimize the database to reclaim disk space
+    ///
+    /// This should be called after bulk deletions or periodically to:
+    /// - Reclaim disk space from deleted records
+    /// - Rebuild indexes for better performance
+    /// - Analyze tables for query optimization
+    pub async fn vacuum(&self) -> Result<VacuumStats> {
+        self.storage.vacuum().await
+    }
+
+    /// Clean up orphaned embeddings (embeddings without matching memories)
+    pub async fn cleanup_orphaned_embeddings(&self) -> Result<usize> {
+        self.storage.cleanup_orphaned_embeddings().await
+    }
+
+    /// Full storage optimization: cleanup orphans, vacuum, and reclaim space
+    pub async fn optimize_storage(&self) -> Result<VacuumStats> {
+        // First clean up orphaned embeddings
+        let orphans = self.cleanup_orphaned_embeddings().await?;
+        tracing::info!("Cleaned up {} orphaned embeddings", orphans);
+
+        // Then vacuum to reclaim space
+        self.vacuum().await
+    }
 }
 
 // Re-export num_cpus for config default

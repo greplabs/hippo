@@ -530,9 +530,68 @@ impl Storage {
             DELETE FROM sources;
             DELETE FROM clusters;
             DELETE FROM tags;
+            DELETE FROM embeddings;
         "#,
         )?;
         Ok(())
+    }
+
+    /// Vacuum and optimize the database to reclaim space
+    ///
+    /// This should be called after bulk deletions or periodically to:
+    /// - Reclaim disk space from deleted records
+    /// - Rebuild indexes for better performance
+    /// - Analyze tables for query optimization
+    pub async fn vacuum(&self) -> Result<VacuumStats> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        // Get size before vacuum
+        let size_before: i64 = db
+            .query_row("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        // Run VACUUM to reclaim space and defragment
+        db.execute_batch("VACUUM")?;
+
+        // Analyze for query optimization
+        db.execute_batch("ANALYZE")?;
+
+        // Get size after vacuum
+        let size_after: i64 = db
+            .query_row("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let bytes_reclaimed = (size_before - size_after).max(0) as u64;
+        info!(
+            "Database vacuum complete: reclaimed {} bytes ({:.2} MB)",
+            bytes_reclaimed,
+            bytes_reclaimed as f64 / 1024.0 / 1024.0
+        );
+
+        Ok(VacuumStats {
+            size_before: size_before as u64,
+            size_after: size_after as u64,
+            bytes_reclaimed,
+        })
+    }
+
+    /// Clean up orphaned embeddings (embeddings without matching memories)
+    pub async fn cleanup_orphaned_embeddings(&self) -> Result<usize> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        let deleted = db.execute(
+            "DELETE FROM embeddings WHERE memory_id NOT IN (SELECT id FROM memories)",
+            [],
+        )?;
+
+        info!("Cleaned up {} orphaned embeddings", deleted);
+        Ok(deleted)
     }
 
     pub async fn get_stats(&self) -> Result<StorageStats> {
@@ -681,22 +740,36 @@ impl Storage {
         memory_id: MemoryId,
         limit: usize,
     ) -> Result<Vec<(MemoryId, f32)>> {
-        // Try Qdrant first
+        // Get the memory to know its kind
+        let memory = match self.get_memory(memory_id).await? {
+            Some(m) => m,
+            None => return Ok(vec![]),
+        };
+
+        // Try Qdrant first (preferred - embeddings stored there)
         if self.qdrant.is_available().await {
-            // Get the memory to know its kind
-            if let Some(memory) = self.get_memory(memory_id).await? {
-                // Get embedding from SQLite
-                if let Some(embedding) = self.get_embedding(memory_id).await? {
-                    return self
-                        .qdrant
-                        .find_similar(memory_id, embedding, &memory.kind, limit)
-                        .await;
-                }
+            // Get embedding from Qdrant (primary storage)
+            if let Some(embedding) = self.qdrant.get_embedding(memory_id, &memory.kind).await? {
+                return self
+                    .qdrant
+                    .find_similar(memory_id, embedding, &memory.kind, limit)
+                    .await;
             }
         }
 
-        // Fallback to SQLite-based similarity search
-        self.find_similar_sqlite(memory_id, limit).await
+        // Fallback: Try SQLite (for legacy data or offline mode)
+        if let Some(embedding) = self.get_embedding(memory_id).await? {
+            if self.qdrant.is_available().await {
+                return self
+                    .qdrant
+                    .find_similar(memory_id, embedding, &memory.kind, limit)
+                    .await;
+            }
+            // Final fallback: SQLite-based similarity search
+            return self.find_similar_sqlite(memory_id, limit).await;
+        }
+
+        Ok(vec![])
     }
 
     /// SQLite fallback for similarity search
@@ -777,7 +850,13 @@ impl Storage {
         Ok(scored)
     }
 
-    /// Store embedding in both SQLite and Qdrant
+    /// Store embedding in Qdrant (primary) or SQLite (fallback)
+    ///
+    /// Storage optimization: Only stores in ONE location to avoid duplication.
+    /// - If Qdrant is available: store ONLY in Qdrant (preferred for vector search)
+    /// - If Qdrant is unavailable: store in SQLite as fallback
+    ///
+    /// This reduces storage by ~50% for embeddings (was storing in both).
     pub async fn store_embedding_with_qdrant(
         &self,
         memory_id: MemoryId,
@@ -785,14 +864,14 @@ impl Storage {
         model: &str,
         kind: &MemoryKind,
     ) -> Result<()> {
-        // Store in SQLite
-        self.store_embedding(memory_id, embedding, model).await?;
-
-        // Store in Qdrant if available
+        // Store in Qdrant if available (primary storage for vectors)
         if self.qdrant.is_available().await {
             self.qdrant
                 .upsert(memory_id, embedding.to_vec(), kind)
                 .await?;
+        } else {
+            // Fallback: Store in SQLite only when Qdrant is unavailable
+            self.store_embedding(memory_id, embedding, model).await?;
         }
 
         Ok(())
