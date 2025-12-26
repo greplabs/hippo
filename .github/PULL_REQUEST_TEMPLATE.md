@@ -1,49 +1,42 @@
-## Description
+## Summary
 
-<!-- Provide a brief description of your changes -->
+Brief description of changes.
+
+## Phase
+
+- [ ] Phase 1: Visual Polish & Consistency
+- [ ] Phase 2: Smart Tagging & Organization
+- [ ] Phase 3: Advanced Search & Discovery
+- [ ] Phase 4: Smart Automation
+- [ ] Phase 5: Platform & Integrations
 
 ## Type of Change
 
-<!-- Mark the relevant option with an "x" -->
-
-- [ ] Bug fix (non-breaking change that fixes an issue)
-- [ ] New feature (non-breaking change that adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to change)
-- [ ] Documentation update
+- [ ] New feature
+- [ ] Bug fix
 - [ ] Performance improvement
-- [ ] Code refactoring (no functional changes)
-- [ ] CI/CD or build changes
+- [ ] Refactoring
+- [ ] Documentation
+- [ ] Tests
 
-## Related Issues
+## Changes
 
-<!-- Link any related issues using "Fixes #123" or "Relates to #123" -->
+- Change 1
+- Change 2
 
-## How Has This Been Tested?
+## Testing
 
-<!-- Describe the tests you ran to verify your changes -->
+- [ ] Unit tests pass (`cargo test`)
+- [ ] Manual testing done
+- [ ] Performance verified (if applicable)
 
-- [ ] `cargo test` passes
-- [ ] `cargo clippy` passes without warnings
-- [ ] `cargo fmt` has been run
-- [ ] Manual testing performed
+## Screenshots
 
-**Test Configuration:**
-- OS:
-- Rust version:
-
-## Screenshots (if applicable)
-
-<!-- Add screenshots to help explain your changes -->
+If applicable, add screenshots to show UI changes.
 
 ## Checklist
 
-- [ ] My code follows the project's style guidelines
-- [ ] I have performed a self-review of my code
-- [ ] I have commented my code where necessary
-- [ ] I have updated the documentation if needed
-- [ ] My changes generate no new warnings
-- [ ] Any dependent changes have been merged and published
-
-## Additional Notes
-
-<!-- Add any other context about the PR here -->
+- [ ] Code follows project style guidelines
+- [ ] Self-reviewed the code
+- [ ] Added/updated documentation
+- [ ] No new warnings introduced

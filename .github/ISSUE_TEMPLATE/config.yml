@@ -1,8 +1,8 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
-  - name: Question or Discussion
+  - name: Discussions
     url: https://github.com/greplabs/hippo/discussions
-    about: Ask questions or start discussions about Hippo
-  - name: Security Vulnerability
-    url: https://github.com/greplabs/hippo/security/advisories/new
-    about: Report security vulnerabilities privately
+    about: Ask questions and share ideas
+  - name: Documentation
+    url: https://github.com/greplabs/hippo/blob/main/CLAUDE.md
+    about: Read the project documentation
