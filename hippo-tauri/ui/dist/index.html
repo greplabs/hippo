@@ -3113,9 +3113,25 @@
       var selectedIds = [];
       var lastSelectedIdx = -1;
 
-      // Thumbnail cache: path -> thumbnail path
+      // Thumbnail cache: path -> thumbnail path (limited to prevent memory issues)
       var thumbnailCache = {};
       var thumbnailPending = {};
+      var thumbnailCacheOrder = [];
+      var THUMBNAIL_CACHE_MAX = 200;
+
+      function addToThumbnailCache(path, thumbPath) {
+        // Remove if already in cache
+        var idx = thumbnailCacheOrder.indexOf(path);
+        if (idx !== -1) thumbnailCacheOrder.splice(idx, 1);
+        // Add to front
+        thumbnailCacheOrder.unshift(path);
+        thumbnailCache[path] = thumbPath;
+        // Evict oldest if over limit
+        while (thumbnailCacheOrder.length > THUMBNAIL_CACHE_MAX) {
+          var oldPath = thumbnailCacheOrder.pop();
+          delete thumbnailCache[oldPath];
+        }
+      }
 
       // AI settings
       var apiKey = localStorage.getItem('hippo-api-key') || '';
@@ -3559,6 +3575,10 @@
             renderSources();
             renderTagBar();
             renderFiles();
+
+            // Scroll content area to top on load
+            var contentArea = document.querySelector('.content');
+            if (contentArea) contentArea.scrollTop = 0;
 
             // Check Ollama status in background
             invoke('ollama_status').then(function(status) {
@@ -4024,7 +4044,7 @@
 
             // Request thumbnail from backend
             invoke('get_thumbnail', { path: path }).then(function(thumbPath) {
-              thumbnailCache[path] = thumbPath;
+              addToThumbnailCache(path, thumbPath);
               thumbnailPending[path] = false;
 
               // Update all images with this path

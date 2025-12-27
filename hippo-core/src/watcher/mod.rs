@@ -135,6 +135,38 @@ impl DebouncedEvents {
     }
 }
 
+/// Patterns for directories to skip watching
+const SKIP_PATTERNS: &[&str] = &[
+    ".git",
+    "node_modules",
+    ".venv",
+    "__pycache__",
+    ".cache",
+    ".npm",
+    "target",
+    "build",
+    "dist",
+];
+
+/// Check if a path should be skipped (contains excluded directories)
+fn should_skip_path(path: &Path) -> bool {
+    for component in path.components() {
+        if let std::path::Component::Normal(name) = component {
+            if let Some(name_str) = name.to_str() {
+                // Skip hidden directories (starting with .)
+                if name_str.starts_with('.') && name_str != "." && name_str != ".." {
+                    return true;
+                }
+                // Skip known non-user directories
+                if SKIP_PATTERNS.contains(&name_str) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Internal watcher state
 struct WatcherState {
     stats: RwLock<WatchStats>,
@@ -343,7 +375,7 @@ impl FileWatcher {
         match event.kind {
             EventKind::Create(_) => {
                 for path in event.paths {
-                    if !path.is_file() {
+                    if !path.is_file() || should_skip_path(&path) {
                         continue;
                     }
 
@@ -363,7 +395,7 @@ impl FileWatcher {
             }
             EventKind::Modify(ModifyKind::Data(_)) | EventKind::Modify(ModifyKind::Any) => {
                 for path in event.paths {
-                    if !path.is_file() {
+                    if !path.is_file() || should_skip_path(&path) {
                         continue;
                     }
 
@@ -384,6 +416,9 @@ impl FileWatcher {
             }
             EventKind::Remove(_) => {
                 for path in event.paths {
+                    if should_skip_path(&path) {
+                        continue;
+                    }
                     info!("File deleted: {:?}", path);
                     state.increment_stat("deleted").await;
 
