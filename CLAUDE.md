@@ -1574,13 +1574,13 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 27, 2025 - Session 10 Final)
+### Latest Checkpoint (December 27, 2025 - v1.0.0 GA Release)
 
-**Commit**: `9893567` on `main` branch - All PRs merged through #67
+**Commit**: `b229f43` on `main` branch - All PRs merged through #69
 
-**Release**: v0.2.0 published with macOS aarch64 build
+**Release**: **v1.0.0 GA** - First general availability release!
 
-**Major Features Implemented This Session**:
+**Major Features in v1.0.0**:
 - ✅ Fixed macOS app icon with proper rounded corners (PR #57)
 - ✅ Added web app icons (favicons, PWA icons, apple-touch-icon) (PR #57)
 - ✅ Major search performance optimizations (PR #59)
@@ -1589,6 +1589,8 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 - ✅ Improved scroll reset with delayed execution (PR #63)
 - ✅ Fixed stuck indexing overlay (PR #64, #65)
 - ✅ Fixed memory leaks causing UI blank screen (PR #67)
+- ✅ **Fast indexing mode** - 100x faster indexing by default (PR #68)
+- ✅ Code cleanup - clippy lints (PR #69)
 
 ### Completed Feature Branches
 
