@@ -177,16 +177,14 @@ impl QdrantStorage {
         };
 
         if embedding.len() != expected_dim {
-            warn!(
-                "Embedding dimension mismatch: got {}, expected {} for collection {}",
+            // Dimension mismatch - skip Qdrant and use SQLite fallback
+            // This happens when using Ollama (768-dim) with collections created for OpenAI (1536-dim)
+            debug!(
+                "Embedding dimension mismatch: got {}, expected {} - using SQLite fallback",
                 embedding.len(),
-                expected_dim,
-                collection
+                expected_dim
             );
-            // Pad or truncate embedding to match
-            let mut adjusted = embedding;
-            adjusted.resize(expected_dim, 0.0);
-            return self.upsert_raw(memory_id, adjusted, collection).await;
+            return Ok(());
         }
 
         self.upsert_raw(memory_id, embedding, collection).await
