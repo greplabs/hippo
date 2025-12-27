@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ApiError"],"fn":["add_source","add_tag","get_memory","get_stats","get_thumbnail","health_check","list_sources","list_tags","main","remove_source","remove_tag","search_memories"],"struct":["AddSourceRequest","AddTagRequest","AppState","RemoveSourceParams","SearchParams","TagInfo"]};

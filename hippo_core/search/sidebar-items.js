@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ExtensionFilter","MatchMode"],"fn":["fuzzy_find_best_match","fuzzy_match","semantic_score"],"struct":["AdvancedFilter","FilterBuilder","HybridSearchConfig","MetadataMatch","ParsedQuery","Searcher"]};

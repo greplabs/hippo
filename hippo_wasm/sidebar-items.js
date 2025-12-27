@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["filter_by_type","fuzzy_match","get_stats","init","search_local","semantic_score","sort_memories","version"],"struct":["WasmHighlight","WasmMemory","WasmSearchResult"]};
