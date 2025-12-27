@@ -1574,18 +1574,16 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 27, 2025 - Session 9)
+### Latest Checkpoint (December 27, 2025 - Session 10)
 
-**Commit**: `46644d4` on `main` branch - All PRs merged through #55
+**Commit**: `f5ea859` on `main` branch - All PRs merged through #57
 
 **Release**: v0.2.0 published with macOS aarch64 build
 
 **Major Features Implemented This Session**:
-- ✅ Enhanced UI interactions with micro-animations (PR #54)
-- ✅ Favorites counter badge on filter button (PR #54)
-- ✅ Find Similar Files button in detail panel (PR #54)
-- ✅ Smart re-indexing to skip unchanged files (PR #55)
-- ✅ 5 new unit tests for indexer module (PR #55)
+- ✅ Fixed macOS app icon with proper rounded corners (PR #57)
+- ✅ Added web app icons (favicons, PWA icons, apple-touch-icon) (PR #57)
+- ✅ Created master icon SVG with 228px corner radius for macOS compatibility
 
 ### Completed Feature Branches
 
@@ -1601,8 +1599,35 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 | `fix/crash-bugs` | Stability Fixes | ✅ Merged | #52 |
 | `feature/ui-polish-and-interactions` | UI Polish & Interactions | ✅ Merged | #54 |
 | `feature/core-improvements` | Smart Re-indexing & Tests | ✅ Merged | #55 |
+| `feature/macos-rounded-icons` | macOS Icon Fix | ✅ Merged | #57 |
 
-### Session 9 Changes
+### Session 10 Changes
+
+#### macOS Icon Fix (PR #57)
+
+**New Icon Assets** (`assets/`):
+- ✅ Created `hippo-icon-macos.svg` - Master icon with 228px corner radius
+- ✅ Created `hippo-icon-square.svg` - Square version for reference
+
+**Desktop App Icons** (`hippo-tauri/icons/`):
+- ✅ Regenerated all PNG sizes (32x32, 128x128, 256x256, 512x512) in RGBA format
+- ✅ Updated `icon.icns` for macOS
+- ✅ Updated `icon.ico` for Windows
+- ✅ Icons now display with proper rounded corners on macOS dock/menu bar
+
+**Web App Icons** (`hippo-web/static/icons/`):
+- ✅ Added `favicon.ico`, `favicon-16.png`, `favicon-32.png`
+- ✅ Added `apple-touch-icon.png` (180x180)
+- ✅ Added PWA icons: `icon-192.png`, `icon-512.png`
+- ✅ Updated `icon.svg` to match new design
+
+**Technical Details**:
+- macOS expects square icons and applies its own rounding via superellipse
+- Previous circular icon with transparent corners appeared with sharp edges
+- New icon has pre-rounded background (228px radius on 1024x1024 canvas)
+- All PNGs converted to RGBA format (required by Tauri)
+
+### Previous Session - Session 9 Changes
 
 #### UI Polish & Interactions (PR #54)
 
