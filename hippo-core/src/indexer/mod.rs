@@ -157,6 +157,8 @@ pub struct IndexerConfig {
     pub auto_tag_enabled: bool,
     /// When true, only re-index files that have been modified since last indexing
     pub smart_reindex: bool,
+    /// Directory patterns to skip (e.g., ".git", "node_modules")
+    pub skip_patterns: Vec<String>,
 }
 
 impl Default for IndexerConfig {
@@ -189,6 +191,23 @@ impl Default for IndexerConfig {
             auto_tag_enabled: false,
             // Smart re-indexing enabled by default for faster syncs
             smart_reindex: true,
+            // Skip common non-user directories for faster indexing
+            skip_patterns: vec![
+                ".git",
+                "node_modules",
+                ".venv",
+                "__pycache__",
+                ".cache",
+                ".npm",
+                "target",  // Rust build directory
+                "build",
+                "dist",
+                ".DS_Store",
+                "Thumbs.db",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
         }
     }
 }
@@ -526,10 +545,23 @@ impl Indexer {
             .await;
         let _ = progress_tx.send(state.progress.read().await.clone());
 
-        // Collect all supported files
+        // Collect all supported files, skipping excluded directories
+        let skip_patterns = config.skip_patterns.clone();
         let all_files: Vec<PathBuf> = WalkDir::new(path)
             .follow_links(true)
             .into_iter()
+            .filter_entry(|e| {
+                // Skip directories matching skip patterns
+                if e.file_type().is_dir() {
+                    if let Some(name) = e.file_name().to_str() {
+                        // Skip hidden directories and excluded patterns
+                        if name.starts_with('.') || skip_patterns.contains(&name.to_string()) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            })
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_file())
             .filter(|e| {
