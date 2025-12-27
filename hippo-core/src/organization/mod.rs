@@ -811,7 +811,8 @@ impl RuleCondition {
         }
     }
 
-    pub fn not(mut self) -> Self {
+    /// Negate this condition (e.g., "does NOT contain")
+    pub fn negated(mut self) -> Self {
         self.negate = true;
         self
     }
@@ -860,7 +861,7 @@ pub enum ConditionOp {
     Contains,
     StartsWith,
     EndsWith,
-    Matches,      // Regex match
+    Matches, // Regex match
     GreaterThan,
     LessThan,
     GreaterOrEqual,
@@ -878,10 +879,16 @@ pub enum ConditionValue {
     String(String),
     StringList(Vec<String>),
     Number(f64),
-    NumberRange { min: f64, max: f64 },
+    NumberRange {
+        min: f64,
+        max: f64,
+    },
     Boolean(bool),
     Date(DateTime<Utc>),
-    DateRange { start: DateTime<Utc>, end: DateTime<Utc> },
+    DateRange {
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    },
     Null,
 }
 
@@ -900,7 +907,11 @@ impl RuleAction {
         }
     }
 
-    pub fn with_param(mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
+    pub fn with_param(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+    ) -> Self {
         self.parameters.insert(key.into(), value.into());
         self
     }
@@ -965,10 +976,7 @@ impl RuleTemplates {
                 ConditionOp::Equals,
                 ConditionValue::Boolean(true),
             ))
-            .add_action(
-                RuleAction::new(ActionType::AddTag)
-                    .with_param("tag", "has-location")
-            )
+            .add_action(RuleAction::new(ActionType::AddTag).with_param("tag", "has-location"))
     }
 
     /// Auto-tag screenshots
@@ -985,10 +993,7 @@ impl RuleTemplates {
                 ConditionOp::Contains,
                 ConditionValue::String("screenshot".to_string()),
             ))
-            .add_action(
-                RuleAction::new(ActionType::AddTag)
-                    .with_param("tag", "screenshot")
-            )
+            .add_action(RuleAction::new(ActionType::AddTag).with_param("tag", "screenshot"))
     }
 
     /// Run AI analysis on new documents
@@ -998,10 +1003,7 @@ impl RuleTemplates {
             .add_condition(RuleCondition::new(
                 ConditionField::FileType,
                 ConditionOp::InList,
-                ConditionValue::StringList(vec![
-                    "document".to_string(),
-                    "pdf".to_string(),
-                ]),
+                ConditionValue::StringList(vec!["document".to_string(), "pdf".to_string()]),
             ))
             .add_action(RuleAction::new(ActionType::RunAiAnalysis))
             .add_action(RuleAction::new(ActionType::GenerateAiTags))
@@ -1017,8 +1019,7 @@ impl RuleTemplates {
                 ConditionValue::String("code".to_string()),
             ))
             .add_action(
-                RuleAction::new(ActionType::AddTag)
-                    .with_param("tag_template", "lang:{{language}}")
+                RuleAction::new(ActionType::AddTag).with_param("tag_template", "lang:{{language}}"),
             )
     }
 
@@ -1031,10 +1032,7 @@ impl RuleTemplates {
                 ConditionOp::GreaterThan,
                 ConditionValue::Number(100.0 * 1024.0 * 1024.0), // 100MB
             ))
-            .add_action(
-                RuleAction::new(ActionType::AddTag)
-                    .with_param("tag", "large-file")
-            )
+            .add_action(RuleAction::new(ActionType::AddTag).with_param("tag", "large-file"))
     }
 }
 
@@ -1209,7 +1207,7 @@ mod tests {
         );
         assert!(!condition.negate);
 
-        let negated = condition.not();
+        let negated = condition.negated();
         assert!(negated.negate);
     }
 
@@ -1232,13 +1230,22 @@ mod tests {
         assert_eq!(rule.actions.len(), 1);
 
         let rule = RuleTemplates::tag_screenshots();
-        assert!(rule.conditions.iter().any(|c| c.field == ConditionField::FileName));
+        assert!(rule
+            .conditions
+            .iter()
+            .any(|c| c.field == ConditionField::FileName));
 
         let rule = RuleTemplates::analyze_new_documents();
-        assert!(rule.actions.iter().any(|a| a.action_type == ActionType::RunAiAnalysis));
+        assert!(rule
+            .actions
+            .iter()
+            .any(|a| a.action_type == ActionType::RunAiAnalysis));
 
         let rule = RuleTemplates::mark_large_files();
-        assert!(rule.conditions.iter().any(|c| c.field == ConditionField::FileSize));
+        assert!(rule
+            .conditions
+            .iter()
+            .any(|c| c.field == ConditionField::FileSize));
     }
 
     #[test]

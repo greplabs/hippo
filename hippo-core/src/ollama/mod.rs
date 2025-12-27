@@ -405,7 +405,10 @@ impl OllamaClient {
             let cache = self.model_cache.read();
             if let Some(cached) = cache.as_ref() {
                 if cached.cached_at.elapsed().as_secs() < MODEL_CACHE_TTL_SECS {
-                    debug!("Returning cached model list ({} models)", cached.models.len());
+                    debug!(
+                        "Returning cached model list ({} models)",
+                        cached.models.len()
+                    );
                     return Ok(cached.models.clone());
                 }
             }

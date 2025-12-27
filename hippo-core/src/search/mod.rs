@@ -176,9 +176,9 @@ fn levenshtein_distance_bounded(s1: &str, s2: &str, max_distance: usize) -> usiz
                 1
             };
 
-            curr_row[i] = (prev_row[i] + 1)           // deletion
-                .min(curr_row[i - 1] + 1)             // insertion
-                .min(prev_row[i - 1] + cost);         // substitution
+            curr_row[i] = (prev_row[i] + 1) // deletion
+                .min(curr_row[i - 1] + 1) // insertion
+                .min(prev_row[i - 1] + cost); // substitution
 
             min_in_row = min_in_row.min(curr_row[i]);
         }

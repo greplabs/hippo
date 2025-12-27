@@ -323,9 +323,7 @@ impl FileWatcher {
                     }
 
                     // Find which source this file belongs to
-                    if let Some(source) =
-                        Self::find_source_for_path_static(&path, &watched_paths)
-                    {
+                    if let Some(source) = Self::find_source_for_path_static(&path, &watched_paths) {
                         info!("File created: {:?}", path);
                         state.increment_stat("created").await;
 
@@ -344,9 +342,7 @@ impl FileWatcher {
                         continue;
                     }
 
-                    if let Some(source) =
-                        Self::find_source_for_path_static(&path, &watched_paths)
-                    {
+                    if let Some(source) = Self::find_source_for_path_static(&path, &watched_paths) {
                         info!("File modified: {:?}", path);
                         state.increment_stat("modified").await;
 

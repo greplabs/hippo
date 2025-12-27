@@ -192,9 +192,15 @@ impl ThumbnailManager {
         // Save thumbnail as JPEG with optimized quality (60% = ~50% smaller files)
         let mut output = fs::File::create(&thumbnail_path)?;
         let rgb = thumbnail.to_rgb8();
-        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, THUMBNAIL_JPEG_QUALITY);
+        let mut encoder =
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, THUMBNAIL_JPEG_QUALITY);
         encoder
-            .encode(&rgb, rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
+            .encode(
+                &rgb,
+                rgb.width(),
+                rgb.height(),
+                image::ExtendedColorType::Rgb8,
+            )
             .map_err(|e| HippoError::Other(format!("Failed to save thumbnail: {}", e)))?;
 
         debug!("Thumbnail saved: {:?}", thumbnail_path);
@@ -449,9 +455,15 @@ impl ThumbnailManager {
 
         let mut output = fs::File::create(output_path)?;
         let rgb = thumbnail.to_rgb8();
-        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, THUMBNAIL_JPEG_QUALITY);
+        let mut encoder =
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, THUMBNAIL_JPEG_QUALITY);
         encoder
-            .encode(&rgb, rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
+            .encode(
+                &rgb,
+                rgb.width(),
+                rgb.height(),
+                image::ExtendedColorType::Rgb8,
+            )
             .map_err(|e| HippoError::Other(format!("Failed to save PDF thumbnail: {}", e)))?;
 
         Ok(())
@@ -531,9 +543,17 @@ impl ThumbnailManager {
                     let thumbnail = self.create_thumbnail(&img);
                     let mut output = fs::File::create(output_path)?;
                     let rgb = thumbnail.to_rgb8();
-                    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, THUMBNAIL_JPEG_QUALITY);
+                    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(
+                        &mut output,
+                        THUMBNAIL_JPEG_QUALITY,
+                    );
                     encoder
-                        .encode(&rgb, rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
+                        .encode(
+                            &rgb,
+                            rgb.width(),
+                            rgb.height(),
+                            image::ExtendedColorType::Rgb8,
+                        )
                         .map_err(|e| {
                             HippoError::Other(format!("Failed to save Office thumbnail: {}", e))
                         })?;
@@ -551,7 +571,10 @@ impl ThumbnailManager {
 impl Default for ThumbnailManager {
     fn default() -> Self {
         Self::new().unwrap_or_else(|e| {
-            warn!("Failed to create ThumbnailManager with default cache: {}. Using temp directory.", e);
+            warn!(
+                "Failed to create ThumbnailManager with default cache: {}. Using temp directory.",
+                e
+            );
             // Fallback to temp directory if default cache creation fails
             let temp_cache = std::env::temp_dir().join("hippo_thumbnails");
             Self::with_cache_dir(temp_cache)

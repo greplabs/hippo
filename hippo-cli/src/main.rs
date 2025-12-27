@@ -408,9 +408,24 @@ async fn main() -> Result<()> {
             print_info(&format!("Total memories: {}", stats.total_memories));
         }
 
-        Commands::Sniff { query, tags, limit, sort, semantic, format } => {
-            let search_mode = if semantic { "🧠 semantic" } else { "🔍 text" };
-            print_header(&format!("Sniffing ({}) for \"{}\"", search_mode, query.bright_yellow()));
+        Commands::Sniff {
+            query,
+            tags,
+            limit,
+            sort,
+            semantic,
+            format,
+        } => {
+            let search_mode = if semantic {
+                "🧠 semantic"
+            } else {
+                "🔍 text"
+            };
+            print_header(&format!(
+                "Sniffing ({}) for \"{}\"",
+                search_mode,
+                query.bright_yellow()
+            ));
 
             let results = if semantic {
                 // Use semantic search
@@ -468,19 +483,31 @@ async fn main() -> Result<()> {
                                 })
                             })
                             .collect();
-                        println!("{}", serde_json::to_string_pretty(&json_results).unwrap_or_default());
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json_results).unwrap_or_default()
+                        );
                     }
                     "csv" => {
                         // CSV output
                         println!("path,name,kind,size,tags,score");
                         for r in &results.memories {
-                            let name = r.memory.metadata.title.clone().unwrap_or_else(||
-                                r.memory.path.file_name()
+                            let name = r.memory.metadata.title.clone().unwrap_or_else(|| {
+                                r.memory
+                                    .path
+                                    .file_name()
                                     .map(|n| n.to_string_lossy().to_string())
                                     .unwrap_or_default()
-                            );
-                            let tags = r.memory.tags.iter().map(|t| t.name.as_str()).collect::<Vec<_>>().join(";");
-                            println!("\"{}\",\"{}\",\"{:?}\",{},\"{}\",{:.2}",
+                            });
+                            let tags = r
+                                .memory
+                                .tags
+                                .iter()
+                                .map(|t| t.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(";");
+                            println!(
+                                "\"{}\",\"{}\",\"{:?}\",{},\"{}\",{:.2}",
                                 r.memory.path.display(),
                                 name,
                                 r.memory.kind,
@@ -622,7 +649,10 @@ async fn main() -> Result<()> {
         }
 
         Commands::Think { query, limit } => {
-            print_header(&format!("🧠 Thinking about \"{}\"...", query.bright_yellow()));
+            print_header(&format!(
+                "🧠 Thinking about \"{}\"...",
+                query.bright_yellow()
+            ));
 
             let pb = ProgressBar::new_spinner();
             pb.set_style(
@@ -670,13 +700,19 @@ async fn main() -> Result<()> {
                 Err(e) => {
                     pb.finish_and_clear();
                     print_error(&format!("Semantic search failed: {}", e));
-                    println!("\n{}", "Tip: Make sure Ollama is running with 'ollama serve'".dimmed());
+                    println!(
+                        "\n{}",
+                        "Tip: Make sure Ollama is running with 'ollama serve'".dimmed()
+                    );
                 }
             }
         }
 
         Commands::Kin { target, limit } => {
-            print_header(&format!("🔗 Finding files similar to \"{}\"...", target.bright_cyan()));
+            print_header(&format!(
+                "🔗 Finding files similar to \"{}\"...",
+                target.bright_cyan()
+            ));
 
             // First, find the target file
             let results = hippo.search(&target).await?;
@@ -686,7 +722,9 @@ async fn main() -> Result<()> {
                 println!(
                     "\n  {} {}\n",
                     "Reference file:".dimmed(),
-                    memory.path.file_name()
+                    memory
+                        .path
+                        .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default()
                         .bright_cyan()
@@ -746,7 +784,10 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Chat { question, show_sources } => {
+        Commands::Chat {
+            question,
+            show_sources,
+        } => {
             print_header(&format!("💬 Asking: \"{}\"", question.bright_yellow()));
 
             let pb = ProgressBar::new_spinner();
@@ -761,11 +802,17 @@ async fn main() -> Result<()> {
             // Get relevant context via semantic search
             let context_results = hippo.semantic_search(&question, 10).await;
             let context_files: Vec<String> = match &context_results {
-                Ok(results) => results.memories.iter().map(|r| {
-                    r.memory.path.file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default()
-                }).collect(),
+                Ok(results) => results
+                    .memories
+                    .iter()
+                    .map(|r| {
+                        r.memory
+                            .path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default()
+                    })
+                    .collect(),
                 Err(_) => vec![],
             };
 
@@ -786,16 +833,23 @@ async fn main() -> Result<()> {
                     let mem = &r.memory;
                     context.push_str(&format!(
                         "\n---\nFile: {}\nPath: {}\nTags: {}\n",
-                        mem.metadata.title.clone().unwrap_or_else(||
-                            mem.path.file_name()
-                                .map(|n| n.to_string_lossy().to_string())
-                                .unwrap_or_default()
-                        ),
+                        mem.metadata.title.clone().unwrap_or_else(|| mem
+                            .path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default()),
                         mem.path.display(),
-                        mem.tags.iter().map(|t| t.name.as_str()).collect::<Vec<_>>().join(", ")
+                        mem.tags
+                            .iter()
+                            .map(|t| t.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     ));
                     if let Some(preview) = &mem.metadata.text_preview {
-                        context.push_str(&format!("Content preview: {}\n", preview.chars().take(500).collect::<String>()));
+                        context.push_str(&format!(
+                            "Content preview: {}\n",
+                            preview.chars().take(500).collect::<String>()
+                        ));
                     }
                 }
             }

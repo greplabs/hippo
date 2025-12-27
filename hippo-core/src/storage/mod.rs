@@ -134,7 +134,8 @@ impl Storage {
 
             CREATE TABLE IF NOT EXISTS tags (
                 name TEXT PRIMARY KEY,
-                count INTEGER NOT NULL DEFAULT 0
+                count INTEGER NOT NULL DEFAULT 0,
+                color TEXT
             );
 
             -- Embeddings table for semantic search
@@ -159,6 +160,9 @@ impl Storage {
         let _ = conn.execute("ALTER TABLE memories ADD COLUMN extension TEXT", []);
         let _ = conn.execute("ALTER TABLE memories ADD COLUMN kind_name TEXT", []);
         let _ = conn.execute("ALTER TABLE memories ADD COLUMN tags_text TEXT", []);
+
+        // Migration: Add color column to tags table
+        let _ = conn.execute("ALTER TABLE tags ADD COLUMN color TEXT", []);
 
         // Create indexes for faster queries (5-50x improvement for filtered queries)
         // Core indexes
@@ -522,6 +526,43 @@ impl Storage {
         Ok(tags)
     }
 
+    /// List all tags with their colors
+    pub async fn list_tags_with_colors(&self) -> Result<Vec<(String, u64, Option<String>)>> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        let mut stmt = db.prepare("SELECT name, count, color FROM tags ORDER BY count DESC")?;
+        let tags = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)? as u64,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(tags)
+    }
+
+    /// Set color for a tag
+    pub async fn set_tag_color(&self, tag_name: &str, color: Option<&str>) -> Result<()> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+
+        db.execute(
+            "UPDATE tags SET color = ?1 WHERE name = ?2",
+            params![color, tag_name],
+        )?;
+
+        Ok(())
+    }
+
     // === Source Operations ===
 
     pub async fn add_source(&self, source: Source) -> Result<()> {
@@ -602,7 +643,11 @@ impl Storage {
 
         // Get size before vacuum
         let size_before: i64 = db
-            .query_row("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()", [], |row| row.get(0))
+            .query_row(
+                "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
+                [],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         // Run VACUUM to reclaim space and defragment
@@ -613,7 +658,11 @@ impl Storage {
 
         // Get size after vacuum
         let size_after: i64 = db
-            .query_row("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()", [], |row| row.get(0))
+            .query_row(
+                "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
+                [],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         let bytes_reclaimed = (size_before - size_after).max(0) as u64;
