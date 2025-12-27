@@ -22,7 +22,7 @@
 # Database (local dev)
 *.db
 *.db-journal
-storage/
+/storage/
 .qdrant-initialized
 hippo-tauri/binaries/
 
