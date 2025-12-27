@@ -373,7 +373,11 @@ impl QdrantManager {
         } else {
             format!(
                 "Qdrant failed to start within 60 seconds. Error: {}",
-                stderr_output.lines().take(5).collect::<Vec<_>>().join(" | ")
+                stderr_output
+                    .lines()
+                    .take(5)
+                    .collect::<Vec<_>>()
+                    .join(" | ")
             )
         };
 

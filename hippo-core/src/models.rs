@@ -342,7 +342,9 @@ impl Tag {
     /// Check if this tag is a child of the given parent path
     pub fn is_child_of(&self, parent_path: &str) -> bool {
         match &self.parent {
-            Some(parent) => parent == parent_path || parent.starts_with(&format!("{}/", parent_path)),
+            Some(parent) => {
+                parent == parent_path || parent.starts_with(&format!("{}/", parent_path))
+            }
             None => false,
         }
     }
@@ -494,13 +496,12 @@ impl ParsedSearchTerms {
     /// - NOT or - prefix for exclusion
     pub fn parse(query: &str) -> Self {
         let mut terms = ParsedSearchTerms::default();
-        let mut chars = query.chars().peekable();
         let mut current_token = String::new();
         let mut in_quotes = false;
         let mut negate_next = false;
         let mut or_mode = false;
 
-        while let Some(ch) = chars.next() {
+        for ch in query.chars() {
             match ch {
                 '"' => {
                     if in_quotes {
@@ -594,9 +595,7 @@ impl ParsedSearchTerms {
 
     /// Check if the parsed terms are empty
     pub fn is_empty(&self) -> bool {
-        self.must_match.is_empty()
-            && self.should_match.is_empty()
-            && self.must_not_match.is_empty()
+        self.must_match.is_empty() && self.should_match.is_empty() && self.must_not_match.is_empty()
     }
 
     /// Get all positive terms (must + should) for semantic search
@@ -634,7 +633,11 @@ impl SearchQuery {
         let parsed = ParsedSearchTerms::parse(query);
         Self {
             text: Some(query.to_string()),
-            parsed_terms: if parsed.is_empty() { None } else { Some(parsed) },
+            parsed_terms: if parsed.is_empty() {
+                None
+            } else {
+                Some(parsed)
+            },
             ..Default::default()
         }
     }

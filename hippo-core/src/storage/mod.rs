@@ -643,7 +643,11 @@ impl Storage {
 
         // Get size before vacuum
         let size_before: i64 = db
-            .query_row("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()", [], |row| row.get(0))
+            .query_row(
+                "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
+                [],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         // Run VACUUM to reclaim space and defragment
@@ -654,7 +658,11 @@ impl Storage {
 
         // Get size after vacuum
         let size_after: i64 = db
-            .query_row("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()", [], |row| row.get(0))
+            .query_row(
+                "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
+                [],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         let bytes_reclaimed = (size_before - size_after).max(0) as u64;

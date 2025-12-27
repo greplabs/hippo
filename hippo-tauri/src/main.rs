@@ -253,7 +253,10 @@ async fn set_tag_color(
     color: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!("[Hippo] Setting color for tag '{}' to {:?}", tag_name, color);
+    println!(
+        "[Hippo] Setting color for tag '{}' to {:?}",
+        tag_name, color
+    );
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -263,10 +266,7 @@ async fn set_tag_color(
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(format!(
-        "Set color for tag '{}'",
-        tag_name
-    ))
+    Ok(format!("Set color for tag '{}'", tag_name))
 }
 
 #[tauri::command]
@@ -984,18 +984,25 @@ async fn ollama_rag_query(
     let mut semantic_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     if let Ok(results) = &semantic_results {
-        println!("[Hippo] Found {} semantically relevant files", results.memories.len());
+        println!(
+            "[Hippo] Found {} semantically relevant files",
+            results.memories.len()
+        );
         for result in results.memories.iter().take(10) {
             let memory = &result.memory;
             let score = result.score;
             semantic_ids.insert(memory.id.to_string());
-            let filename = memory.path.file_name()
+            let filename = memory
+                .path
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
 
             // Read file content for text/code files
-            let content_preview = if matches!(&memory.kind,
-                hippo_core::MemoryKind::Document { .. } | hippo_core::MemoryKind::Code { .. }) {
+            let content_preview = if matches!(
+                &memory.kind,
+                hippo_core::MemoryKind::Document { .. } | hippo_core::MemoryKind::Code { .. }
+            ) {
                 std::fs::read_to_string(&memory.path)
                     .map(|c| c.chars().take(2000).collect::<String>())
                     .unwrap_or_else(|_| String::new())
@@ -1006,14 +1013,21 @@ async fn ollama_rag_query(
             let file_type = match &memory.kind {
                 hippo_core::MemoryKind::Code { language, .. } => format!("code:{}", language),
                 hippo_core::MemoryKind::Document { .. } => "document".to_string(),
-                hippo_core::MemoryKind::Image { width, height, .. } => format!("image ({}x{})", width, height),
+                hippo_core::MemoryKind::Image { width, height, .. } => {
+                    format!("image ({}x{})", width, height)
+                }
                 hippo_core::MemoryKind::Video { .. } => "video".to_string(),
                 hippo_core::MemoryKind::Audio { .. } => "audio".to_string(),
                 _ => "file".to_string(),
             };
 
             // Build context for this file
-            let mut file_context = format!("📁 {} [{}] (relevance: {:.0}%)", filename, file_type, score * 100.0);
+            let mut file_context = format!(
+                "📁 {} [{}] (relevance: {:.0}%)",
+                filename,
+                file_type,
+                score * 100.0
+            );
             if let Some(title) = &memory.metadata.title {
                 file_context.push_str(&format!("\n   Title: {}", title));
             }
@@ -1065,7 +1079,11 @@ async fn ollama_rag_query(
         "📊 Collection Overview: {} total files, {:.1} MB total size\nFile types: {}",
         memories.len(),
         total_size as f64 / 1_000_000.0,
-        file_types.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join(", ")
+        file_types
+            .iter()
+            .map(|(k, v)| format!("{}: {}", k, v))
+            .collect::<Vec<_>>()
+            .join(", ")
     );
     context_parts.insert(0, summary);
 
@@ -1076,15 +1094,21 @@ async fn ollama_rag_query(
                 continue;
             }
 
-            let filename = memory.path.file_name()
+            let filename = memory
+                .path
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
             let filename_lower = filename.to_lowercase();
 
             // Check keyword relevance
-            let is_relevant = query_lower.split_whitespace()
-                .any(|word| filename_lower.contains(word) ||
-                     memory.tags.iter().any(|t| t.name.to_lowercase().contains(word)));
+            let is_relevant = query_lower.split_whitespace().any(|word| {
+                filename_lower.contains(word)
+                    || memory
+                        .tags
+                        .iter()
+                        .any(|t| t.name.to_lowercase().contains(word))
+            });
 
             if is_relevant && relevant_files.len() < 15 {
                 let file_type = match &memory.kind {
@@ -1130,7 +1154,10 @@ async fn ollama_rag_query(
         context, query
     );
 
-    println!("[Hippo] Sending to Ollama ({} chars context)", context.len());
+    println!(
+        "[Hippo] Sending to Ollama ({} chars context)",
+        context.len()
+    );
 
     // Use generate API with improved system prompt
     let system = r#"You are Hippo, an intelligent file assistant that helps users understand and organize their files.

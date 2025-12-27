@@ -569,7 +569,8 @@ impl Indexer {
             // Generate and store embeddings in batch (much faster)
             state
                 .update_progress(|p| {
-                    p.current_file = Some(format!("Embedding batch of {} files...", memories.len()));
+                    p.current_file =
+                        Some(format!("Embedding batch of {} files...", memories.len()));
                 })
                 .await;
 

@@ -289,7 +289,8 @@ impl Embedder {
         &self,
         memories: &[Memory],
     ) -> Result<Vec<(MemoryId, Vec<f32>, &'static str)>> {
-        let mut results: Vec<(MemoryId, Vec<f32>, &'static str)> = Vec::with_capacity(memories.len());
+        let mut results: Vec<(MemoryId, Vec<f32>, &'static str)> =
+            Vec::with_capacity(memories.len());
 
         // Separate memories by type for optimized processing
         let mut text_memories: Vec<(usize, &Memory)> = Vec::new();
@@ -333,21 +334,31 @@ impl Embedder {
                 // Batch embed code with Ollama
                 match ollama.embed(&code_texts).await {
                     Ok(embeddings) => {
-                        for (embedding, (_, memory)) in embeddings.into_iter().zip(code_memories.iter()) {
+                        for (embedding, (_, memory)) in
+                            embeddings.into_iter().zip(code_memories.iter())
+                        {
                             results.push((memory.id, embedding, "code_embedding"));
                         }
                     }
                     Err(e) => {
                         warn!("Ollama batch code embedding failed, using fallback: {}", e);
                         for (text, (_, memory)) in code_texts.iter().zip(code_memories.iter()) {
-                            results.push((memory.id, self.hash_embed(text, CODE_EMBEDDING_DIM), "code_embedding"));
+                            results.push((
+                                memory.id,
+                                self.hash_embed(text, CODE_EMBEDDING_DIM),
+                                "code_embedding",
+                            ));
                         }
                     }
                 }
             } else {
                 // Fallback to hash embeddings
                 for (text, (_, memory)) in code_texts.iter().zip(code_memories.iter()) {
-                    results.push((memory.id, self.hash_embed(text, CODE_EMBEDDING_DIM), "code_embedding"));
+                    results.push((
+                        memory.id,
+                        self.hash_embed(text, CODE_EMBEDDING_DIM),
+                        "code_embedding",
+                    ));
                 }
             }
         }
@@ -372,27 +383,42 @@ impl Embedder {
                 // Batch embed with Ollama
                 match ollama.embed(&texts).await {
                     Ok(embeddings) => {
-                        for (embedding, (_, memory)) in embeddings.into_iter().zip(text_memories.iter()) {
+                        for (embedding, (_, memory)) in
+                            embeddings.into_iter().zip(text_memories.iter())
+                        {
                             results.push((memory.id, embedding, "text_embedding"));
                         }
                     }
                     Err(e) => {
                         warn!("Ollama batch text embedding failed, using fallback: {}", e);
                         for (text, (_, memory)) in texts.iter().zip(text_memories.iter()) {
-                            results.push((memory.id, self.hash_embed(text, TEXT_EMBEDDING_DIM), "text_embedding"));
+                            results.push((
+                                memory.id,
+                                self.hash_embed(text, TEXT_EMBEDDING_DIM),
+                                "text_embedding",
+                            ));
                         }
                     }
                 }
             } else {
                 // Fallback to hash embeddings
                 for (text, (_, memory)) in texts.iter().zip(text_memories.iter()) {
-                    results.push((memory.id, self.hash_embed(text, TEXT_EMBEDDING_DIM), "text_embedding"));
+                    results.push((
+                        memory.id,
+                        self.hash_embed(text, TEXT_EMBEDDING_DIM),
+                        "text_embedding",
+                    ));
                 }
             }
         }
 
-        debug!("Batch embedded {} memories ({} images, {} code, {} text)",
-            results.len(), image_memories.len(), code_memories.len(), text_memories.len());
+        debug!(
+            "Batch embedded {} memories ({} images, {} code, {} text)",
+            results.len(),
+            image_memories.len(),
+            code_memories.len(),
+            text_memories.len()
+        );
 
         Ok(results)
     }
