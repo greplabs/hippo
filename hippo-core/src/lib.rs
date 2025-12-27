@@ -342,6 +342,16 @@ impl Hippo {
         self.storage.list_tags().await
     }
 
+    /// Get all unique tags with their colors
+    pub async fn list_tags_with_colors(&self) -> Result<Vec<(String, u64, Option<String>)>> {
+        self.storage.list_tags_with_colors().await
+    }
+
+    /// Set the color for a tag
+    pub async fn set_tag_color(&self, tag_name: &str, color: Option<&str>) -> Result<()> {
+        self.storage.set_tag_color(tag_name, color).await
+    }
+
     // === Knowledge Graph ===
 
     /// Get the mind map / knowledge graph for a memory

@@ -225,7 +225,7 @@ async fn get_tags(state: State<'_, AppState>) -> Result<serde_json::Value, Strin
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    match hippo.storage().list_tags_with_colors().await {
+    match hippo.list_tags_with_colors().await {
         Ok(tags) => {
             println!("[Hippo] Found {} tags", tags.len());
             let tag_objects: Vec<serde_json::Value> = tags
@@ -261,7 +261,6 @@ async fn set_tag_color(
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     hippo
-        .storage()
         .set_tag_color(&tag_name, color.as_deref())
         .await
         .map_err(|e| e.to_string())?;
