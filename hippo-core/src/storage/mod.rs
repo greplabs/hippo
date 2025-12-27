@@ -1,6 +1,6 @@
 //! Storage layer combining SQLite (metadata) and Qdrant (vectors)
 
-use crate::error::{HippoError, Result};
+use crate::error::Result;
 use crate::models::*;
 use crate::qdrant::QdrantStorage;
 use crate::HippoConfig;
@@ -37,6 +37,23 @@ pub struct Storage {
     db: Mutex<Connection>,
     qdrant: Arc<QdrantStorage>,
     qdrant_url: String,
+}
+
+impl Storage {
+    /// Safely acquire the database lock, recovering from poisoning if necessary.
+    /// Mutex poisoning happens when a thread panics while holding the lock.
+    /// This helper recovers the inner data since SQLite connections remain valid.
+    fn get_db(&self) -> Result<std::sync::MutexGuard<'_, Connection>> {
+        match self.db.lock() {
+            Ok(guard) => Ok(guard),
+            Err(poisoned) => {
+                // Log the poisoning but recover - SQLite connections are still usable
+                warn!("Database mutex was poisoned (a thread panicked), recovering...");
+                // Get the inner value despite the poison - this is safe for SQLite
+                Ok(poisoned.into_inner())
+            }
+        }
+    }
 }
 
 impl Storage {
@@ -251,10 +268,7 @@ impl Storage {
     // === Memory Operations ===
 
     pub async fn upsert_memory(&self, memory: &Memory) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         // Extract searchable fields
         let title = memory.metadata.title.clone().unwrap_or_default();
@@ -315,10 +329,7 @@ impl Storage {
     }
 
     pub async fn get_memory(&self, id: MemoryId) -> Result<Option<Memory>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut stmt = db.prepare(
             "SELECT path, source_json, kind_json, metadata_json, tags_json,
@@ -351,10 +362,7 @@ impl Storage {
     }
 
     pub async fn toggle_favorite(&self, id: MemoryId) -> Result<bool> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         // Get current state
         let current: i32 = db
@@ -376,10 +384,7 @@ impl Storage {
     }
 
     pub async fn delete_memories_by_source(&self, source: &Source) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
         let source_json = serde_json::to_string(source)?;
         db.execute(
             "DELETE FROM memories WHERE source_json = ?1",
@@ -390,10 +395,7 @@ impl Storage {
 
     /// Remove a memory by its ID
     pub async fn delete_memory(&self, id: MemoryId) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
         db.execute(
             "DELETE FROM memories WHERE id = ?1",
             params![id.to_string()],
@@ -403,10 +405,7 @@ impl Storage {
 
     /// Remove a memory by its file path
     pub async fn remove_memory_by_path(&self, path: &std::path::Path) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
         let path_str = path.to_string_lossy();
         db.execute(
             "DELETE FROM memories WHERE path = ?1",
@@ -417,10 +416,7 @@ impl Storage {
 
     /// Get a memory by its file path
     pub async fn get_memory_by_path(&self, path: &std::path::Path) -> Result<Option<Memory>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
         let path_str = path.to_string_lossy();
 
         let mut stmt = db.prepare(
@@ -454,10 +450,7 @@ impl Storage {
     }
 
     pub async fn find_by_path_prefix(&self, prefix: &str) -> Result<Vec<Memory>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut stmt = db.prepare(
             "SELECT id, path, source_json, kind_json, metadata_json, tags_json,
@@ -510,10 +503,7 @@ impl Storage {
     }
 
     pub async fn list_tags(&self) -> Result<Vec<(String, u64)>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut stmt = db.prepare("SELECT name, count FROM tags ORDER BY count DESC")?;
         let tags = stmt
@@ -528,10 +518,7 @@ impl Storage {
 
     /// List all tags with their colors
     pub async fn list_tags_with_colors(&self) -> Result<Vec<(String, u64, Option<String>)>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut stmt = db.prepare("SELECT name, count, color FROM tags ORDER BY count DESC")?;
         let tags = stmt
@@ -550,10 +537,7 @@ impl Storage {
 
     /// Set color for a tag
     pub async fn set_tag_color(&self, tag_name: &str, color: Option<&str>) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         db.execute(
             "UPDATE tags SET color = ?1 WHERE name = ?2",
@@ -566,10 +550,7 @@ impl Storage {
     // === Source Operations ===
 
     pub async fn add_source(&self, source: Source) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
         let id = uuid::Uuid::new_v4().to_string();
         let config = SourceConfig {
             source,
@@ -588,10 +569,7 @@ impl Storage {
     }
 
     pub async fn remove_source(&self, source: &Source) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
         let source_json = serde_json::to_string(source)?;
         db.execute(
             "DELETE FROM sources WHERE config_json LIKE ?1",
@@ -601,10 +579,7 @@ impl Storage {
     }
 
     pub async fn remove_memories_by_path_prefix(&self, path_prefix: &str) -> Result<usize> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
         let count = db.execute(
             "DELETE FROM memories WHERE path LIKE ?1",
             params![format!("{}%", path_prefix)],
@@ -613,10 +588,7 @@ impl Storage {
     }
 
     pub async fn clear_all(&self) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
         db.execute_batch(
             r#"
             DELETE FROM memories;
@@ -636,10 +608,7 @@ impl Storage {
     /// - Rebuild indexes for better performance
     /// - Analyze tables for query optimization
     pub async fn vacuum(&self) -> Result<VacuumStats> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         // Get size before vacuum
         let size_before: i64 = db
@@ -681,10 +650,7 @@ impl Storage {
 
     /// Clean up orphaned embeddings (embeddings without matching memories)
     pub async fn cleanup_orphaned_embeddings(&self) -> Result<usize> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let deleted = db.execute(
             "DELETE FROM embeddings WHERE memory_id NOT IN (SELECT id FROM memories)",
@@ -696,10 +662,7 @@ impl Storage {
     }
 
     pub async fn get_stats(&self) -> Result<StorageStats> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let memory_count: i64 =
             db.query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))?;
@@ -718,10 +681,7 @@ impl Storage {
     }
 
     pub async fn list_sources(&self) -> Result<Vec<SourceConfig>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut stmt = db.prepare("SELECT config_json FROM sources")?;
         let sources = stmt
@@ -737,10 +697,7 @@ impl Storage {
     // === Cluster Operations ===
 
     pub async fn list_clusters(&self) -> Result<Vec<Cluster>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut stmt = db.prepare(
             "SELECT id, name, kind, memory_ids_json, cover_id, auto_generated, created_at, metadata_json
@@ -782,10 +739,7 @@ impl Storage {
             metadata: std::collections::HashMap::new(),
         };
 
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
         db.execute(
             "INSERT INTO clusters (id, name, kind, memory_ids_json, auto_generated, created_at, metadata_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -808,10 +762,7 @@ impl Storage {
         cluster_id: uuid::Uuid,
         memory_ids: Vec<MemoryId>,
     ) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut stmt = db.prepare("SELECT memory_ids_json FROM clusters WHERE id = ?1")?;
         let current: Vec<MemoryId> = stmt.query_row(params![cluster_id.to_string()], |row| {
@@ -987,10 +938,7 @@ impl Storage {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Memory>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         // Prepare query for FTS5 - escape special characters and add wildcards
         let fts_query = query
@@ -1046,10 +994,7 @@ impl Storage {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Memory>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let pattern = format!("%{}%", query.to_lowercase());
 
@@ -1128,10 +1073,7 @@ impl Storage {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Memory>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         // Build dynamic SQL based on filters
         let mut conditions = Vec::new();
@@ -1220,10 +1162,7 @@ impl Storage {
         tags: &[String],
         kind: Option<&str>,
     ) -> Result<usize> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut conditions = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -1272,10 +1211,7 @@ impl Storage {
         embedding: &[f32],
         model: &str,
     ) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         // Convert embedding to bytes
         let embedding_bytes: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
@@ -1296,10 +1232,7 @@ impl Storage {
 
     /// Get embedding for a memory
     pub async fn get_embedding(&self, memory_id: MemoryId) -> Result<Option<Vec<f32>>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut stmt = db.prepare("SELECT embedding FROM embeddings WHERE memory_id = ?1")?;
         let result = stmt.query_row(params![memory_id.to_string()], |row| {
@@ -1326,10 +1259,7 @@ impl Storage {
 
     /// Get all embeddings for similarity search
     pub async fn get_all_embeddings(&self) -> Result<Vec<(MemoryId, Vec<f32>)>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut stmt = db.prepare("SELECT memory_id, embedding FROM embeddings")?;
         let embeddings = stmt
@@ -1358,10 +1288,7 @@ impl Storage {
     // === Stats ===
 
     pub async fn get_all_memories(&self) -> Result<Vec<Memory>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let mut stmt = db.prepare(
             "SELECT id, path, source_json, kind_json, metadata_json, tags_json,
@@ -1399,10 +1326,7 @@ impl Storage {
     }
 
     pub async fn stats(&self) -> Result<IndexStats> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+        let db = self.get_db()?;
 
         let total: i64 = db.query_row("SELECT COUNT(*) FROM memories", [], |r| r.get(0))?;
 
@@ -1519,10 +1443,7 @@ impl Storage {
 
         // Import clusters
         for cluster in data.clusters {
-            let db = self
-                .db
-                .lock()
-                .map_err(|_| HippoError::Database(rusqlite::Error::InvalidQuery))?;
+            let db = self.get_db()?;
 
             match db.execute(
                 "INSERT OR REPLACE INTO clusters (id, name, kind, memory_ids_json, cover_id, auto_generated, created_at, metadata_json)

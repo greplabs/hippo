@@ -141,6 +141,8 @@ struct WatcherState {
     watched_paths: RwLock<HashMap<PathBuf, Source>>,
     is_paused: RwLock<bool>,
     debounced_events: RwLock<DebouncedEvents>,
+    /// Flag to signal shutdown to background tasks
+    shutdown: std::sync::atomic::AtomicBool,
 }
 
 impl WatcherState {
@@ -150,7 +152,18 @@ impl WatcherState {
             watched_paths: RwLock::new(HashMap::new()),
             is_paused: RwLock::new(false),
             debounced_events: RwLock::new(DebouncedEvents::new(Duration::from_millis(debounce_ms))),
+            shutdown: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Signal shutdown to all background tasks
+    fn signal_shutdown(&self) {
+        self.shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Check if shutdown was signaled
+    fn is_shutdown(&self) -> bool {
+        self.shutdown.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     async fn increment_stat(&self, stat_type: &str) {
@@ -280,9 +293,20 @@ impl FileWatcher {
         indexer: Option<Arc<Indexer>>,
     ) {
         loop {
+            // Check for shutdown signal
+            if state.is_shutdown() {
+                info!("Watcher shutdown signaled, stopping event processing");
+                break;
+            }
+
             // Use recv_timeout to avoid blocking forever
             match rx.recv_timeout(Duration::from_millis(100)) {
                 Ok(event) => {
+                    // Check for shutdown again (could have been signaled while waiting)
+                    if state.is_shutdown() {
+                        break;
+                    }
+
                     // Check if paused
                     if *state.is_paused.read().await {
                         continue;
@@ -296,7 +320,7 @@ impl FileWatcher {
                     }
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    // Normal timeout, continue
+                    // Normal timeout, continue (also allows checking shutdown flag)
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                     info!("Notify watcher channel disconnected, stopping event processing");
@@ -304,6 +328,7 @@ impl FileWatcher {
                 }
             }
         }
+        debug!("Watcher event processing task exited");
     }
 
     /// Handle a single notify event
@@ -643,10 +668,26 @@ impl FileWatcher {
     pub async fn unwatch_all(&mut self) -> Result<()> {
         self.stop_all().await
     }
+
+    /// Shutdown the watcher and all background tasks
+    /// This signals the background event processing task to exit
+    pub fn shutdown(&self) {
+        info!("Shutting down file watcher");
+        self.state.signal_shutdown();
+    }
+}
+
+impl Drop for FileWatcher {
+    fn drop(&mut self) {
+        // Signal shutdown to background tasks
+        self.state.signal_shutdown();
+        debug!("FileWatcher dropped, shutdown signaled");
+    }
 }
 
 /// Start a background task to flush debounced events periodically
-pub async fn start_flush_task(watcher: Arc<RwLock<FileWatcher>>) {
+/// Returns a handle to the spawned task
+pub async fn start_flush_task(watcher: Arc<RwLock<FileWatcher>>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(100));
 
@@ -654,9 +695,17 @@ pub async fn start_flush_task(watcher: Arc<RwLock<FileWatcher>>) {
             interval.tick().await;
 
             let watcher_lock = watcher.read().await;
+
+            // Check for shutdown signal
+            if watcher_lock.state.is_shutdown() {
+                info!("Flush task shutting down");
+                break;
+            }
+
             if let Err(e) = watcher_lock.flush_events().await {
                 error!("Failed to flush watch events: {}", e);
             }
         }
-    });
+        debug!("Flush task exited");
+    })
 }
