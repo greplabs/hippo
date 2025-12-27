@@ -1574,14 +1574,18 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 27, 2025 - Session 8)
+### Latest Checkpoint (December 27, 2025 - Session 9)
 
-**Commit**: `279be45` on `main` branch - All PRs merged through #52
+**Commit**: `46644d4` on `main` branch - All PRs merged through #55
 
 **Release**: v0.2.0 published with macOS aarch64 build
 
-**Major Fixes Implemented This Session**:
-- ✅ Fixed crash bugs in watcher and storage modules (PR #52)
+**Major Features Implemented This Session**:
+- ✅ Enhanced UI interactions with micro-animations (PR #54)
+- ✅ Favorites counter badge on filter button (PR #54)
+- ✅ Find Similar Files button in detail panel (PR #54)
+- ✅ Smart re-indexing to skip unchanged files (PR #55)
+- ✅ 5 new unit tests for indexer module (PR #55)
 
 ### Completed Feature Branches
 
@@ -1595,8 +1599,62 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 | `feature/loading-empty-states` | UI Loading States | ✅ Merged | #49 |
 | `feature/tag-colors` | Tag Colors & Bulk Tagging | ✅ Merged | #50 |
 | `fix/crash-bugs` | Stability Fixes | ✅ Merged | #52 |
+| `feature/ui-polish-and-interactions` | UI Polish & Interactions | ✅ Merged | #54 |
+| `feature/core-improvements` | Smart Re-indexing & Tests | ✅ Merged | #55 |
 
-### Session 8 Changes
+### Session 9 Changes
+
+#### UI Polish & Interactions (PR #54)
+
+**Micro-interactions** (`hippo-tauri/ui/dist/index.html`):
+- ✅ Added ripple effect on button clicks
+- ✅ Added hover lift effect for cards
+- ✅ Added press scale animation
+- ✅ Added stagger children animation for lists
+- ✅ Added slide-in animations for panels
+- ✅ Added bounce hover animation
+
+**Favorites Counter**:
+- ✅ Real-time favorites count badge on filter button
+- ✅ Updates automatically when files are starred/unstarred
+- ✅ Gradient badge styling with golden colors
+
+**Find Similar Files**:
+- ✅ Prominent "Find Similar Files" button in detail panel
+- ✅ Shows up to 5 similar files with similarity percentage badges
+- ✅ Click results to navigate to similar files
+- ✅ Collapsible panel with close button
+- ✅ Calls `get_similar` backend endpoint
+
+**AI Chat Typing**:
+- ✅ Added typing cursor animation
+- ✅ Added `typeMessage()` function for streaming effect
+- ✅ Click to skip animation feature
+
+**Dark Mode Polish**:
+- ✅ Refined shadows with subtle borders
+- ✅ Improved glow effects on buttons
+- ✅ Better scrollbar styling in dark mode
+- ✅ Focus ring improvements
+
+#### Smart Re-indexing & Tests (PR #55)
+
+**Smart Re-indexing** (`hippo-core/src/indexer/mod.rs`):
+- ✅ Added `smart_reindex: bool` config option (enabled by default)
+- ✅ Added `ReindexStatus` enum: `New`, `Modified`, `Unchanged`, `Error`
+- ✅ Added `needs_reindex()` async method to check file modification times
+- ✅ Compares file mtime against `indexed_at` in database
+- ✅ Skips unchanged files during sync for much faster re-indexing
+- ✅ Logs skipped file count during smart reindex
+
+**New Unit Tests**:
+- ✅ `test_indexer_config_default`: Verifies default config values
+- ✅ `test_indexing_progress_percentage`: Tests progress calculation
+- ✅ `test_reindex_status_variants`: Tests all status variants
+- ✅ `test_supported_extensions_comprehensive`: Tests 30+ file extensions
+- ✅ `test_indexing_stage_serialization`: Tests JSON roundtrip
+
+### Previous Session - Session 8 Changes
 
 #### Critical Bug Fixes (PR #52)
 
