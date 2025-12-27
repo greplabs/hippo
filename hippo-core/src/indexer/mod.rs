@@ -155,6 +155,8 @@ pub struct IndexerConfig {
     pub batch_size: usize,
     pub supported_extensions: Vec<String>,
     pub auto_tag_enabled: bool,
+    /// When true, only re-index files that have been modified since last indexing
+    pub smart_reindex: bool,
 }
 
 impl Default for IndexerConfig {
@@ -185,6 +187,52 @@ impl Default for IndexerConfig {
             .map(String::from)
             .collect(),
             auto_tag_enabled: false,
+            // Smart re-indexing enabled by default for faster syncs
+            smart_reindex: true,
+        }
+    }
+}
+
+/// Result of checking if a file needs re-indexing
+#[derive(Debug)]
+pub enum ReindexStatus {
+    /// File is new, needs full indexing
+    New,
+    /// File has been modified since last index
+    Modified,
+    /// File hasn't changed, skip re-indexing
+    Unchanged,
+    /// Error checking status
+    Error(String),
+}
+
+impl Indexer {
+    /// Check if a file needs re-indexing based on modification time
+    pub async fn needs_reindex(storage: &Storage, path: &Path) -> ReindexStatus {
+        // Get file's current modification time
+        let file_mtime = match std::fs::metadata(path) {
+            Ok(meta) => match meta.modified() {
+                Ok(mtime) => mtime,
+                Err(e) => return ReindexStatus::Error(format!("Failed to get mtime: {}", e)),
+            },
+            Err(e) => return ReindexStatus::Error(format!("Failed to get metadata: {}", e)),
+        };
+
+        // Check if file exists in database
+        match storage.get_memory_by_path(path).await {
+            Ok(Some(memory)) => {
+                // Compare with indexed_at time
+                let indexed_at = memory.indexed_at;
+                let file_mtime_chrono = chrono::DateTime::<chrono::Utc>::from(file_mtime);
+
+                if file_mtime_chrono > indexed_at {
+                    ReindexStatus::Modified
+                } else {
+                    ReindexStatus::Unchanged
+                }
+            }
+            Ok(None) => ReindexStatus::New,
+            Err(e) => ReindexStatus::Error(format!("Database error: {}", e)),
         }
     }
 }
@@ -478,8 +526,8 @@ impl Indexer {
             .await;
         let _ = progress_tx.send(state.progress.read().await.clone());
 
-        // Collect all files
-        let files: Vec<PathBuf> = WalkDir::new(path)
+        // Collect all supported files
+        let all_files: Vec<PathBuf> = WalkDir::new(path)
             .follow_links(true)
             .into_iter()
             .filter_map(|e| e.ok())
@@ -493,6 +541,45 @@ impl Indexer {
             })
             .map(|e| e.path().to_path_buf())
             .collect();
+
+        // Smart re-indexing: filter to only files that need re-indexing
+        let (files, skipped_count) = if config.smart_reindex {
+            let mut needs_index = Vec::with_capacity(all_files.len());
+            let mut skipped = 0usize;
+
+            for file_path in all_files {
+                match Self::needs_reindex(storage, &file_path).await {
+                    ReindexStatus::New | ReindexStatus::Modified => {
+                        needs_index.push(file_path);
+                    }
+                    ReindexStatus::Unchanged => {
+                        skipped += 1;
+                    }
+                    ReindexStatus::Error(e) => {
+                        debug!("Error checking reindex status for {:?}: {}", file_path, e);
+                        // On error, include the file to be safe
+                        needs_index.push(file_path);
+                    }
+                }
+            }
+
+            (needs_index, skipped)
+        } else {
+            (all_files, 0)
+        };
+
+        if skipped_count > 0 {
+            println!(
+                "[Indexer] Smart reindex: {} unchanged files skipped, {} files to process",
+                skipped_count,
+                files.len()
+            );
+            info!(
+                "Smart reindex: {} unchanged files skipped, {} files to process",
+                skipped_count,
+                files.len()
+            );
+        }
 
         println!("[Indexer] Found {} files to index", files.len());
         info!("Found {} files to index", files.len());
@@ -1227,6 +1314,127 @@ impl MemoryKindExt for Memory {
             MemoryKind::Database => "database",
             MemoryKind::Folder => "folder",
             MemoryKind::Unknown => "unknown",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_indexer_config_default() {
+        let config = IndexerConfig::default();
+        assert!(config.smart_reindex, "Smart reindex should be enabled by default");
+        assert!(!config.auto_tag_enabled, "Auto-tagging should be disabled by default");
+        assert!(config.parallelism >= 1, "Parallelism should be at least 1");
+        assert!(config.batch_size > 0, "Batch size should be positive");
+        assert!(
+            config.supported_extensions.contains(&"jpg".to_string()),
+            "Should support jpg extension"
+        );
+        assert!(
+            config.supported_extensions.contains(&"rs".to_string()),
+            "Should support rs extension"
+        );
+        assert!(
+            config.supported_extensions.contains(&"pdf".to_string()),
+            "Should support pdf extension"
+        );
+    }
+
+    #[test]
+    fn test_indexing_progress_percentage() {
+        let mut progress = IndexingProgress::new();
+        assert_eq!(progress.percentage(), 0.0);
+
+        progress.total = 100;
+        progress.processed = 50;
+        assert!((progress.percentage() - 50.0).abs() < 0.001);
+
+        progress.processed = 100;
+        assert!((progress.percentage() - 100.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_reindex_status_variants() {
+        // Test that all variants exist and can be matched
+        let new = ReindexStatus::New;
+        let modified = ReindexStatus::Modified;
+        let unchanged = ReindexStatus::Unchanged;
+        let error = ReindexStatus::Error("test error".to_string());
+
+        assert!(matches!(new, ReindexStatus::New));
+        assert!(matches!(modified, ReindexStatus::Modified));
+        assert!(matches!(unchanged, ReindexStatus::Unchanged));
+        assert!(matches!(error, ReindexStatus::Error(_)));
+    }
+
+    #[test]
+    fn test_supported_extensions_comprehensive() {
+        let config = IndexerConfig::default();
+
+        // Images
+        for ext in &["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "heic"] {
+            assert!(
+                config.supported_extensions.contains(&ext.to_string()),
+                "Should support image extension: {}",
+                ext
+            );
+        }
+
+        // Videos
+        for ext in &["mp4", "mov", "avi", "mkv", "webm"] {
+            assert!(
+                config.supported_extensions.contains(&ext.to_string()),
+                "Should support video extension: {}",
+                ext
+            );
+        }
+
+        // Audio
+        for ext in &["mp3", "wav", "flac", "m4a", "ogg", "aac"] {
+            assert!(
+                config.supported_extensions.contains(&ext.to_string()),
+                "Should support audio extension: {}",
+                ext
+            );
+        }
+
+        // Code
+        for ext in &["rs", "py", "js", "ts", "go", "java", "c", "cpp"] {
+            assert!(
+                config.supported_extensions.contains(&ext.to_string()),
+                "Should support code extension: {}",
+                ext
+            );
+        }
+
+        // Documents
+        for ext in &["pdf", "doc", "docx", "txt", "md"] {
+            assert!(
+                config.supported_extensions.contains(&ext.to_string()),
+                "Should support document extension: {}",
+                ext
+            );
+        }
+    }
+
+    #[test]
+    fn test_indexing_stage_serialization() {
+        let stages = vec![
+            IndexingStage::Scanning,
+            IndexingStage::Embedding,
+            IndexingStage::Tagging,
+            IndexingStage::Complete,
+        ];
+
+        for stage in stages {
+            let json = serde_json::to_string(&stage).unwrap();
+            let parsed: IndexingStage = serde_json::from_str(&json).unwrap();
+            // Verify roundtrip works
+            let json2 = serde_json::to_string(&parsed).unwrap();
+            assert_eq!(json, json2);
         }
     }
 }
