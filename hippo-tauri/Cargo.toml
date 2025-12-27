@@ -1,6 +1,6 @@
 [package]
 name = "hippo-tauri"
-version = "0.2.0"
+version = "1.0.0"
 edition = "2021"
 description = "Hippo desktop app - The memory that never forgets"
 
