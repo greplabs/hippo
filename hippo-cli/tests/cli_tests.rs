@@ -361,6 +361,8 @@ mod integration_tests {
             name: "important".to_string(),
             source: TagSource::User,
             confidence: None,
+            color: None,
+            parent: None,
         };
         hippo.add_tag(memory.id, tag).await?;
 
@@ -615,6 +617,8 @@ mod error_tests {
             name: "test".to_string(),
             source: TagSource::User,
             confidence: None,
+            color: None,
+            parent: None,
         };
 
         let _result = hippo.add_tag(fake_id, tag).await;
@@ -686,6 +690,8 @@ mod workflow_tests {
             name: "vacation".to_string(),
             source: TagSource::User,
             confidence: None,
+            color: None,
+            parent: None,
         };
         hippo.add_tag(memory.id, tag).await?;
 
@@ -794,6 +800,8 @@ mod workflow_tests {
                     name: "work".to_string(),
                     source: TagSource::User,
                     confidence: None,
+                    color: None,
+                    parent: None,
                 },
             )
             .await?;
@@ -806,6 +814,8 @@ mod workflow_tests {
                     name: "personal".to_string(),
                     source: TagSource::User,
                     confidence: None,
+                    color: None,
+                    parent: None,
                 },
             )
             .await?;
