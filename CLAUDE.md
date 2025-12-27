@@ -1574,16 +1574,14 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 27, 2025 - Session 7)
+### Latest Checkpoint (December 27, 2025 - Session 8)
 
-**Commit**: `cb99175` on `main` branch - All PRs merged through #50
+**Commit**: `279be45` on `main` branch - All PRs merged through #52
 
 **Release**: v0.2.0 published with macOS aarch64 build
 
-**Major Features Implemented This Session**:
-- ✅ System tray support with menu integration (PR #48)
-- ✅ Loading skeletons and indexing progress overlay (PR #49)
-- ✅ Tag colors, bulk tagging with autocomplete, and file type icons (PR #50)
+**Major Fixes Implemented This Session**:
+- ✅ Fixed crash bugs in watcher and storage modules (PR #52)
 
 ### Completed Feature Branches
 
@@ -1596,8 +1594,33 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 | `feature/phase5-platform` | Platform & Integrations | ✅ Merged | #48 |
 | `feature/loading-empty-states` | UI Loading States | ✅ Merged | #49 |
 | `feature/tag-colors` | Tag Colors & Bulk Tagging | ✅ Merged | #50 |
+| `fix/crash-bugs` | Stability Fixes | ✅ Merged | #52 |
 
-### Session 7 Changes
+### Session 8 Changes
+
+#### Critical Bug Fixes (PR #52)
+
+**File Watcher Infinite Loop Fix** (`hippo-core/src/watcher/mod.rs`):
+- ✅ Added `shutdown` flag to `WatcherState` with atomic bool
+- ✅ Implemented `signal_shutdown()` and `is_shutdown()` methods
+- ✅ Updated `process_notify_events()` to check shutdown flag and exit gracefully
+- ✅ Implemented `Drop` trait for `FileWatcher` to cleanup on drop
+- ✅ Updated `start_flush_task()` to respect shutdown signal and return `JoinHandle`
+
+**Database Mutex Poisoning Fix** (`hippo-core/src/storage/mod.rs`):
+- ✅ Added `get_db()` helper method that safely recovers from mutex poisoning
+- ✅ Replaced 31 occurrences of unsafe `.lock().map_err()` pattern
+- ✅ Logs warning when poisoning is detected but recovers gracefully
+- ✅ SQLite connections remain valid after mutex poisoning recovery
+
+**Other Fixes**:
+- ✅ Fixed `.gitignore` to not ignore `src/storage` directory (was catching `hippo-core/src/storage/`)
+
+**Root Causes Addressed**:
+1. Background watcher tasks ran forever with no way to terminate, causing memory leaks
+2. When a thread panicked while holding the database lock, all subsequent DB operations failed permanently
+
+### Previous Session - Session 7 Changes
 
 #### System Tray Support (PR #48)
 - ✅ Added system tray icon with menu integration
