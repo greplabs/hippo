@@ -77,6 +77,7 @@ mod storage_tests {
             limit: 50,
             offset: 0,
             location: None,
+            parsed_terms: None,
         };
 
         assert_eq!(query.text, Some("rust programming".to_string()));

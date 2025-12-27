@@ -634,6 +634,8 @@ async fn test_tag_suggestion_integration_pattern() {
             name: t.name.clone(),
             source: TagSource::Ai,
             confidence: Some(t.confidence),
+            parent: None,
+            color: None,
         })
         .collect();
 

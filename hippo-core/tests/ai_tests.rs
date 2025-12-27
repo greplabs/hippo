@@ -364,6 +364,8 @@ fn create_test_memory(path: &str, kind: MemoryKind, tags: Vec<&str>) -> Memory {
                 name: t.to_string(),
                 source: TagSource::User,
                 confidence: None,
+                parent: None,
+                color: None,
             })
             .collect(),
         embedding_id: None,
