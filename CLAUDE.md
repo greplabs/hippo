@@ -1574,9 +1574,9 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 27, 2025 - Session 10 Continued)
+### Latest Checkpoint (December 27, 2025 - Session 10 Final)
 
-**Commit**: `f4c61be` on `main` branch - All PRs merged through #65
+**Commit**: `9893567` on `main` branch - All PRs merged through #67
 
 **Release**: v0.2.0 published with macOS aarch64 build
 
@@ -1588,6 +1588,7 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 - ✅ UI scroll fix + thumbnail cache limit + skip patterns (PR #62)
 - ✅ Improved scroll reset with delayed execution (PR #63)
 - ✅ Fixed stuck indexing overlay (PR #64, #65)
+- ✅ Fixed memory leaks causing UI blank screen (PR #67)
 
 ### Completed Feature Branches
 
@@ -1610,6 +1611,7 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 | `fix/scroll-delay` | Scroll Reset | ✅ Merged | #63 |
 | `fix/indexing-overlay` | Overlay Field Fix | ✅ Merged | #64 |
 | `fix/indexing-overlay-v2` | Smart Overlay Detection | ✅ Merged | #65 |
+| `fix/memory-leak-ui-blank` | Memory Leak Fix | ✅ Merged | #67 |
 
 ### Session 10 Changes
 
@@ -1704,6 +1706,27 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 - ✅ Reduced auto-hide timeout from 5s to 1.5s
 - ✅ Added close button (×) for manual dismissal
 - ✅ CSS styling for `.indexing-close` button
+
+#### Memory Leak Fix (PR #67)
+
+**Problem**: UI would go blank after running for extended periods due to memory accumulation
+
+**Root Causes Identified**:
+- `thumbnailPending` object grew indefinitely (entries set to true/false but never deleted)
+- No limit on concurrent thumbnail requests overwhelming the system
+- Stale thumbnail requests accumulated between renders
+
+**Solutions** (`hippo-tauri/ui/dist/index.html`):
+- ✅ Added concurrency limit for thumbnail requests (max 5 at a time)
+- ✅ Implemented queue-based thumbnail loading with `processThumbnailQueue()`
+- ✅ Delete `thumbnailPending[p]` after completion instead of just setting `false`
+- ✅ Added `cleanupThumbnailPending()` for periodic cleanup
+- ✅ Clear thumbnail queue on each `renderFiles()` call
+
+**New Features**:
+- ✅ Added **Refresh** button to sidebar (clears all caches and reloads data)
+- ✅ Added **Cmd+R** keyboard shortcut for refresh
+- ✅ Updated shortcuts help modal with refresh shortcut
 
 ### Previous Session - Session 9 Changes
 

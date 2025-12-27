@@ -159,6 +159,9 @@ pub struct IndexerConfig {
     pub smart_reindex: bool,
     /// Directory patterns to skip (e.g., ".git", "node_modules")
     pub skip_patterns: Vec<String>,
+    /// When true, generate AI embeddings via Ollama (slower but enables semantic search)
+    /// When false, use fast hash-based embeddings (instant, good for basic search)
+    pub generate_ai_embeddings: bool,
 }
 
 impl Default for IndexerConfig {
@@ -208,6 +211,9 @@ impl Default for IndexerConfig {
             .into_iter()
             .map(String::from)
             .collect(),
+            // Fast mode by default - use hash embeddings for instant indexing
+            // Set to true to enable AI-powered semantic search (requires Ollama)
+            generate_ai_embeddings: false,
         }
     }
 }
@@ -686,12 +692,14 @@ impl Indexer {
             }
 
             // Generate and store embeddings in batch (much faster)
-            state
-                .update_progress(|p| {
-                    p.current_file =
-                        Some(format!("Embedding batch of {} files...", memories.len()));
-                })
-                .await;
+            // Skip if generate_ai_embeddings is disabled for fast indexing
+            if config.generate_ai_embeddings {
+                state
+                    .update_progress(|p| {
+                        p.current_file =
+                            Some(format!("Embedding batch of {} files...", memories.len()));
+                    })
+                    .await;
 
             // Use batch embedding for efficiency
             match embedder.embed_memories_batch(&memories).await {
@@ -770,6 +778,25 @@ impl Indexer {
                             .await;
                         let _ = progress_tx.send(state.progress.read().await.clone());
                     }
+                }
+            }
+            } else {
+                // Fast mode: skip AI embeddings, just update progress
+                for memory in &memories {
+                    state.files_processed_count.fetch_add(1, Ordering::SeqCst);
+                    state
+                        .update_progress(|p| {
+                            p.processed += 1;
+                            p.current_file = Some(
+                                memory
+                                    .path
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_default(),
+                            );
+                        })
+                        .await;
+                    let _ = progress_tx.send(state.progress.read().await.clone());
                 }
             }
 
