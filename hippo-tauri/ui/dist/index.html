@@ -3576,9 +3576,16 @@
             renderTagBar();
             renderFiles();
 
-            // Scroll content area to top on load
-            var contentArea = document.querySelector('.content');
-            if (contentArea) contentArea.scrollTop = 0;
+            // Scroll content area to top on load (use setTimeout to ensure DOM is rendered)
+            setTimeout(function() {
+              var contentArea = document.querySelector('.content');
+              if (contentArea) {
+                contentArea.scrollTop = 0;
+                window.scrollTo(0, 0);
+              }
+              document.body.scrollTop = 0;
+              document.documentElement.scrollTop = 0;
+            }, 100);
 
             // Check Ollama status in background
             invoke('ollama_status').then(function(status) {
