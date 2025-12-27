@@ -1875,6 +1875,7 @@
         <button class="sidebar-btn" id="settingsBtn"><span class="icon icon-sm" id="settingsIcon"></span> AI Settings</button>
         <button class="sidebar-btn" id="darkModeBtn"><span class="icon icon-sm" id="themeIcon"></span> <span id="themeText">Dark Mode</span></button>
         <button class="sidebar-btn" id="shortcutsBtn" onclick="toggleShortcutHelp()"><span class="icon icon-sm" id="shortcutsIcon"></span> Shortcuts <kbd style="margin-left:auto;background:#f5f5f4;border:1px solid #e7e5e4;border-radius:4px;padding:1px 5px;font-size:10px;font-family:ui-monospace,monospace;">?</kbd></button>
+        <button class="sidebar-btn" id="refreshBtn" title="Refresh data and clear caches"><span class="icon icon-sm" id="refreshIcon"></span> Refresh</button>
         <button class="sidebar-btn danger" id="resetBtn"><span class="icon icon-sm" id="resetIcon"></span> Reset Index</button>
       </div>
     </aside>
@@ -2165,6 +2166,7 @@
           <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>K</kbd></span><span class="shortcut-desc">Command palette</span></div>
           <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>F</kbd></span><span class="shortcut-desc">Focus search</span></div>
           <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>O</kbd></span><span class="shortcut-desc">Add folder</span></div>
+          <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>R</kbd></span><span class="shortcut-desc">Refresh data</span></div>
           <div class="shortcut-item"><span class="shortcut-keys"><kbd>⌘</kbd><kbd>,</kbd></span><span class="shortcut-desc">Open settings</span></div>
           <div class="shortcut-item"><span class="shortcut-keys"><kbd>Esc</kbd></span><span class="shortcut-desc">Close / Deselect</span></div>
         </div>
@@ -3121,6 +3123,9 @@
       var thumbnailPending = {};
       var thumbnailCacheOrder = [];
       var THUMBNAIL_CACHE_MAX = 200;
+      var THUMBNAIL_CONCURRENT_MAX = 5;  // Limit concurrent thumbnail requests
+      var thumbnailActiveRequests = 0;
+      var thumbnailQueue = [];
 
       function addToThumbnailCache(path, thumbPath) {
         // Remove if already in cache
@@ -3134,6 +3139,20 @@
           var oldPath = thumbnailCacheOrder.pop();
           delete thumbnailCache[oldPath];
         }
+        // Also clean up thumbnailPending periodically
+        if (thumbnailCacheOrder.length % 50 === 0) {
+          cleanupThumbnailPending();
+        }
+      }
+
+      function cleanupThumbnailPending() {
+        // Remove entries that are no longer pending
+        var keys = Object.keys(thumbnailPending);
+        keys.forEach(function(key) {
+          if (!thumbnailPending[key]) {
+            delete thumbnailPending[key];
+          }
+        });
       }
 
       // AI settings
@@ -3185,6 +3204,8 @@
         document.getElementById('bulkTagIcon').innerHTML = icons.tag;
         document.getElementById('bulkSelectIcon').innerHTML = icons.checkSquare;
         document.getElementById('bulkCloseIcon').innerHTML = icons.close;
+        // Refresh icon
+        document.getElementById('refreshIcon').innerHTML = icons.refresh;
         // AI icons
         document.getElementById('settingsIcon').innerHTML = icons.settings;
         document.getElementById('shortcutsIcon').innerHTML = icons.keyboard;
@@ -3958,6 +3979,9 @@
         }
 
         function renderFiles() {
+          // Clear pending thumbnail queue when re-rendering to avoid processing stale entries
+          thumbnailQueue = [];
+
           var filtered = getFiltered();
           document.getElementById('resultCount').textContent = filtered.length + ' files';
           updateFavoritesCount();
@@ -4059,7 +4083,7 @@
           return html;
         }
 
-        // Load thumbnails for pending images
+        // Load thumbnails for pending images with concurrency limit
         function loadThumbnails() {
           var pending = document.querySelectorAll('.thumb-pending');
           pending.forEach(function(img) {
@@ -4077,27 +4101,53 @@
             // Mark as pending to avoid duplicate requests
             thumbnailPending[path] = true;
 
-            // Request thumbnail from backend
-            invoke('get_thumbnail', { path: path }).then(function(thumbPath) {
-              addToThumbnailCache(path, thumbPath);
-              thumbnailPending[path] = false;
-
-              // Update all images with this path
-              document.querySelectorAll('img[data-path="' + CSS.escape(path) + '"]').forEach(function(el) {
-                el.src = convertFileSrc(thumbPath);
-                el.style.display = '';
-                el.classList.remove('thumb-pending');
-              });
-            }).catch(function(e) {
-              thumbnailPending[path] = false;
-              // Fallback to original image if thumbnail fails
-              document.querySelectorAll('img[data-path="' + CSS.escape(path) + '"]').forEach(function(el) {
-                el.src = convertFileSrc(path);
-                el.style.display = '';
-                el.classList.remove('thumb-pending');
-              });
-            });
+            // Queue the request instead of making it immediately
+            thumbnailQueue.push(path);
           });
+
+          // Process queue with concurrency limit
+          processThumbnailQueue();
+        }
+
+        function processThumbnailQueue() {
+          while (thumbnailQueue.length > 0 && thumbnailActiveRequests < THUMBNAIL_CONCURRENT_MAX) {
+            var path = thumbnailQueue.shift();
+            if (!path || thumbnailCache[path]) continue;
+
+            thumbnailActiveRequests++;
+
+            // Request thumbnail from backend
+            (function(p) {
+              invoke('get_thumbnail', { path: p }).then(function(thumbPath) {
+                addToThumbnailCache(p, thumbPath);
+                delete thumbnailPending[p];
+                thumbnailActiveRequests--;
+
+                // Update all images with this path
+                document.querySelectorAll('img[data-path="' + CSS.escape(p) + '"]').forEach(function(el) {
+                  el.src = convertFileSrc(thumbPath);
+                  el.style.display = '';
+                  el.classList.remove('thumb-pending');
+                });
+
+                // Process next in queue
+                processThumbnailQueue();
+              }).catch(function(e) {
+                delete thumbnailPending[p];
+                thumbnailActiveRequests--;
+
+                // Fallback to original image if thumbnail fails
+                document.querySelectorAll('img[data-path="' + CSS.escape(p) + '"]').forEach(function(el) {
+                  el.src = convertFileSrc(p);
+                  el.style.display = '';
+                  el.classList.remove('thumb-pending');
+                });
+
+                // Process next in queue
+                processThumbnailQueue();
+              });
+            })(path);
+          }
         }
 
         function bindCardEvents() {
@@ -5827,6 +5877,29 @@
           }
         };
 
+        // Refresh button - clears caches and reloads data
+        document.getElementById('refreshBtn').onclick = function() {
+          // Clear all caches to free memory
+          thumbnailCache = {};
+          thumbnailPending = {};
+          thumbnailCacheOrder = [];
+          thumbnailQueue = [];
+          thumbnailActiveRequests = 0;
+
+          // Clear selection state
+          selectedIds = [];
+          lastSelectedIdx = -1;
+
+          // Clear search state
+          searchHistory = [];
+          lastSearchQuery = '';
+
+          showToast('Refreshing data...', 'info');
+
+          // Reload data from backend
+          loadData();
+        };
+
         // Theme toggle function
         function setTheme(isDark) {
           darkMode = isDark;
@@ -6093,6 +6166,11 @@
             if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
               e.preventDefault();
               document.getElementById('addBtn').click();
+            }
+            // Refresh with Cmd+R
+            if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+              e.preventDefault();
+              document.getElementById('refreshBtn').click();
             }
             // Focus search
             if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
