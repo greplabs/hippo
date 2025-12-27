@@ -3510,21 +3510,34 @@
 
       // Indexing progress tracking
       var indexingInterval = null;
+      var indexingZeroCount = 0; // Track consecutive 0/0 responses
       function startIndexingProgress() {
         document.getElementById('indexingOverlay').style.display = 'block';
+        indexingZeroCount = 0;
         indexingInterval = setInterval(function() {
           invoke('get_indexing_progress').then(function(p) {
             document.getElementById('indexedCount').textContent = p.processed || 0;
             document.getElementById('totalCount').textContent = p.total || 0;
             var pct = p.total ? (p.processed / p.total * 100) : 0;
             document.getElementById('indexingBarFill').style.width = pct + '%';
-            if (p.eta_seconds && p.eta_seconds > 0) {
-              document.getElementById('indexingEta').textContent = '~' + (p.eta_seconds > 60 ? Math.ceil(p.eta_seconds/60) + 'm' : Math.ceil(p.eta_seconds) + 's') + ' remaining';
+            if (p.estimated_seconds_remaining && p.estimated_seconds_remaining > 0) {
+              document.getElementById('indexingEta').textContent = '~' + (p.estimated_seconds_remaining > 60 ? Math.ceil(p.estimated_seconds_remaining/60) + 'm' : Math.ceil(p.estimated_seconds_remaining) + 's') + ' remaining';
             } else if (p.processed > 0) {
               document.getElementById('indexingEta').textContent = 'Processing...';
             }
-            if (p.is_complete) stopIndexingProgress();
-          }).catch(function(e) { console.error('Progress:', e); });
+            // Check if indexing is complete (stage === 'Complete' or no activity)
+            if (p.stage === 'Complete') {
+              stopIndexingProgress();
+            } else if (p.total === 0 && p.processed === 0) {
+              indexingZeroCount++;
+              // Auto-hide after 5 seconds of 0/0 (10 * 500ms)
+              if (indexingZeroCount >= 10) {
+                stopIndexingProgress();
+              }
+            } else {
+              indexingZeroCount = 0;
+            }
+          }).catch(function(e) { console.error('Progress:', e); stopIndexingProgress(); });
         }, 500);
       }
       function stopIndexingProgress() {
