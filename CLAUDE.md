@@ -1574,9 +1574,9 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 27, 2025 - Session 10)
+### Latest Checkpoint (December 27, 2025 - Session 10 Continued)
 
-**Commit**: `899117e` on `main` branch - All PRs merged through #59
+**Commit**: `f4c61be` on `main` branch - All PRs merged through #65
 
 **Release**: v0.2.0 published with macOS aarch64 build
 
@@ -1584,6 +1584,10 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 - ✅ Fixed macOS app icon with proper rounded corners (PR #57)
 - ✅ Added web app icons (favicons, PWA icons, apple-touch-icon) (PR #57)
 - ✅ Major search performance optimizations (PR #59)
+- ✅ Qdrant dimension mismatch fix - silent SQLite fallback (PR #61)
+- ✅ UI scroll fix + thumbnail cache limit + skip patterns (PR #62)
+- ✅ Improved scroll reset with delayed execution (PR #63)
+- ✅ Fixed stuck indexing overlay (PR #64, #65)
 
 ### Completed Feature Branches
 
@@ -1601,6 +1605,11 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 | `feature/core-improvements` | Smart Re-indexing & Tests | ✅ Merged | #55 |
 | `feature/macos-rounded-icons` | macOS Icon Fix | ✅ Merged | #57 |
 | `feature/search-optimizations` | Search Performance | ✅ Merged | #59 |
+| `fix/qdrant-dimension-mismatch` | Qdrant Fallback | ✅ Merged | #61 |
+| `fix/ui-and-performance` | UI Fixes + Performance | ✅ Merged | #62 |
+| `fix/scroll-delay` | Scroll Reset | ✅ Merged | #63 |
+| `fix/indexing-overlay` | Overlay Field Fix | ✅ Merged | #64 |
+| `fix/indexing-overlay-v2` | Smart Overlay Detection | ✅ Merged | #65 |
 
 ### Session 10 Changes
 
@@ -1649,6 +1658,52 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 - Previous circular icon with transparent corners appeared with sharp edges
 - New icon has pre-rounded background (228px radius on 1024x1024 canvas)
 - All PNGs converted to RGBA format (required by Tauri)
+
+#### Qdrant Dimension Mismatch Fix (PR #61)
+
+**Problem**: App crashed when indexing 200K+ files due to embedding dimension mismatch warnings
+- Ollama produces 768-dim embeddings but Qdrant collections expected 1536-dim
+- Previous code tried to pad embeddings which caused floods of warnings
+
+**Solution** (`hippo-core/src/qdrant/mod.rs`):
+- Changed from `warn!` to `debug!` log level for dimension mismatch
+- Return `Ok(())` immediately to silently fall back to SQLite storage
+- Keeps semantic search working via SQLite vector fallback
+
+#### UI & Performance Fixes (PR #62)
+
+**Scroll Position Fix** (`hippo-tauri/ui/dist/index.html`):
+- ✅ Scroll content area to top after data loads
+- ✅ Uses setTimeout to ensure DOM is rendered before scrolling
+
+**Thumbnail Cache Limit**:
+- ✅ Added 200-entry LRU cache to prevent memory exhaustion
+- ✅ `addToThumbnailCache()` function with eviction logic
+- ✅ Prevents WebView crashes from unbounded thumbnail loading
+
+**Indexer Skip Patterns** (`hippo-core/src/indexer/mod.rs`):
+- ✅ Added `skip_patterns` config field
+- ✅ Skips: `.git`, `node_modules`, `.venv`, `__pycache__`, `.cache`, `.npm`, `target`, `build`, `dist`
+- ✅ Uses `filter_entry()` in WalkDir to prune directories before traversal
+- ✅ 10-100x faster indexing on repos with large excluded directories
+
+**Watcher Skip Patterns** (`hippo-core/src/watcher/mod.rs`):
+- ✅ Added `should_skip_path()` helper function
+- ✅ Filters events from `.git`, `node_modules`, etc.
+- ✅ Reduces log noise and unnecessary re-indexing
+
+#### Indexing Overlay Fixes (PR #64, #65)
+
+**Field Name Fix** (PR #64):
+- ✅ Changed `p.is_complete` to `p.stage === 'Complete'` (matching backend)
+- ✅ Changed `p.eta_seconds` to `p.estimated_seconds_remaining`
+
+**Smart Overlay Detection** (PR #65):
+- ✅ Pre-check before showing overlay (`total > 0` or `stage === 'Scanning'`)
+- ✅ Separated `startIndexingProgress()` and `startIndexingPolling()`
+- ✅ Reduced auto-hide timeout from 5s to 1.5s
+- ✅ Added close button (×) for manual dismissal
+- ✅ CSS styling for `.indexing-close` button
 
 ### Previous Session - Session 9 Changes
 
