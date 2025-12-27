@@ -11,14 +11,10 @@
       <stop offset="0%" style="stop-color:#A78BFA;stop-opacity:1" />
       <stop offset="100%" style="stop-color:#C4B5FD;stop-opacity:1" />
     </linearGradient>
-    <!-- macOS-style rounded rectangle clip path (superellipse approximation) -->
-    <clipPath id="macOSClip">
-      <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228"/>
-    </clipPath>
   </defs>
 
-  <!-- Rounded background with macOS-style corners -->
-  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="url(#bgGradient)"/>
+  <!-- Square background - fills entire canvas -->
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bgGradient)"/>
 
   <!-- Hippo face - centered -->
   <g transform="translate(512, 512)">
@@ -52,13 +48,13 @@
     <path d="M -75 165 Q 0 220 75 165" stroke="#6366F1" stroke-width="11" fill="none" stroke-linecap="round"/>
   </g>
 
-  <!-- Memory sparkles (repositioned to stay within rounded bounds) -->
+  <!-- Memory sparkles -->
   <g fill="#FCD34D">
-    <circle cx="780" cy="180" r="16"/>
-    <circle cx="860" cy="280" r="10"/>
-    <circle cx="220" cy="200" r="12"/>
-    <circle cx="160" cy="300" r="8"/>
-    <circle cx="820" cy="740" r="14"/>
-    <circle cx="200" cy="780" r="10"/>
+    <circle cx="820" cy="150" r="16"/>
+    <circle cx="900" cy="250" r="10"/>
+    <circle cx="200" cy="180" r="12"/>
+    <circle cx="140" cy="280" r="8"/>
+    <circle cx="860" cy="780" r="14"/>
+    <circle cx="180" cy="820" r="10"/>
   </g>
 </svg>
