@@ -1457,6 +1457,320 @@
     body.dark .card-placeholder {
       background: var(--bg-tertiary);
     }
+
+    /* ==================== Enhanced Micro-interactions ==================== */
+
+    /* Ripple effect for buttons */
+    .ripple {
+      position: relative;
+      overflow: hidden;
+    }
+    .ripple::after {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      background-image: radial-gradient(circle, rgba(255,255,255,0.3) 10%, transparent 10.01%);
+      background-repeat: no-repeat;
+      background-position: 50%;
+      transform: scale(10, 10);
+      opacity: 0;
+      transition: transform 0.4s, opacity 0.8s;
+    }
+    .ripple:active::after {
+      transform: scale(0, 0);
+      opacity: 0.3;
+      transition: 0s;
+    }
+
+    /* Smooth hover lift effect */
+    .hover-lift {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .hover-lift:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    body.dark .hover-lift:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    /* Scale on press */
+    .press-scale:active {
+      transform: scale(0.97);
+    }
+
+    /* Glow effect for primary actions */
+    .glow-primary {
+      transition: box-shadow 0.3s ease;
+    }
+    .glow-primary:hover {
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+    }
+
+    /* Bounce animation */
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+    .bounce-hover:hover {
+      animation: bounce 0.4s ease;
+    }
+
+    /* Slide in animations */
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideInBottom {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .slide-in-left { animation: slideInLeft 0.3s ease; }
+    .slide-in-bottom { animation: slideInBottom 0.3s ease; }
+
+    /* Stagger children animation */
+    .stagger-children > * {
+      opacity: 0;
+      animation: fadeInUp 0.3s ease forwards;
+    }
+    .stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+    .stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
+    .stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+    .stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
+    .stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+    .stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
+
+    /* ==================== Favorites Counter ==================== */
+    .favorites-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 9px;
+      margin-left: 6px;
+      box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
+    }
+    body.dark .favorites-count {
+      box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+    }
+
+    /* ==================== Find Similar Button ==================== */
+    .find-similar-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 16px;
+      margin-top: 12px;
+      background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 12px rgba(6, 182, 212, 0.25);
+    }
+    .find-similar-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(6, 182, 212, 0.35);
+    }
+    .find-similar-btn:active {
+      transform: translateY(0) scale(0.98);
+    }
+    .find-similar-btn .icon {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Similar files results panel */
+    .similar-files-panel {
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--bg-tertiary);
+      border-radius: 12px;
+      border: 1px solid var(--border-primary);
+      animation: fadeInUp 0.3s ease;
+    }
+    .similar-files-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .similar-files-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .similar-files-title .icon {
+      color: #06b6d4;
+    }
+    .similar-files-close {
+      padding: 4px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    .similar-files-close:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .similar-file-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-secondary);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .similar-file-item:last-child {
+      margin-bottom: 0;
+    }
+    .similar-file-item:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent-primary);
+      transform: translateX(4px);
+    }
+    .similar-file-thumb {
+      width: 40px;
+      height: 40px;
+      border-radius: 6px;
+      overflow: hidden;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+    }
+    .similar-file-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .similar-file-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .similar-file-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .similar-file-score {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .similarity-badge {
+      padding: 2px 8px;
+      background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+      border-radius: 10px;
+    }
+
+    /* ==================== AI Typing Effect ==================== */
+    @keyframes typing-cursor {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .typing-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: var(--accent-primary);
+      margin-left: 2px;
+      animation: typing-cursor 0.8s ease-in-out infinite;
+      vertical-align: text-bottom;
+    }
+    .ai-typing {
+      min-height: 20px;
+    }
+
+    /* ==================== Enhanced Dark Mode Polish ==================== */
+    body.dark {
+      /* Refined shadows for dark mode */
+      --shadow-card: 0 4px 20px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03);
+      --shadow-hover: 0 8px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+    }
+    body.dark .card {
+      box-shadow: var(--shadow-card);
+    }
+    body.dark .card:hover {
+      box-shadow: var(--shadow-hover);
+    }
+
+    /* Improved dark mode buttons */
+    body.dark .action-btn.primary {
+      background: linear-gradient(135deg, #fafaf9 0%, #e7e5e4 100%);
+      box-shadow: 0 4px 12px rgba(255,255,255,0.1);
+    }
+    body.dark .action-btn.primary:hover {
+      box-shadow: 0 6px 20px rgba(255,255,255,0.15);
+    }
+
+    /* Improved dark mode scrollbar */
+    body.dark ::-webkit-scrollbar-track {
+      background: rgba(255,255,255,0.02);
+    }
+
+    /* Dark mode glow effects */
+    body.dark .sidebar-btn.ai-chat-btn {
+      box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+    }
+    body.dark .sidebar-btn.ai-chat-btn:hover {
+      box-shadow: 0 6px 25px rgba(139, 92, 246, 0.4);
+    }
+
+    /* Improved dark mode borders */
+    body.dark .source-item {
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+    body.dark .source-item:hover {
+      border-color: rgba(255,255,255,0.08);
+    }
+
+    /* Dark mode filter pills */
+    body.dark .filter-btn.active {
+      box-shadow: 0 2px 10px rgba(250, 250, 249, 0.2);
+    }
+
+    /* Focus ring improvements */
+    *:focus-visible {
+      outline: 2px solid var(--accent-primary);
+      outline-offset: 2px;
+    }
+    body.dark *:focus-visible {
+      outline-color: var(--accent-primary);
+    }
   </style>
 
   <!-- Prism.js for syntax highlighting -->
@@ -1584,7 +1898,7 @@
       <div class="symbol-results" id="symbolResults" style="display:none;"></div>
       <div class="filter-bar">
         <button class="filter-btn active" data-filter="all">All</button>
-        <button class="filter-btn" data-filter="favorites"><span class="icon icon-sm filter-icon" data-icon="star"></span> Favorites</button>
+        <button class="filter-btn" data-filter="favorites"><span class="icon icon-sm filter-icon" data-icon="star"></span> Favorites<span class="favorites-count" id="favoritesCount" style="display:none;">0</span></button>
         <button class="filter-btn" data-filter="image"><span class="icon icon-sm filter-icon" data-icon="image"></span> Images</button>
         <button class="filter-btn" data-filter="video"><span class="icon icon-sm filter-icon" data-icon="video"></span> Videos</button>
         <button class="filter-btn" data-filter="audio"><span class="icon icon-sm filter-icon" data-icon="audio"></span> Audio</button>
@@ -1615,6 +1929,17 @@
           <button class="action-btn primary" id="openBtn">Open</button>
           <button class="action-btn secondary" id="revealBtn">Reveal</button>
           <button class="action-btn secondary star" id="starBtn"><span class="icon icon-md" id="starIcon"></span></button>
+        </div>
+        <button class="find-similar-btn" id="findSimilarBtn">
+          <span class="icon" id="findSimilarIcon"></span>
+          Find Similar Files
+        </button>
+        <div class="similar-files-panel" id="similarFilesPanel" style="display:none;">
+          <div class="similar-files-header">
+            <span class="similar-files-title"><span class="icon icon-sm" id="similarTitleIcon"></span> Similar Files</span>
+            <button class="similar-files-close" id="closeSimilarPanel"><span class="icon icon-sm" id="closeSimilarIcon"></span></button>
+          </div>
+          <div id="similarFilesList"></div>
         </div>
         <div class="detail-section">
           <p class="detail-section-title">Tags</p>
@@ -2877,9 +3202,13 @@
         document.getElementById('ollamaStatusIcon').innerHTML = icons.checkCircle;
         // AI Action icons
         document.getElementById('suggestTagsIcon').innerHTML = icons.tag;
-        document.getElementById('findSimilarIcon').innerHTML = icons.file;
         document.getElementById('smartRenameIcon').innerHTML = icons.doc;
         document.getElementById('askAboutIcon').innerHTML = icons.messageCircle;
+        // Find Similar icons in detail panel
+        document.getElementById('findSimilarIcon').innerHTML = icons.search;
+        document.getElementById('similarTitleIcon').innerHTML = icons.sparkles;
+        document.getElementById('closeSimilarIcon').innerHTML = icons.close;
+        document.getElementById('findSimilarIcon').innerHTML = icons.sparkles;
         // Filter icons
         document.querySelectorAll('.filter-icon').forEach(function(el) {
           var iconName = el.dataset.icon;
@@ -3562,9 +3891,21 @@
           return filtered;
         }
 
+        function updateFavoritesCount() {
+          var favCount = memories.filter(function(m) { return m.is_favorite; }).length;
+          var badge = document.getElementById('favoritesCount');
+          if (favCount > 0) {
+            badge.textContent = favCount;
+            badge.style.display = 'inline-flex';
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+
         function renderFiles() {
           var filtered = getFiltered();
           document.getElementById('resultCount').textContent = filtered.length + ' files';
+          updateFavoritesCount();
 
           if (filtered.length === 0) {
             document.getElementById('filesContainer').innerHTML = '<div class="empty"><div class="empty-icon"><span class="icon icon-2xl" style="color:#a8a29e;">' + icons.folderEmpty + '</span></div><div class="empty-title">' +
@@ -4762,6 +5103,50 @@
           container.scrollTop = container.scrollHeight;
         }
 
+        // ==================== AI Typing Effect ====================
+        var typingSpeed = 15; // ms per character
+        var typingInProgress = false;
+
+        function typeMessage(element, text, callback) {
+          typingInProgress = true;
+          var i = 0;
+          element.innerHTML = '<span class="ai-typing"></span><span class="typing-cursor"></span>';
+          var textSpan = element.querySelector('.ai-typing');
+          var cursor = element.querySelector('.typing-cursor');
+
+          function typeChar() {
+            if (i < text.length) {
+              // Handle markdown-like formatting chunks
+              var chunk = text.charAt(i);
+              // Speed up for whitespace
+              var delay = chunk === ' ' || chunk === '\n' ? typingSpeed / 3 : typingSpeed;
+
+              textSpan.textContent += chunk;
+              i++;
+
+              // Auto-scroll
+              var container = document.getElementById('chatMessages');
+              container.scrollTop = container.scrollHeight;
+
+              setTimeout(typeChar, delay);
+            } else {
+              // Done typing, remove cursor
+              if (cursor) cursor.remove();
+              typingInProgress = false;
+              if (callback) callback();
+            }
+          }
+
+          typeChar();
+        }
+
+        // Skip typing animation on click
+        document.getElementById('chatMessages').addEventListener('click', function() {
+          if (typingInProgress) {
+            typingInProgress = false;
+          }
+        });
+
         function removeChatLoading() {
           var loading = document.getElementById('chatLoading');
           if (loading) loading.remove();
@@ -5213,6 +5598,99 @@
             showToast('Failed: ' + e, 'error');
           });
         }
+
+        // ==================== Find Similar Files ====================
+        var similarFilesLoading = false;
+
+        function findSimilarFiles() {
+          if (!selectedMemory || similarFilesLoading) return;
+
+          var btn = document.getElementById('findSimilarBtn');
+          var panel = document.getElementById('similarFilesPanel');
+
+          // If panel is already showing, hide it
+          if (panel.style.display !== 'none') {
+            panel.style.display = 'none';
+            return;
+          }
+
+          similarFilesLoading = true;
+          btn.innerHTML = '<span class="icon">' + icons.refresh + '</span> Searching...';
+          btn.disabled = true;
+
+          invoke('get_similar', { memoryId: selectedMemory.id, limit: 5 }).then(function(results) {
+            similarFilesLoading = false;
+            btn.innerHTML = '<span class="icon">' + icons.sparkles + '</span> Find Similar Files';
+            btn.disabled = false;
+
+            if (!results || results.length === 0) {
+              showToast('No similar files found', 'info');
+              return;
+            }
+
+            // Render similar files panel
+            renderSimilarFiles(results);
+            panel.style.display = 'block';
+          }).catch(function(e) {
+            similarFilesLoading = false;
+            btn.innerHTML = '<span class="icon">' + icons.sparkles + '</span> Find Similar Files';
+            btn.disabled = false;
+            showToast('Failed to find similar files: ' + e, 'error');
+          });
+        }
+
+        function renderSimilarFiles(files) {
+          var list = document.getElementById('similarFilesList');
+          var html = '';
+
+          files.forEach(function(file) {
+            var mem = file.memory || file;
+            var score = file.score || 0;
+            var scorePercent = Math.round(score * 100);
+            var title = (mem.metadata && mem.metadata.title) || mem.path.split('/').pop();
+            var type = getType(mem.kind);
+            var ext = mem.path.split('.').pop();
+
+            html += '<div class="similar-file-item" data-id="' + mem.id + '">';
+            html += '<div class="similar-file-thumb">';
+            if ((type === 'image' || type === 'video') && convertFileSrc) {
+              var thumbSrc = thumbnailCache[mem.path];
+              if (thumbSrc) {
+                html += '<img src="' + convertFileSrc(thumbSrc) + '" onerror="this.style.display=\'none\'">';
+              }
+            }
+            html += '<span class="icon icon-sm">' + getFileIcon(type) + '</span>';
+            html += '</div>';
+            html += '<div class="similar-file-info">';
+            html += '<div class="similar-file-name" title="' + esc(title) + '">' + esc(title) + '</div>';
+            html += '<div class="similar-file-score">' + formatSize(mem.metadata ? mem.metadata.file_size : 0) + '</div>';
+            html += '</div>';
+            html += '<span class="similarity-badge">' + scorePercent + '%</span>';
+            html += '</div>';
+          });
+
+          list.innerHTML = html;
+
+          // Bind click events
+          list.querySelectorAll('.similar-file-item').forEach(function(item) {
+            item.onclick = function() {
+              var id = item.dataset.id;
+              var mem = memories.find(function(m) { return m.id === id; });
+              if (mem) {
+                selectMemory(mem);
+                document.getElementById('similarFilesPanel').style.display = 'none';
+              }
+            };
+          });
+        }
+
+        function closeSimilarPanel() {
+          document.getElementById('similarFilesPanel').style.display = 'none';
+        }
+
+        // Bind Find Similar button
+        document.getElementById('findSimilarBtn').onclick = findSimilarFiles;
+        document.getElementById('closeSimilarPanel').onclick = closeSimilarPanel;
 
         function addTagToMemory(tag) {
           if (!selectedMemory || !tag) return;
