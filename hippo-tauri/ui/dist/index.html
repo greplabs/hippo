@@ -128,7 +128,9 @@
 
     /* Indexing progress overlay */
     .indexing-overlay { position: fixed; bottom: 24px; right: 24px; z-index: 1000; animation: fadeInUp 0.3s ease; }
-    .indexing-progress { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 14px; padding: 18px 22px; box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 16px; min-width: 300px; }
+    .indexing-progress { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 14px; padding: 18px 22px; box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 16px; min-width: 300px; position: relative; }
+    .indexing-close { position: absolute; top: 6px; right: 8px; background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer; padding: 4px 8px; border-radius: 4px; line-height: 1; }
+    .indexing-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
     .indexing-spinner { width: 36px; height: 36px; border: 3px solid var(--border-primary); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; flex-shrink: 0; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .indexing-info { flex: 1; }
@@ -2003,6 +2005,7 @@
   <!-- Indexing Progress Overlay -->
   <div id="indexingOverlay" class="indexing-overlay" style="display: none;">
     <div class="indexing-progress">
+      <button class="indexing-close" id="indexingClose" title="Dismiss">&times;</button>
       <div class="indexing-spinner"></div>
       <div class="indexing-info">
         <div class="indexing-title">Indexing files...</div>
@@ -3233,6 +3236,11 @@
       }
       initIcons();
 
+      // Indexing overlay close button
+      document.getElementById('indexingClose').onclick = function() {
+        stopIndexingProgress();
+      };
+
       // Command definitions
       var commands = [
         { id: 'add-folder', title: 'Add Folder', desc: 'Index a new folder', icon: 'folderPlus', shortcut: ['⌘', 'O'], action: 'addFolder' },
@@ -3510,10 +3518,23 @@
 
       // Indexing progress tracking
       var indexingInterval = null;
-      var indexingZeroCount = 0; // Track consecutive 0/0 responses
+      var indexingZeroCount = 0;
       function startIndexingProgress() {
-        document.getElementById('indexingOverlay').style.display = 'block';
-        indexingZeroCount = 0;
+        // Check if indexing is actually happening before showing overlay
+        invoke('get_indexing_progress').then(function(p) {
+          // Only show if there's real work (total > 0 or scanning stage)
+          if (p.total > 0 || p.stage === 'Scanning') {
+            document.getElementById('indexingOverlay').style.display = 'block';
+            indexingZeroCount = 0;
+            startIndexingPolling();
+          } else {
+            // No indexing, just refresh data
+            loadData();
+          }
+        }).catch(function(e) { loadData(); });
+      }
+      function startIndexingPolling() {
+        if (indexingInterval) clearInterval(indexingInterval);
         indexingInterval = setInterval(function() {
           invoke('get_indexing_progress').then(function(p) {
             document.getElementById('indexedCount').textContent = p.processed || 0;
@@ -3525,19 +3546,13 @@
             } else if (p.processed > 0) {
               document.getElementById('indexingEta').textContent = 'Processing...';
             }
-            // Check if indexing is complete (stage === 'Complete' or no activity)
-            if (p.stage === 'Complete') {
+            // Stop if complete or no activity
+            if (p.stage === 'Complete' || (p.total === 0 && p.processed === 0 && ++indexingZeroCount >= 3)) {
               stopIndexingProgress();
-            } else if (p.total === 0 && p.processed === 0) {
-              indexingZeroCount++;
-              // Auto-hide after 5 seconds of 0/0 (10 * 500ms)
-              if (indexingZeroCount >= 10) {
-                stopIndexingProgress();
-              }
-            } else {
+            } else if (p.total > 0) {
               indexingZeroCount = 0;
             }
-          }).catch(function(e) { console.error('Progress:', e); stopIndexingProgress(); });
+          }).catch(function(e) { stopIndexingProgress(); });
         }, 500);
       }
       function stopIndexingProgress() {
