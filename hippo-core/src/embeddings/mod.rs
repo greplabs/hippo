@@ -9,10 +9,13 @@ use crate::error::{HippoError, Result};
 use crate::models::*;
 use crate::ollama::{OllamaClient, OllamaConfig};
 use crate::HippoConfig;
+use parking_lot::RwLock;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
 /// Embedding dimension for different model types
@@ -20,13 +23,98 @@ pub const TEXT_EMBEDDING_DIM: usize = 1536; // OpenAI ada-002 compatible
 pub const IMAGE_EMBEDDING_DIM: usize = 512; // CLIP compatible
 pub const CODE_EMBEDDING_DIM: usize = 768; // CodeBERT compatible
 
+/// Cache configuration
+const EMBEDDING_CACHE_SIZE: usize = 5000;
+const EMBEDDING_CACHE_TTL_SECS: u64 = 3600; // 1 hour TTL
+
+/// Cached embedding with timestamp
+#[derive(Clone)]
+struct CachedEmbedding {
+    embedding: Vec<f32>,
+    created_at: Instant,
+}
+
+impl CachedEmbedding {
+    fn new(embedding: Vec<f32>) -> Self {
+        Self {
+            embedding,
+            created_at: Instant::now(),
+        }
+    }
+
+    fn is_expired(&self) -> bool {
+        self.created_at.elapsed() > Duration::from_secs(EMBEDDING_CACHE_TTL_SECS)
+    }
+}
+
+/// Thread-safe embedding cache with LRU eviction
+struct EmbeddingCache {
+    entries: HashMap<String, CachedEmbedding>,
+    access_order: Vec<String>, // For LRU tracking
+    max_size: usize,
+    hits: u64,
+    misses: u64,
+}
+
+impl EmbeddingCache {
+    fn new(max_size: usize) -> Self {
+        Self {
+            entries: HashMap::with_capacity(max_size),
+            access_order: Vec::with_capacity(max_size),
+            max_size,
+            hits: 0,
+            misses: 0,
+        }
+    }
+
+    fn get(&mut self, key: &str) -> Option<Vec<f32>> {
+        if let Some(cached) = self.entries.get(key) {
+            if !cached.is_expired() {
+                self.hits += 1;
+                // Move to end for LRU
+                if let Some(pos) = self.access_order.iter().position(|k| k == key) {
+                    let k = self.access_order.remove(pos);
+                    self.access_order.push(k);
+                }
+                return Some(cached.embedding.clone());
+            } else {
+                // Remove expired entry
+                self.entries.remove(key);
+                self.access_order.retain(|k| k != key);
+            }
+        }
+        self.misses += 1;
+        None
+    }
+
+    fn insert(&mut self, key: String, embedding: Vec<f32>) {
+        // Evict if at capacity
+        while self.entries.len() >= self.max_size && !self.access_order.is_empty() {
+            let oldest = self.access_order.remove(0);
+            self.entries.remove(&oldest);
+        }
+
+        self.entries.insert(key.clone(), CachedEmbedding::new(embedding));
+        self.access_order.push(key);
+    }
+
+    fn stats(&self) -> (u64, u64, usize) {
+        (self.hits, self.misses, self.entries.len())
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.access_order.clear();
+    }
+}
+
 /// Main embedder that handles all embedding generation
 pub struct Embedder {
     config: EmbedderConfig,
     client: Client,
     ollama: Option<OllamaClient>,
-    #[allow(dead_code)] // Reserved for future embedding cache
-    cache: HashMap<String, Vec<f32>>,
+    /// Query embedding cache for faster repeated searches
+    cache: Arc<RwLock<EmbeddingCache>>,
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +166,7 @@ impl Embedder {
             },
             client: Client::new(),
             ollama,
-            cache: HashMap::new(),
+            cache: Arc::new(RwLock::new(EmbeddingCache::new(EMBEDDING_CACHE_SIZE))),
         })
     }
 
@@ -97,7 +185,7 @@ impl Embedder {
             },
             client: Client::new(),
             ollama: Some(OllamaClient::with_config(ollama_config)),
-            cache: HashMap::new(),
+            cache: Arc::new(RwLock::new(EmbeddingCache::new(EMBEDDING_CACHE_SIZE))),
         }
     }
 
@@ -112,7 +200,7 @@ impl Embedder {
             },
             client: Client::new(),
             ollama: None,
-            cache: HashMap::new(),
+            cache: Arc::new(RwLock::new(EmbeddingCache::new(EMBEDDING_CACHE_SIZE))),
         }
     }
 
@@ -246,8 +334,32 @@ impl Embedder {
         Ok(self.hash_embed(&text, TEXT_EMBEDDING_DIM))
     }
 
-    /// Embed a search query
+    /// Embed a search query (with caching for repeated queries)
     pub async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
+        // Check cache first
+        let cache_key = format!("query:{}", query);
+        {
+            let mut cache = self.cache.write();
+            if let Some(cached) = cache.get(&cache_key) {
+                debug!("Embedding cache hit for query: {}", query);
+                return Ok(cached);
+            }
+        }
+
+        // Generate embedding
+        let embedding = self.embed_query_uncached(query).await?;
+
+        // Cache the result
+        {
+            let mut cache = self.cache.write();
+            cache.insert(cache_key, embedding.clone());
+        }
+
+        Ok(embedding)
+    }
+
+    /// Embed a search query without caching (internal use)
+    async fn embed_query_uncached(&self, query: &str) -> Result<Vec<f32>> {
         // Use Ollama if available
         if let Some(ollama) = &self.ollama {
             if matches!(self.config.api_provider, EmbeddingProvider::Ollama) {
@@ -269,6 +381,17 @@ impl Embedder {
 
         // Fallback to hash-based embedding
         Ok(self.hash_embed(query, TEXT_EMBEDDING_DIM))
+    }
+
+    /// Get embedding cache statistics (hits, misses, size)
+    pub fn cache_stats(&self) -> (u64, u64, usize) {
+        self.cache.read().stats()
+    }
+
+    /// Clear the embedding cache
+    pub fn clear_cache(&self) {
+        self.cache.write().clear();
+        debug!("Embedding cache cleared");
     }
 
     /// Embed multiple texts using Ollama
