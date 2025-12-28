@@ -1574,12 +1574,27 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 28, 2025 - Session 11)
+### Latest Checkpoint (December 28, 2025 - Session 12)
 
-**Commit**: `67369a2` on `main` branch - All PRs merged through #74
+**Commit**: `ea8ebe9` on `main` branch - All PRs merged through #75
 
-**Release**: v1.0.0 GA + AI Enhancements
-- GitHub Release: https://github.com/greplabs/hippo/releases/tag/v1.0.0
+**Release**: v1.1.0 - AI Performance Update
+- Ultra-fast auto-tagging with qwen2:0.5b (352MB, ~1.2s average)
+- UI tag suggestions now use fast_generate() for instant response
+- AI tagging benchmark for model comparison
+
+**Session 12 Completed Features**:
+- ✅ Updated ai_suggest_tags command to use fast_generate() (10x faster)
+- ✅ Created AI tagging benchmark (`hippo-core/benches/ai_tagging_benchmark.rs`)
+- ✅ Verified model performance with actual benchmarks
+- ✅ Version bump to v1.1.0
+
+**Benchmark Results** (December 28, 2025):
+| Model | Avg (ms) | Min (ms) | Max (ms) | Size |
+|-------|----------|----------|----------|------|
+| qwen2:0.5b | 1199 | 341 | 3125 | 352MB |
+| llama3.2:1b | 1697 | 447 | 4483 | 1.3GB |
+| gemma2:2b | 2480 | 679 | 5923 | 1.6GB |
 
 **Session 11 Completed Features** (PR #74):
 - ✅ Ultra-fast auto-tagging with qwen2:0.5b (352MB, ~1.2s response)
@@ -1587,13 +1602,6 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 - ✅ fast_generate() method for instant tag suggestions
 - ✅ Real-time file tagging via watcher integration (auto_tag_single)
 - ✅ auto_tag_batch uses fast model for 5-10x faster batch tagging
-
-**Performance Comparison**:
-| Model | Response Time | Size |
-|-------|--------------|------|
-| qwen2:0.5b | ~1.2s | 352MB |
-| gemma2:2b | ~3-5s | 1.6GB |
-| llama3.2:1b | ~2-3s | 1.3GB |
 
 **Session 10 Changes (December 27-28, 2025)**:
 - ✅ Fixed critical memory leaks in background tasks (PR #72)

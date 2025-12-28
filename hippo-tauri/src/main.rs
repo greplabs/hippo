@@ -1250,20 +1250,29 @@ async fn ai_suggest_tags(
 
     let existing_tags: Vec<String> = memory.tags.iter().map(|t| t.name.clone()).collect();
 
+    // Use fast_generate for quick tag suggestions (~1-2s vs 3-5s)
+    // Include file_info for better context-aware suggestions
     let prompt = format!(
-        "Suggest 3-5 relevant tags for this file. Only output the tags as a comma-separated list, nothing else.\n\n\
-        Filename: {}\nFile info: {}\nExisting tags: {}\n\nSuggested tags:",
-        filename, file_info, existing_tags.join(", ")
+        "Analyze this {} and suggest 5 single-word tags for categorization.\n\
+        File: '{}'\nInfo: {}\n\
+        Return only comma-separated lowercase tags, no explanations:",
+        match &memory.kind {
+            hippo_core::MemoryKind::Image { .. } => "image",
+            hippo_core::MemoryKind::Video { .. } => "video",
+            hippo_core::MemoryKind::Audio { .. } => "audio",
+            hippo_core::MemoryKind::Code { .. } => "code",
+            hippo_core::MemoryKind::Document { .. } => "document",
+            _ => "file",
+        },
+        filename,
+        file_info
     );
 
     let response = ai_client
         .ollama()
-        .generate(
-            &prompt,
-            Some("You are a file tagging assistant. Suggest concise, relevant tags."),
-        )
+        .fast_generate(&prompt)
         .await
-        .map_err(|e| format!("Generation failed: {}", e))?;
+        .map_err(|e| format!("Fast generation failed: {}", e))?;
 
     // Parse tags from response
     let suggested: Vec<String> = response
