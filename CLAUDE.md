@@ -1574,7 +1574,31 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 28, 2025 - v1.0.0 GA Release)
+### Latest Checkpoint (December 28, 2025 - Session 11)
+
+**Commit**: `4851a21` on `main` branch - All PRs merged through #73
+
+**Release**: v1.0.0 GA + Memory Leak Fixes
+- GitHub Release: https://github.com/greplabs/hippo/releases/tag/v1.0.0
+
+**Session 11 Focus**: AI & Auto-Organization Polish
+- 🔄 Ultra-fast auto-tagging with qwen2:0.5b (352MB, instant responses)
+- 🔄 Real-time file tagging via watcher integration
+- 🔄 Smart organization suggestions in UI
+- 🔄 AI insights panel for file recommendations
+
+**Session 10 Changes (December 27-28, 2025)**:
+- ✅ Fixed critical memory leaks in background tasks (PR #72)
+- ✅ Phase 2 memory optimizations - cache limits and channel efficiency (PR #73)
+- ✅ JoinHandle tracking for Indexer and FileWatcher
+- ✅ VecDeque for O(1) cache eviction
+- ✅ 50MB memory-based cache limit for embeddings
+- ✅ TTL cleanup for debounced events (5 min max)
+- ✅ Watch channel for progress updates (no buffer accumulation)
+
+---
+
+### Previous Checkpoint (December 27, 2025 - v1.0.0 GA Release)
 
 **Commit**: `b52f623` on `main` branch - All PRs merged through #70
 

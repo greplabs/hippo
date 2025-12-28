@@ -960,6 +960,7 @@ impl UnifiedAiClient {
             base_url: config.ollama_url.clone(),
             embedding_model: config.ollama_embedding_model.clone(),
             generation_model: config.ollama_generation_model.clone(),
+            tagging_model: crate::ollama::DEFAULT_TAGGING_MODEL.to_string(),
             timeout_secs: 120,
         };
         let ollama = OllamaClient::with_config(ollama_config);
@@ -1022,6 +1023,7 @@ impl UnifiedAiClient {
             base_url: self.config.ollama_url.clone(),
             embedding_model: self.config.ollama_embedding_model.clone(),
             generation_model: self.config.ollama_generation_model.clone(),
+            tagging_model: crate::ollama::DEFAULT_TAGGING_MODEL.to_string(),
             timeout_secs: 120,
         };
         self.ollama = OllamaClient::with_config(ollama_config);

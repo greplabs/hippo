@@ -487,8 +487,64 @@ impl Indexer {
             }
         }
 
+        // Auto-tag single file using fast model if enabled
+        if self.config.auto_tag_enabled {
+            Self::auto_tag_single(&memory, &self.storage).await;
+        }
+
         info!("Indexed single file: {:?}", path);
         Ok(())
+    }
+
+    /// Auto-tag a single memory using the ultra-fast tagging model
+    async fn auto_tag_single(memory: &Memory, storage: &Storage) {
+        use crate::ollama::OllamaClient;
+
+        let ollama_client = OllamaClient::new();
+
+        // Quick availability check
+        if !ollama_client.is_available().await {
+            return;
+        }
+
+        let filename = memory
+            .path
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        // Use fast_generate for quick tag suggestions based on filename and type
+        let kind_str = match &memory.kind {
+            MemoryKind::Image { .. } => "image",
+            MemoryKind::Video { .. } => "video",
+            MemoryKind::Audio { .. } => "audio",
+            MemoryKind::Code { language, .. } => language.as_str(),
+            MemoryKind::Document { .. } => "document",
+            _ => "file",
+        };
+
+        let prompt = format!(
+            "Suggest 3-5 single-word tags for {} file: '{}'. Tags only, comma-separated, lowercase:",
+            kind_str, filename
+        );
+
+        if let Ok(response) = ollama_client.fast_generate(&prompt).await {
+            let tags: Vec<String> = response
+                .split(',')
+                .map(|s| s.trim().to_lowercase().replace(' ', "-"))
+                .filter(|s| !s.is_empty() && s.len() <= 30 && s.len() > 1)
+                .take(5)
+                .collect();
+
+            for tag_name in tags {
+                let tag = Tag::ai(tag_name.clone(), 75);
+                if let Err(e) = storage.add_tag(memory.id, tag).await {
+                    debug!("Failed to add auto-tag '{}': {}", tag_name, e);
+                }
+            }
+
+            debug!("Auto-tagged file '{}' with fast model", filename);
+        }
     }
 
     /// Background worker that processes index tasks
@@ -920,7 +976,8 @@ impl Indexer {
                             "Based on this image description, suggest 5-8 single-word tags for categorization. Description: '{}'. Return only comma-separated lowercase tags, no explanations.",
                             caption.chars().take(500).collect::<String>()
                         );
-                        if let Ok(response) = ollama_client.generate(&prompt, None).await {
+                        // Use fast_generate for quick tag extraction
+                        if let Ok(response) = ollama_client.fast_generate(&prompt).await {
                             let caption_tags: Vec<String> = response
                                 .split(',')
                                 .map(|s| s.trim().to_lowercase().replace(' ', "-"))
@@ -1016,12 +1073,12 @@ impl Indexer {
                         }
                     }
 
-                    // Use AI for video filename analysis (can't easily analyze video content)
+                    // Use fast AI for video filename analysis (can't easily analyze video content)
                     let prompt = format!(
                         "Suggest 3-5 tags for a video file named '{}'. Return only comma-separated lowercase tags.",
                         filename
                     );
-                    if let Ok(response) = ollama_client.generate(&prompt, None).await {
+                    if let Ok(response) = ollama_client.fast_generate(&prompt).await {
                         let video_tags: Vec<String> = response
                             .split(',')
                             .map(|s| s.trim().to_lowercase().replace(' ', "-"))
@@ -1078,14 +1135,14 @@ impl Indexer {
                     // Add format tag
                     all_tags.push(format!("doc:{:?}", format).to_lowercase());
 
-                    // Analyze document content if available
+                    // Analyze document content if available with fast model
                     if let Some(ref preview) = memory.metadata.text_preview {
                         if preview.len() > 50 {
                             let prompt = format!(
                                 "Suggest 3-5 topic tags for this document excerpt: '{}'. Return only comma-separated lowercase tags.",
                                 preview.chars().take(500).collect::<String>()
                             );
-                            if let Ok(response) = ollama_client.generate(&prompt, None).await {
+                            if let Ok(response) = ollama_client.fast_generate(&prompt).await {
                                 let doc_tags: Vec<String> = response
                                     .split(',')
                                     .map(|s| s.trim().to_lowercase().replace(' ', "-"))
@@ -1111,7 +1168,7 @@ impl Indexer {
                         "Suggest 3-5 tags for this file: {}, type: {}. Return only comma-separated lowercase tags.",
                         filename, kind_name
                     );
-                    if let Ok(response) = ollama_client.generate(&prompt, None).await {
+                    if let Ok(response) = ollama_client.fast_generate(&prompt).await {
                         let fallback_tags: Vec<String> = response
                             .split(',')
                             .map(|s| s.trim().to_lowercase().replace(' ', "-"))
