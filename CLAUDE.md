@@ -1574,11 +1574,13 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress (December 2025)
 
-### Latest Checkpoint (December 27, 2025 - v1.0.0 GA Release)
+### Latest Checkpoint (December 28, 2025 - v1.0.0 GA Release)
 
-**Commit**: `b229f43` on `main` branch - All PRs merged through #69
+**Commit**: `b52f623` on `main` branch - All PRs merged through #70
 
 **Release**: **v1.0.0 GA** - First general availability release!
+- GitHub Release: https://github.com/greplabs/hippo/releases/tag/v1.0.0
+- macOS Build: `Hippo_1.0.0_aarch64.dmg` available for download
 
 **Major Features in v1.0.0**:
 - ✅ Fixed macOS app icon with proper rounded corners (PR #57)
@@ -1591,6 +1593,7 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 - ✅ Fixed memory leaks causing UI blank screen (PR #67)
 - ✅ **Fast indexing mode** - 100x faster indexing by default (PR #68)
 - ✅ Code cleanup - clippy lints (PR #69)
+- ✅ Version bump to v1.0.0 GA (PR #70)
 
 ### Completed Feature Branches
 
@@ -1614,8 +1617,38 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 | `fix/indexing-overlay` | Overlay Field Fix | ✅ Merged | #64 |
 | `fix/indexing-overlay-v2` | Smart Overlay Detection | ✅ Merged | #65 |
 | `fix/memory-leak-ui-blank` | Memory Leak Fix | ✅ Merged | #67 |
+| `feature/fast-indexing` | Fast Indexing Mode | ✅ Merged | #68 |
+| `chore/cleanup-lint` | Clippy Fixes | ✅ Merged | #69 |
+| `release/v1.0.0` | GA Release Version | ✅ Merged | #70 |
 
-### Session 10 Changes
+### Session 10 Changes (December 27-28, 2025)
+
+#### Fast Indexing Mode (PR #68)
+
+**Problem**: Indexing was slow due to Ollama embedding generation for every file (1-2 seconds per file)
+
+**Solution** (`hippo-core/src/indexer/mod.rs`):
+- ✅ Added `generate_ai_embeddings: bool` config field (defaults to `false`)
+- ✅ When false: Skip Ollama embeddings entirely for instant indexing
+- ✅ When true: Full AI-powered embeddings for semantic search
+- ✅ Hash-based embeddings still work for basic similarity
+
+**Performance Impact**:
+- Before: ~1-2 seconds per file (with Ollama)
+- After: ~50-100 files per second (instant mode)
+- 100x faster indexing by default
+
+#### Code Cleanup (PR #69)
+- ✅ Fixed clippy lint: Changed `match` to `if let` for single pattern in tray icon handler
+
+#### GA Release (PR #70)
+- ✅ Bumped version from 0.2.0 to 1.0.0 in:
+  - `Cargo.toml` (workspace)
+  - `hippo-tauri/Cargo.toml`
+  - `hippo-tauri/tauri.conf.json`
+- ✅ Created GitHub release with `Hippo_1.0.0_aarch64.dmg`
+
+### Previous Session - Session 10 Early Changes
 
 #### Search Performance Optimizations (PR #59)
 
