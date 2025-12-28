@@ -1576,18 +1576,28 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ### Latest Checkpoint (December 28, 2025 - Session 12)
 
-**Commit**: `ea8ebe9` on `main` branch - All PRs merged through #75
+**Commit**: `9eca5f3` on `main` branch - All PRs merged through #77
 
-**Release**: v1.1.0 - AI Performance Update
-- Ultra-fast auto-tagging with qwen2:0.5b (352MB, ~1.2s average)
-- UI tag suggestions now use fast_generate() for instant response
-- AI tagging benchmark for model comparison
+**Release**: v1.1.0 - Rich AI Content Analysis
+- GitHub Release: https://github.com/greplabs/hippo/releases/tag/v1.1.0
+- Download: `Hippo_1.1.0_macos_aarch64.zip` or `.dmg`
 
 **Session 12 Completed Features**:
-- ✅ Updated ai_suggest_tags command to use fast_generate() (10x faster)
-- ✅ Created AI tagging benchmark (`hippo-core/benches/ai_tagging_benchmark.rs`)
-- ✅ Verified model performance with actual benchmarks
+- ✅ Rich image analysis using llava vision model for scene/object detection (PR #76)
+- ✅ PDF/document text extraction and content analysis (pdf-extract crate)
+- ✅ Code content analysis with language-specific tags
+- ✅ AI tagging benchmark (`hippo-core/benches/ai_tagging_benchmark.rs`)
+- ✅ Updated ai_suggest_tags to include file content for better suggestions
+- ✅ 10x faster UI tag suggestions with ultra-fast model
+- ✅ Fixed scroll position reset after search (PR #77)
+- ✅ Fixed ollama_analyze/summarize to support both memoryId and filePaths (PR #77)
 - ✅ Version bump to v1.1.0
+
+**New Content Analysis Strategies**:
+- `analyze_image_for_tags()` - Vision model for images with fallback
+- `analyze_document_for_tags()` - Text extraction for PDF/TXT/MD
+- `analyze_code_for_tags()` - Language-specific code analysis
+- `filename_based_tags()` - Fast fallback for other file types
 
 **Benchmark Results** (December 28, 2025):
 | Model | Avg (ms) | Min (ms) | Max (ms) | Size |
