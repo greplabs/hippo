@@ -26,19 +26,25 @@ pub const CODE_EMBEDDING_DIM: usize = 768; // CodeBERT compatible
 /// Cache configuration
 const EMBEDDING_CACHE_SIZE: usize = 5000;
 const EMBEDDING_CACHE_TTL_SECS: u64 = 3600; // 1 hour TTL
+/// Maximum memory for embedding cache (50MB)
+const EMBEDDING_CACHE_MAX_BYTES: usize = 50 * 1024 * 1024;
 
-/// Cached embedding with timestamp
+/// Cached embedding with timestamp and size tracking
 #[derive(Clone)]
 struct CachedEmbedding {
     embedding: Vec<f32>,
     created_at: Instant,
+    /// Size in bytes (embedding.len() * 4 for f32)
+    size_bytes: usize,
 }
 
 impl CachedEmbedding {
     fn new(embedding: Vec<f32>) -> Self {
+        let size_bytes = embedding.len() * std::mem::size_of::<f32>();
         Self {
             embedding,
             created_at: Instant::now(),
+            size_bytes,
         }
     }
 
@@ -47,22 +53,26 @@ impl CachedEmbedding {
     }
 }
 
-/// Thread-safe embedding cache with LRU eviction
+/// Thread-safe embedding cache with LRU eviction and memory limits
 /// Uses VecDeque for O(1) front removal during eviction
 struct EmbeddingCache {
     entries: HashMap<String, CachedEmbedding>,
     access_order: VecDeque<String>, // For LRU tracking - O(1) pop_front
-    max_size: usize,
+    max_entries: usize,
+    max_bytes: usize,
+    current_bytes: usize,
     hits: u64,
     misses: u64,
 }
 
 impl EmbeddingCache {
-    fn new(max_size: usize) -> Self {
+    fn new(max_entries: usize) -> Self {
         Self {
-            entries: HashMap::with_capacity(max_size),
-            access_order: VecDeque::with_capacity(max_size),
-            max_size,
+            entries: HashMap::with_capacity(max_entries.min(1000)), // Don't pre-allocate too much
+            access_order: VecDeque::with_capacity(max_entries.min(1000)),
+            max_entries,
+            max_bytes: EMBEDDING_CACHE_MAX_BYTES,
+            current_bytes: 0,
             hits: 0,
             misses: 0,
         }
@@ -79,8 +89,10 @@ impl EmbeddingCache {
                 }
                 return Some(cached.embedding.clone());
             } else {
-                // Remove expired entry
-                self.entries.remove(key);
+                // Remove expired entry and update byte count
+                if let Some(removed) = self.entries.remove(key) {
+                    self.current_bytes = self.current_bytes.saturating_sub(removed.size_bytes);
+                }
                 self.access_order.retain(|k| k != key);
             }
         }
@@ -89,14 +101,22 @@ impl EmbeddingCache {
     }
 
     fn insert(&mut self, key: String, embedding: Vec<f32>) {
-        // Evict if at capacity - O(1) with VecDeque::pop_front
-        while self.entries.len() >= self.max_size && !self.access_order.is_empty() {
+        let new_size = embedding.len() * std::mem::size_of::<f32>();
+
+        // Evict if at entry capacity or memory limit - O(1) with VecDeque::pop_front
+        while (self.entries.len() >= self.max_entries || self.current_bytes + new_size > self.max_bytes)
+            && !self.access_order.is_empty()
+        {
             if let Some(oldest) = self.access_order.pop_front() {
-                self.entries.remove(&oldest);
+                if let Some(removed) = self.entries.remove(&oldest) {
+                    self.current_bytes = self.current_bytes.saturating_sub(removed.size_bytes);
+                }
             }
         }
 
-        self.entries.insert(key.clone(), CachedEmbedding::new(embedding));
+        let cached = CachedEmbedding::new(embedding);
+        self.current_bytes += cached.size_bytes;
+        self.entries.insert(key.clone(), cached);
         self.access_order.push_back(key);
     }
 
@@ -104,9 +124,16 @@ impl EmbeddingCache {
         (self.hits, self.misses, self.entries.len())
     }
 
+    /// Get memory usage in bytes
+    #[allow(dead_code)] // Reserved for future memory monitoring
+    fn memory_bytes(&self) -> usize {
+        self.current_bytes
+    }
+
     fn clear(&mut self) {
         self.entries.clear();
         self.access_order.clear();
+        self.current_bytes = 0;
     }
 }
 

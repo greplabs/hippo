@@ -79,12 +79,22 @@ pub struct WatchStats {
     pub is_paused: bool,
 }
 
+/// Maximum TTL for pending events (5 minutes) - prevents memory accumulation
+const EVENT_MAX_TTL_SECS: u64 = 300;
+/// Maximum pending events before forced cleanup
+const EVENT_MAX_PENDING: usize = 10000;
+
 /// Debounced event tracker to prevent rapid-fire updates
+/// Includes TTL cleanup to prevent memory accumulation
 struct DebouncedEvents {
     /// Pending events with their last update time
     pending: HashMap<PathBuf, (WatchEvent, Instant)>,
     /// Debounce duration
     debounce_duration: Duration,
+    /// Maximum TTL for any pending event
+    max_ttl: Duration,
+    /// Last cleanup time
+    last_cleanup: Instant,
 }
 
 impl DebouncedEvents {
@@ -92,12 +102,19 @@ impl DebouncedEvents {
         Self {
             pending: HashMap::new(),
             debounce_duration,
+            max_ttl: Duration::from_secs(EVENT_MAX_TTL_SECS),
+            last_cleanup: Instant::now(),
         }
     }
 
     /// Add an event to the debounced queue
     #[allow(dead_code)]
     fn add(&mut self, event: WatchEvent) {
+        // Periodic cleanup every 60 seconds or when queue is too large
+        if self.last_cleanup.elapsed() > Duration::from_secs(60) || self.pending.len() > EVENT_MAX_PENDING {
+            self.cleanup_stale();
+        }
+
         let path = match &event {
             WatchEvent::Created { path, .. } => path.clone(),
             WatchEvent::Modified { path, .. } => path.clone(),
@@ -129,9 +146,28 @@ impl DebouncedEvents {
         ready
     }
 
+    /// Remove events older than max_ttl to prevent memory accumulation
+    fn cleanup_stale(&mut self) {
+        let now = Instant::now();
+        let max_ttl = self.max_ttl;
+
+        self.pending.retain(|_, (_, timestamp)| {
+            now.duration_since(*timestamp) < max_ttl
+        });
+
+        self.last_cleanup = now;
+        debug!("Cleaned up stale events, {} pending remain", self.pending.len());
+    }
+
     /// Check if there are pending events
     fn has_pending(&self) -> bool {
         !self.pending.is_empty()
+    }
+
+    /// Get the number of pending events
+    #[allow(dead_code)]
+    fn pending_count(&self) -> usize {
+        self.pending.len()
     }
 }
 

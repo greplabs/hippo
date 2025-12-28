@@ -25,7 +25,7 @@ use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, watch, RwLock};
 use tracing::{debug, info, instrument, warn};
 use walkdir::WalkDir;
 
@@ -161,7 +161,8 @@ pub struct Indexer {
     config: IndexerConfig,
     task_tx: mpsc::Sender<IndexTask>,
     state: Arc<IndexingState>,
-    progress_tx: tokio::sync::broadcast::Sender<IndexingProgress>,
+    /// Watch channel for progress updates (only keeps latest value, no buffer accumulation)
+    progress_tx: watch::Sender<IndexingProgress>,
     /// Handle to the background worker task for proper cleanup
     worker_handle: Option<JoinHandle<()>>,
 }
@@ -295,7 +296,8 @@ impl Indexer {
         config: &HippoConfig,
     ) -> Result<Self> {
         let (task_tx, task_rx) = mpsc::channel(1000);
-        let (progress_tx, _) = tokio::sync::broadcast::channel(100);
+        // Use watch channel - only keeps latest value, no buffer accumulation
+        let (progress_tx, _progress_rx) = watch::channel(IndexingProgress::default());
 
         let indexer_config = IndexerConfig {
             parallelism: config.indexing_parallelism,
@@ -350,7 +352,8 @@ impl Indexer {
     }
 
     /// Subscribe to indexing progress updates
-    pub fn subscribe_progress(&self) -> tokio::sync::broadcast::Receiver<IndexingProgress> {
+    /// Returns a watch::Receiver that always has the latest progress value
+    pub fn subscribe_progress(&self) -> watch::Receiver<IndexingProgress> {
         self.progress_tx.subscribe()
     }
 
@@ -495,7 +498,7 @@ impl Indexer {
         embedder: Arc<Embedder>,
         config: IndexerConfig,
         state: Arc<IndexingState>,
-        progress_tx: tokio::sync::broadcast::Sender<IndexingProgress>,
+        progress_tx: watch::Sender<IndexingProgress>,
     ) {
         println!("[Indexer] Background worker started");
         info!("Indexer background worker started");
@@ -555,7 +558,7 @@ impl Indexer {
         embedder: &Embedder,
         config: &IndexerConfig,
         state: &Arc<IndexingState>,
-        progress_tx: &tokio::sync::broadcast::Sender<IndexingProgress>,
+        progress_tx: &watch::Sender<IndexingProgress>,
     ) -> Result<()> {
         println!("[Indexer] Starting index of path: {:?}", path);
         info!("Starting index of path: {:?}", path);
@@ -864,7 +867,7 @@ impl Indexer {
     ) -> Result<()> {
         // Create minimal state for compatibility
         let state = IndexingState::new();
-        let (progress_tx, _) = tokio::sync::broadcast::channel(1);
+        let (progress_tx, _) = watch::channel(IndexingProgress::default());
 
         Self::index_path_with_progress(
             path,
