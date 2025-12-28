@@ -47,6 +47,10 @@ pub const DEFAULT_EMBEDDING_MODEL: &str = "nomic-embed-text";
 /// Default generation model - Gemma2 2B offers best quality/speed ratio (~1.6GB)
 pub const DEFAULT_GENERATION_MODEL: &str = "gemma2:2b";
 
+/// Ultra-fast tagging model - Qwen2 0.5B for instant auto-tagging (~352MB)
+/// Falls back to llama3.2:1b if not available
+pub const DEFAULT_TAGGING_MODEL: &str = "qwen2:0.5b";
+
 /// Recommended models for different use cases
 pub struct RecommendedModels;
 
@@ -128,6 +132,8 @@ pub struct OllamaClient {
     base_url: String,
     embedding_model: String,
     generation_model: String,
+    /// Ultra-fast model for auto-tagging (qwen2:0.5b)
+    tagging_model: String,
     // Performance caches
     model_cache: Arc<RwLock<Option<ModelCache>>>,
     embedding_cache: Arc<RwLock<LruCache<String, EmbeddingCacheEntry>>>,
@@ -140,6 +146,8 @@ pub struct OllamaConfig {
     pub base_url: String,
     pub embedding_model: String,
     pub generation_model: String,
+    /// Ultra-fast model for auto-tagging (qwen2:0.5b by default)
+    pub tagging_model: String,
     pub timeout_secs: u64,
 }
 
@@ -149,6 +157,7 @@ impl Default for OllamaConfig {
             base_url: DEFAULT_OLLAMA_URL.to_string(),
             embedding_model: DEFAULT_EMBEDDING_MODEL.to_string(),
             generation_model: DEFAULT_GENERATION_MODEL.to_string(),
+            tagging_model: DEFAULT_TAGGING_MODEL.to_string(),
             // 3 minute timeout for generation (larger models may take longer)
             timeout_secs: 180,
         }
@@ -344,6 +353,7 @@ impl OllamaClient {
             base_url: config.base_url,
             embedding_model: config.embedding_model,
             generation_model: config.generation_model,
+            tagging_model: config.tagging_model,
             model_cache: Arc::new(RwLock::new(None)),
             embedding_cache: Arc::new(RwLock::new(LruCache::new(
                 NonZeroUsize::new(EMBEDDING_CACHE_SIZE).unwrap(),
@@ -612,6 +622,70 @@ impl OllamaClient {
             .map_err(|e| HippoError::Other(format!("Failed to parse response: {}", e)))?;
 
         Ok(gen_resp.response)
+    }
+
+    /// Ultra-fast text generation using the tagging model (qwen2:0.5b)
+    ///
+    /// Optimized for quick, short responses like tag suggestions.
+    /// Uses smaller model with lower token limits for instant responses.
+    pub async fn fast_generate(&self, prompt: &str) -> Result<String> {
+        let url = format!("{}/api/generate", self.base_url);
+
+        // Check if tagging model is available, fallback to generation model
+        let model = if self.has_model(&self.tagging_model).await {
+            self.tagging_model.clone()
+        } else {
+            debug!(
+                "Tagging model {} not available, falling back to {}",
+                self.tagging_model, self.generation_model
+            );
+            self.generation_model.clone()
+        };
+
+        let request = GenerateRequest {
+            model: model.clone(),
+            prompt: prompt.to_string(),
+            stream: false,
+            system: None,
+            context: None,
+            options: GenerateOptions {
+                temperature: Some(0.5),   // Slightly higher for variety in tags
+                num_predict: Some(100),   // Short responses for tags
+                top_p: Some(0.9),
+            },
+        };
+
+        debug!("Fast generating with model: {}", model);
+
+        let resp = self
+            .client
+            .post(&url)
+            .timeout(Duration::from_secs(30)) // Shorter timeout for fast model
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| HippoError::Other(format!("Fast generate request failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let error = resp.text().await.unwrap_or_default();
+            return Err(HippoError::Other(format!(
+                "Fast generation failed ({}): {}. Make sure '{}' model is installed.",
+                status, error, model
+            )));
+        }
+
+        let gen_resp: GenerateResponse = resp
+            .json()
+            .await
+            .map_err(|e| HippoError::Other(format!("Failed to parse response: {}", e)))?;
+
+        Ok(gen_resp.response)
+    }
+
+    /// Get the current tagging model
+    pub fn tagging_model(&self) -> &str {
+        &self.tagging_model
     }
 
     /// Chat with conversation history
