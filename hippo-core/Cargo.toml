@@ -28,6 +28,7 @@ image = { workspace = true }
 kamadak-exif = { workspace = true }
 symphonia = { workspace = true }
 pdfium-render = { workspace = true }
+pdf-extract = { workspace = true }
 zip = { workspace = true }
 
 # Code parsing
@@ -70,3 +71,7 @@ tar = { workspace = true }
 [dev-dependencies]
 tempfile = "3"
 tokio-test = "0.4"
+
+[[bench]]
+name = "ai_tagging_benchmark"
+harness = false

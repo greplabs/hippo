@@ -496,7 +496,13 @@ impl Indexer {
         Ok(())
     }
 
-    /// Auto-tag a single memory using the ultra-fast tagging model
+    /// Auto-tag a single memory with rich content analysis
+    ///
+    /// Uses different strategies based on file type:
+    /// - Images: Vision model (llava) for scene/object detection
+    /// - Documents/PDFs: Text extraction and content analysis
+    /// - Code: Language-specific analysis
+    /// - Other: Filename-based tagging with fast model
     async fn auto_tag_single(memory: &Memory, storage: &Storage) {
         use crate::ollama::OllamaClient;
 
@@ -513,8 +519,165 @@ impl Indexer {
             .map(|f| f.to_string_lossy().to_string())
             .unwrap_or_default();
 
-        // Use fast_generate for quick tag suggestions based on filename and type
-        let kind_str = match &memory.kind {
+        // Content-aware tagging based on file type
+        let tags = match &memory.kind {
+            MemoryKind::Image { .. } => {
+                Self::analyze_image_for_tags(&ollama_client, &memory.path, &filename).await
+            }
+            MemoryKind::Document { .. } => {
+                Self::analyze_document_for_tags(&ollama_client, &memory.path, &filename).await
+            }
+            MemoryKind::Code { language, .. } => {
+                Self::analyze_code_for_tags(&ollama_client, &memory.path, language, &filename).await
+            }
+            _ => {
+                // Fallback to filename-based tagging for other types
+                Self::filename_based_tags(&ollama_client, &memory.kind, &filename).await
+            }
+        };
+
+        // Add discovered tags to storage
+        for tag_name in tags {
+            let tag = Tag::ai(tag_name.clone(), 80);
+            if let Err(e) = storage.add_tag(memory.id, tag).await {
+                debug!("Failed to add auto-tag '{}': {}", tag_name, e);
+            }
+        }
+
+        debug!("Auto-tagged file '{}' with content analysis", filename);
+    }
+
+    /// Analyze image content using vision model (llava)
+    async fn analyze_image_for_tags(
+        ollama: &crate::ollama::OllamaClient,
+        path: &std::path::Path,
+        filename: &str,
+    ) -> Vec<String> {
+        // Try vision model first for rich content analysis
+        if let Ok(caption) = ollama.caption_image(path).await {
+            // Extract tags from the visual description
+            let prompt = format!(
+                "Based on this image description, suggest 5-8 single-word tags for categorization. \
+                Description: '{}'. Return only comma-separated lowercase tags, no explanations.",
+                caption
+            );
+
+            if let Ok(response) = ollama.fast_generate(&prompt).await {
+                return Self::parse_tags(&response);
+            }
+        }
+
+        // Fallback to filename-based if vision fails
+        let prompt = format!(
+            "Suggest 3-5 single-word tags for image file: '{}'. Tags only, comma-separated, lowercase:",
+            filename
+        );
+        if let Ok(response) = ollama.fast_generate(&prompt).await {
+            return Self::parse_tags(&response);
+        }
+
+        Vec::new()
+    }
+
+    /// Analyze document content (PDF, DOCX, TXT, MD)
+    async fn analyze_document_for_tags(
+        ollama: &crate::ollama::OllamaClient,
+        path: &std::path::Path,
+        filename: &str,
+    ) -> Vec<String> {
+        // Try to extract text content from the document
+        let content = Self::extract_document_text(path).await;
+
+        if let Some(text) = content {
+            // Use first 2000 chars for analysis
+            let preview = if text.len() > 2000 {
+                &text[..2000]
+            } else {
+                &text
+            };
+
+            let prompt = format!(
+                "Analyze this document excerpt and suggest 5-8 single-word tags for categorization. \
+                Document: '{}'\nContent:\n{}\n\nReturn only comma-separated lowercase tags:",
+                filename, preview
+            );
+
+            if let Ok(response) = ollama.fast_generate(&prompt).await {
+                return Self::parse_tags(&response);
+            }
+        }
+
+        // Fallback to filename-based
+        let prompt = format!(
+            "Suggest 3-5 single-word tags for document: '{}'. Tags only, comma-separated, lowercase:",
+            filename
+        );
+        if let Ok(response) = ollama.fast_generate(&prompt).await {
+            return Self::parse_tags(&response);
+        }
+
+        Vec::new()
+    }
+
+    /// Extract text from documents (PDF, TXT, MD)
+    async fn extract_document_text(path: &std::path::Path) -> Option<String> {
+        let ext = path.extension()?.to_string_lossy().to_lowercase();
+
+        match ext.as_str() {
+            "txt" | "md" | "markdown" | "rst" => {
+                std::fs::read_to_string(path).ok()
+            }
+            "pdf" => {
+                // Try pdf-extract crate
+                pdf_extract::extract_text(path).ok()
+            }
+            _ => None,
+        }
+    }
+
+    /// Analyze code content for language-specific tags
+    async fn analyze_code_for_tags(
+        ollama: &crate::ollama::OllamaClient,
+        path: &std::path::Path,
+        language: &str,
+        filename: &str,
+    ) -> Vec<String> {
+        // Read first 3000 chars of code for analysis
+        if let Ok(content) = std::fs::read_to_string(path) {
+            let preview = if content.len() > 3000 {
+                &content[..3000]
+            } else {
+                &content
+            };
+
+            let prompt = format!(
+                "Analyze this {} code and suggest 5-8 single-word tags for categorization. \
+                Include relevant frameworks, patterns, and functionality. \
+                File: '{}'\nCode:\n{}\n\nReturn only comma-separated lowercase tags:",
+                language, filename, preview
+            );
+
+            if let Ok(response) = ollama.fast_generate(&prompt).await {
+                let mut tags = Self::parse_tags(&response);
+                // Always add language tag
+                if !tags.contains(&language.to_lowercase()) {
+                    tags.push(language.to_lowercase());
+                }
+                return tags;
+            }
+        }
+
+        // Fallback
+        vec![language.to_lowercase()]
+    }
+
+    /// Fallback: filename-based tagging for unsupported file types
+    async fn filename_based_tags(
+        ollama: &crate::ollama::OllamaClient,
+        kind: &MemoryKind,
+        filename: &str,
+    ) -> Vec<String> {
+        let kind_str = match kind {
             MemoryKind::Image { .. } => "image",
             MemoryKind::Video { .. } => "video",
             MemoryKind::Audio { .. } => "audio",
@@ -528,23 +691,28 @@ impl Indexer {
             kind_str, filename
         );
 
-        if let Ok(response) = ollama_client.fast_generate(&prompt).await {
-            let tags: Vec<String> = response
-                .split(',')
-                .map(|s| s.trim().to_lowercase().replace(' ', "-"))
-                .filter(|s| !s.is_empty() && s.len() <= 30 && s.len() > 1)
-                .take(5)
-                .collect();
-
-            for tag_name in tags {
-                let tag = Tag::ai(tag_name.clone(), 75);
-                if let Err(e) = storage.add_tag(memory.id, tag).await {
-                    debug!("Failed to add auto-tag '{}': {}", tag_name, e);
-                }
-            }
-
-            debug!("Auto-tagged file '{}' with fast model", filename);
+        if let Ok(response) = ollama.fast_generate(&prompt).await {
+            return Self::parse_tags(&response);
         }
+
+        Vec::new()
+    }
+
+    /// Parse comma-separated tags from AI response
+    fn parse_tags(response: &str) -> Vec<String> {
+        response
+            .split(',')
+            .map(|s| {
+                s.trim()
+                    .to_lowercase()
+                    .replace(' ', "-")
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || *c == '-')
+                    .collect::<String>()
+            })
+            .filter(|s| !s.is_empty() && s.len() <= 30 && s.len() > 1)
+            .take(8)
+            .collect()
     }
 
     /// Background worker that processes index tasks
