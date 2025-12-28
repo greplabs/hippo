@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_EMBEDDING_MODEL","DEFAULT_GENERATION_MODEL","DEFAULT_OLLAMA_URL","DEFAULT_TAGGING_MODEL","NOMIC_EMBED_DIM"],"struct":["ChatMessage","LocalAnalysis","ModelDetails","OllamaClient","OllamaConfig","OllamaModel","PullProgress","RagContext","RagDocument","RecommendedModels","StreamChunk"]};

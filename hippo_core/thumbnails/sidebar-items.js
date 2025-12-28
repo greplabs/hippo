@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_CACHE_CAPACITY","MAX_CACHE_MEMORY_BYTES","THUMBNAIL_JPEG_QUALITY","THUMBNAIL_SIZE"],"fn":["is_ffmpeg_available","is_supported_image","is_supported_office_document","is_supported_pdf","is_supported_video"],"struct":["MemoryCacheStats","ThumbnailManager","ThumbnailStats"]};

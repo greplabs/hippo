@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["compute_file_hash","compute_quick_hash","find_duplicates","find_duplicates_by_scanning","find_similar_by_embedding","format_bytes"],"struct":["DuplicateGroup","DuplicateSummary","SimilarGroup","SimilarSummary"]};
