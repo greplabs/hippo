@@ -20,6 +20,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc,
 };
+use tokio::task::JoinHandle;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
@@ -93,6 +94,8 @@ struct PrioritizedFile {
 struct IndexingState {
     progress: RwLock<IndexingProgress>,
     is_paused: AtomicBool,
+    /// Flag to signal shutdown to background tasks
+    shutdown: AtomicBool,
     priority_queue: RwLock<VecDeque<PrioritizedFile>>,
     start_time: RwLock<Option<std::time::Instant>>,
     files_processed_count: AtomicUsize,
@@ -103,10 +106,22 @@ impl IndexingState {
         Arc::new(Self {
             progress: RwLock::new(IndexingProgress::new()),
             is_paused: AtomicBool::new(false),
+            shutdown: AtomicBool::new(false),
             priority_queue: RwLock::new(VecDeque::new()),
             start_time: RwLock::new(None),
             files_processed_count: AtomicUsize::new(0),
         })
+    }
+
+    /// Signal shutdown to background tasks
+    fn signal_shutdown(&self) {
+        self.shutdown.store(true, Ordering::SeqCst);
+    }
+
+    /// Check if shutdown was signaled
+    #[allow(dead_code)] // Reserved for future use in background worker
+    fn is_shutdown(&self) -> bool {
+        self.shutdown.load(Ordering::SeqCst)
     }
 
     async fn update_progress(&self, update_fn: impl FnOnce(&mut IndexingProgress)) {
@@ -147,6 +162,8 @@ pub struct Indexer {
     task_tx: mpsc::Sender<IndexTask>,
     state: Arc<IndexingState>,
     progress_tx: tokio::sync::broadcast::Sender<IndexingProgress>,
+    /// Handle to the background worker task for proper cleanup
+    worker_handle: Option<JoinHandle<()>>,
 }
 
 #[derive(Debug, Clone)]
@@ -288,14 +305,14 @@ impl Indexer {
 
         let state = IndexingState::new();
 
-        // Spawn background worker
+        // Spawn background worker and store handle for cleanup
         let storage_clone = storage.clone();
         let embedder_clone = embedder.clone();
         let config_clone = indexer_config.clone();
         let state_clone = state.clone();
         let progress_tx_clone = progress_tx.clone();
 
-        tokio::spawn(async move {
+        let worker_handle = tokio::spawn(async move {
             Self::background_worker(
                 task_rx,
                 storage_clone,
@@ -314,7 +331,16 @@ impl Indexer {
             task_tx,
             state,
             progress_tx,
+            worker_handle: Some(worker_handle),
         })
+    }
+
+    /// Gracefully shutdown the indexer
+    pub async fn shutdown(&self) {
+        info!("Shutting down indexer...");
+        self.state.signal_shutdown();
+        // Send shutdown task to break the worker loop
+        let _ = self.task_tx.send(IndexTask::Shutdown).await;
     }
 
     /// Get current indexing progress
@@ -1374,6 +1400,21 @@ impl MemoryKindExt for Memory {
             MemoryKind::Folder => "folder",
             MemoryKind::Unknown => "unknown",
         }
+    }
+}
+
+impl Drop for Indexer {
+    fn drop(&mut self) {
+        // Signal shutdown to background worker
+        self.state.signal_shutdown();
+
+        // Abort the worker task if it's still running
+        if let Some(handle) = self.worker_handle.take() {
+            handle.abort();
+            debug!("Indexer worker task aborted");
+        }
+
+        debug!("Indexer dropped, resources cleaned up");
     }
 }
 

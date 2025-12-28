@@ -218,6 +218,8 @@ pub struct FileWatcher {
     storage: Arc<Storage>,
     indexer: Option<Arc<Indexer>>,
     watcher: Option<RecommendedWatcher>,
+    /// Handle to the background event processing task for cleanup
+    event_task_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl FileWatcher {
@@ -237,6 +239,7 @@ impl FileWatcher {
             storage,
             indexer: None,
             watcher: None,
+            event_task_handle: None,
         })
     }
 
@@ -308,10 +311,11 @@ impl FileWatcher {
         let storage = self.storage.clone();
         let indexer = self.indexer.clone();
 
-        // Spawn background task to process notify events
-        tokio::spawn(async move {
+        // Spawn background task to process notify events and store handle for cleanup
+        let handle = tokio::spawn(async move {
             Self::process_notify_events(rx, state, storage, indexer).await;
         });
+        self.event_task_handle = Some(handle);
 
         info!("Notify watcher initialized");
         Ok(())
@@ -716,7 +720,14 @@ impl Drop for FileWatcher {
     fn drop(&mut self) {
         // Signal shutdown to background tasks
         self.state.signal_shutdown();
-        debug!("FileWatcher dropped, shutdown signaled");
+
+        // Abort the event processing task if it's still running
+        if let Some(handle) = self.event_task_handle.take() {
+            handle.abort();
+            debug!("FileWatcher event task aborted");
+        }
+
+        debug!("FileWatcher dropped, resources cleaned up");
     }
 }
 
