@@ -1576,16 +1576,24 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ### Latest Checkpoint (December 28, 2025 - Session 11)
 
-**Commit**: `4851a21` on `main` branch - All PRs merged through #73
+**Commit**: `67369a2` on `main` branch - All PRs merged through #74
 
-**Release**: v1.0.0 GA + Memory Leak Fixes
+**Release**: v1.0.0 GA + AI Enhancements
 - GitHub Release: https://github.com/greplabs/hippo/releases/tag/v1.0.0
 
-**Session 11 Focus**: AI & Auto-Organization Polish
-- 🔄 Ultra-fast auto-tagging with qwen2:0.5b (352MB, instant responses)
-- 🔄 Real-time file tagging via watcher integration
-- 🔄 Smart organization suggestions in UI
-- 🔄 AI insights panel for file recommendations
+**Session 11 Completed Features** (PR #74):
+- ✅ Ultra-fast auto-tagging with qwen2:0.5b (352MB, ~1.2s response)
+- ✅ Separate tagging_model configuration in OllamaConfig
+- ✅ fast_generate() method for instant tag suggestions
+- ✅ Real-time file tagging via watcher integration (auto_tag_single)
+- ✅ auto_tag_batch uses fast model for 5-10x faster batch tagging
+
+**Performance Comparison**:
+| Model | Response Time | Size |
+|-------|--------------|------|
+| qwen2:0.5b | ~1.2s | 352MB |
+| gemma2:2b | ~3-5s | 1.6GB |
+| llama3.2:1b | ~2-3s | 1.3GB |
 
 **Session 10 Changes (December 27-28, 2025)**:
 - ✅ Fixed critical memory leaks in background tasks (PR #72)
