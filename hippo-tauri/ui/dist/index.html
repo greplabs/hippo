@@ -4012,6 +4012,16 @@
 
           document.getElementById('filesContainer').innerHTML = html;
           bindCardEvents();
+
+          // Reset scroll position after rendering results
+          var contentArea = document.getElementById('contentArea');
+          if (contentArea) {
+            contentArea.scrollTop = 0;
+          }
+          var filesContainer = document.getElementById('filesContainer');
+          if (filesContainer) {
+            filesContainer.scrollTop = 0;
+          }
         }
 
         function renderCard(mem, idx) {

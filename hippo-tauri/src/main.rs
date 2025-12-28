@@ -859,19 +859,12 @@ async fn ollama_pull_model(name: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn ollama_analyze(
-    memory_id: String,
+    memory_id: Option<String>,
+    file_paths: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Ollama analyzing file: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-
-    let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
-    let memory = hippo
-        .get_memory(id)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or("Memory not found")?;
 
     // Use unified AI client with Ollama
     let ai_client = UnifiedAiClient::with_ollama(None);
@@ -880,51 +873,78 @@ async fn ollama_analyze(
         return Err("Ollama is not running. Please start Ollama first.".to_string());
     }
 
-    let analysis = ai_client
-        .analyze_file(&memory)
-        .await
-        .map_err(|e| format!("Analysis failed: {}", e))?;
+    // Handle single memory ID
+    if let Some(mid) = memory_id {
+        println!("[Hippo] Ollama analyzing memory: {}", mid);
+        let id: MemoryId = mid.parse().map_err(|_| "Invalid memory ID")?;
+        let memory = hippo
+            .get_memory(id)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("Memory not found")?;
 
-    // Add AI tags to the memory
-    for tag_suggestion in &analysis.tags {
-        if tag_suggestion.confidence >= 70 {
-            let tag = tag_suggestion.to_tag();
-            let _ = hippo.add_tag(id, tag).await;
+        let analysis = ai_client
+            .analyze_file(&memory)
+            .await
+            .map_err(|e| format!("Analysis failed: {}", e))?;
+
+        // Add AI tags to the memory
+        for tag_suggestion in &analysis.tags {
+            if tag_suggestion.confidence >= 70 {
+                let tag = tag_suggestion.to_tag();
+                let _ = hippo.add_tag(id, tag).await;
+            }
         }
+
+        println!(
+            "[Hippo] Ollama analysis complete, found {} tags",
+            analysis.tags.len()
+        );
+        return serde_json::to_value(analysis).map_err(|e| e.to_string());
     }
 
-    println!(
-        "[Hippo] Ollama analysis complete, found {} tags",
-        analysis.tags.len()
-    );
-    serde_json::to_value(analysis).map_err(|e| e.to_string())
+    // Handle multiple file paths
+    if let Some(paths) = file_paths {
+        println!("[Hippo] Ollama analyzing {} files", paths.len());
+        let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+
+        let mut results = Vec::new();
+        for path in &paths {
+            if let Some(memory) = memories.iter().find(|m| m.path.to_string_lossy() == *path) {
+                match ai_client.analyze_file(memory).await {
+                    Ok(analysis) => {
+                        results.push(serde_json::json!({
+                            "file": memory.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                            "analysis": analysis
+                        }));
+                    }
+                    Err(e) => {
+                        results.push(serde_json::json!({
+                            "file": path,
+                            "error": e.to_string()
+                        }));
+                    }
+                }
+            }
+        }
+
+        return Ok(serde_json::json!({
+            "files_analyzed": results.len(),
+            "results": results
+        }));
+    }
+
+    Err("Either memoryId or filePaths must be provided".to_string())
 }
 
 #[tauri::command]
 async fn ollama_summarize(
-    memory_id: String,
+    memory_id: Option<String>,
+    file_paths: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Ollama summarizing: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-
-    let id: MemoryId = memory_id.parse().map_err(|_| "Invalid memory ID")?;
-    let memory = hippo
-        .get_memory(id)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or("Memory not found")?;
-
-    // Read file content
-    let content =
-        std::fs::read_to_string(&memory.path).map_err(|e| format!("Failed to read file: {}", e))?;
-
-    let file_name = memory
-        .path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
 
     let ai_client = UnifiedAiClient::with_ollama(None);
 
@@ -932,13 +952,74 @@ async fn ollama_summarize(
         return Err("Ollama is not running. Please start Ollama first.".to_string());
     }
 
-    let summary = ai_client
-        .summarize(&content, &file_name)
-        .await
-        .map_err(|e| format!("Summarization failed: {}", e))?;
+    // Handle single memory ID
+    if let Some(mid) = memory_id {
+        println!("[Hippo] Ollama summarizing memory: {}", mid);
+        let id: MemoryId = mid.parse().map_err(|_| "Invalid memory ID")?;
+        let memory = hippo
+            .get_memory(id)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("Memory not found")?;
 
-    println!("[Hippo] Ollama summarization complete");
-    serde_json::to_value(summary).map_err(|e| e.to_string())
+        let content = std::fs::read_to_string(&memory.path)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+
+        let file_name = memory
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        let summary = ai_client
+            .summarize(&content, &file_name)
+            .await
+            .map_err(|e| format!("Summarization failed: {}", e))?;
+
+        println!("[Hippo] Ollama summarization complete");
+        return serde_json::to_value(summary).map_err(|e| e.to_string());
+    }
+
+    // Handle multiple file paths
+    if let Some(paths) = file_paths {
+        println!("[Hippo] Ollama summarizing {} files", paths.len());
+        let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+
+        let mut summaries = Vec::new();
+        for path in &paths {
+            if let Some(memory) = memories.iter().find(|m| m.path.to_string_lossy() == *path) {
+                if let Ok(content) = std::fs::read_to_string(&memory.path) {
+                    let file_name = memory
+                        .path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+
+                    match ai_client.summarize(&content, &file_name).await {
+                        Ok(summary) => {
+                            summaries.push(serde_json::json!({
+                                "file": file_name,
+                                "summary": summary
+                            }));
+                        }
+                        Err(e) => {
+                            summaries.push(serde_json::json!({
+                                "file": file_name,
+                                "error": e.to_string()
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+
+        return Ok(serde_json::json!({
+            "files_summarized": summaries.len(),
+            "summaries": summaries
+        }));
+    }
+
+    Err("Either memoryId or filePaths must be provided".to_string())
 }
 
 #[tauri::command]
