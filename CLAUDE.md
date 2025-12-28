@@ -1576,35 +1576,77 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ### Latest Checkpoint (December 28, 2025 - Session 12)
 
-**Commit**: `9eca5f3` on `main` branch - All PRs merged through #77
+**Commit**: `bdccb41` on `main` branch - All PRs merged through #78
 
 **Release**: v1.1.0 - Rich AI Content Analysis
 - GitHub Release: https://github.com/greplabs/hippo/releases/tag/v1.1.0
-- Download: `Hippo_1.1.0_macos_aarch64.zip` or `.dmg`
+- Download: `Hippo_1.1.0_macos_aarch64.zip` (~11.3MB) or `.dmg`
 
-**Session 12 Completed Features**:
-- ✅ Rich image analysis using llava vision model for scene/object detection (PR #76)
+**Session 12 PRs**:
+| PR | Description |
+|----|-------------|
+| #76 | feat(ai): Rich content analysis for auto-tagging v1.1.0 |
+| #77 | fix(ui): Scroll position reset and AI analyze/summarize commands |
+| #78 | docs: Session 12 checkpoint update |
+
+**Session 12 Features & Fixes**:
+- ✅ Rich image analysis using llava vision model for scene/object detection
 - ✅ PDF/document text extraction and content analysis (pdf-extract crate)
-- ✅ Code content analysis with language-specific tags
+- ✅ Code content analysis with language-specific tags and framework detection
 - ✅ AI tagging benchmark (`hippo-core/benches/ai_tagging_benchmark.rs`)
 - ✅ Updated ai_suggest_tags to include file content for better suggestions
-- ✅ 10x faster UI tag suggestions with ultra-fast model
-- ✅ Fixed scroll position reset after search (PR #77)
-- ✅ Fixed ollama_analyze/summarize to support both memoryId and filePaths (PR #77)
+- ✅ 10x faster UI tag suggestions with ultra-fast model (qwen2:0.5b)
+- ✅ Fixed scroll position reset after search results load
+- ✅ Fixed ollama_analyze/summarize to support both memoryId and filePaths
 - ✅ Version bump to v1.1.0
 
-**New Content Analysis Strategies**:
-- `analyze_image_for_tags()` - Vision model for images with fallback
-- `analyze_document_for_tags()` - Text extraction for PDF/TXT/MD
-- `analyze_code_for_tags()` - Language-specific code analysis
-- `filename_based_tags()` - Fast fallback for other file types
+**New Content Analysis Functions** (`hippo-core/src/indexer/mod.rs`):
+```rust
+// Vision model for images with fallback to filename-based
+async fn analyze_image_for_tags(ollama, path, filename) -> Vec<String>
+
+// Text extraction for PDF/TXT/MD documents
+async fn analyze_document_for_tags(ollama, path, filename) -> Vec<String>
+
+// Language-specific code analysis with framework detection
+async fn analyze_code_for_tags(ollama, path, language, filename) -> Vec<String>
+
+// Fast fallback for other file types
+async fn filename_based_tags(ollama, kind, filename) -> Vec<String>
+
+// Helper to parse AI responses into clean tags
+fn parse_tags(response: &str) -> Vec<String>
+```
+
+**Updated Tauri Commands** (`hippo-tauri/src/main.rs`):
+```rust
+// Now accepts both single file and multi-file analysis
+async fn ollama_analyze(
+    memory_id: Option<String>,      // For detail panel
+    file_paths: Option<Vec<String>>, // For chat context
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String>
+
+async fn ollama_summarize(
+    memory_id: Option<String>,
+    file_paths: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String>
+```
 
 **Benchmark Results** (December 28, 2025):
-| Model | Avg (ms) | Min (ms) | Max (ms) | Size |
-|-------|----------|----------|----------|------|
-| qwen2:0.5b | 1199 | 341 | 3125 | 352MB |
-| llama3.2:1b | 1697 | 447 | 4483 | 1.3GB |
-| gemma2:2b | 2480 | 679 | 5923 | 1.6GB |
+| Model | Avg (ms) | Min (ms) | Max (ms) | Size | Use Case |
+|-------|----------|----------|----------|------|----------|
+| qwen2:0.5b | 1199 | 341 | 3125 | 352MB | Auto-tagging (fastest) |
+| llama3.2:1b | 1697 | 447 | 4483 | 1.3GB | Balanced |
+| gemma2:2b | 2480 | 679 | 5923 | 1.6GB | Quality analysis |
+
+**Recommended Ollama Models**:
+```bash
+ollama pull qwen2:0.5b        # Ultra-fast tagging (~1.2s)
+ollama pull llava:7b          # Image analysis
+ollama pull nomic-embed-text  # Embeddings (required)
+```
 
 **Session 11 Completed Features** (PR #74):
 - ✅ Ultra-fast auto-tagging with qwen2:0.5b (352MB, ~1.2s response)
