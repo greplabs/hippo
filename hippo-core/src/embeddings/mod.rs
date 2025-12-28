@@ -12,7 +12,7 @@ use crate::HippoConfig;
 use parking_lot::RwLock;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -48,9 +48,10 @@ impl CachedEmbedding {
 }
 
 /// Thread-safe embedding cache with LRU eviction
+/// Uses VecDeque for O(1) front removal during eviction
 struct EmbeddingCache {
     entries: HashMap<String, CachedEmbedding>,
-    access_order: Vec<String>, // For LRU tracking
+    access_order: VecDeque<String>, // For LRU tracking - O(1) pop_front
     max_size: usize,
     hits: u64,
     misses: u64,
@@ -60,7 +61,7 @@ impl EmbeddingCache {
     fn new(max_size: usize) -> Self {
         Self {
             entries: HashMap::with_capacity(max_size),
-            access_order: Vec::with_capacity(max_size),
+            access_order: VecDeque::with_capacity(max_size),
             max_size,
             hits: 0,
             misses: 0,
@@ -71,10 +72,10 @@ impl EmbeddingCache {
         if let Some(cached) = self.entries.get(key) {
             if !cached.is_expired() {
                 self.hits += 1;
-                // Move to end for LRU
+                // Move to end for LRU - O(n) but only on cache hit
                 if let Some(pos) = self.access_order.iter().position(|k| k == key) {
-                    let k = self.access_order.remove(pos);
-                    self.access_order.push(k);
+                    self.access_order.remove(pos);
+                    self.access_order.push_back(key.to_string());
                 }
                 return Some(cached.embedding.clone());
             } else {
@@ -88,14 +89,15 @@ impl EmbeddingCache {
     }
 
     fn insert(&mut self, key: String, embedding: Vec<f32>) {
-        // Evict if at capacity
+        // Evict if at capacity - O(1) with VecDeque::pop_front
         while self.entries.len() >= self.max_size && !self.access_order.is_empty() {
-            let oldest = self.access_order.remove(0);
-            self.entries.remove(&oldest);
+            if let Some(oldest) = self.access_order.pop_front() {
+                self.entries.remove(&oldest);
+            }
         }
 
         self.entries.insert(key.clone(), CachedEmbedding::new(embedding));
-        self.access_order.push(key);
+        self.access_order.push_back(key);
     }
 
     fn stats(&self) -> (u64, u64, usize) {
