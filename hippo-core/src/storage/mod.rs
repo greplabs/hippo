@@ -9,6 +9,16 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
+/// An FTS5 search result with snippet data and BM25 ranking
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Fts5SearchResult {
+    pub memory: Memory,
+    pub fts5_rank: f64,
+    pub title_snippet: Option<String>,
+    pub filename_snippet: Option<String>,
+    pub tags_snippet: Option<String>,
+}
+
 /// Helper to parse JSON from database, converting errors to rusqlite errors
 fn parse_json<T: serde::de::DeserializeOwned>(s: &str) -> std::result::Result<T, rusqlite::Error> {
     serde_json::from_str(s).map_err(|e| {
@@ -235,6 +245,7 @@ impl Storage {
         );
 
         // FTS5 full-text search index for fast text matching (5-10x faster than LIKE)
+        // columnsize=1 enables efficient bm25() ranking
         let _ = conn.execute(
             r#"CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
                 id,
@@ -243,7 +254,8 @@ impl Storage {
                 tags_text,
                 content='memories',
                 content_rowid='rowid',
-                tokenize='porter unicode61'
+                tokenize='porter unicode61',
+                columnsize=1
             )"#,
             [],
         );
@@ -1084,6 +1096,159 @@ impl Storage {
             Ok(memories) if !memories.is_empty() => Ok(memories),
             _ => self.search_like(query, kind, limit, offset).await,
         }
+    }
+
+    /// Search using FTS5 with BM25 ranking and snippet generation
+    /// Returns results with highlighted snippets and relevance scores
+    pub async fn search_fts5_with_snippets(
+        &self,
+        fts_query: &str,
+        kind: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Fts5SearchResult>> {
+        let db = self.get_db()?;
+
+        // BM25 weights: id=0, title=10, filename=8, tags=7
+        let sql = if kind.is_some() {
+            r#"SELECT m.id, m.path, m.source_json, m.kind_json, m.metadata_json, m.tags_json,
+                      m.embedding_id, m.connections_json, m.is_favorite, m.created_at, m.modified_at, m.indexed_at,
+                      bm25(memories_fts, 0.0, 10.0, 8.0, 7.0) as rank,
+                      snippet(memories_fts, 1, '<mark>', '</mark>', '...', 30) as title_snip,
+                      snippet(memories_fts, 2, '<mark>', '</mark>', '...', 30) as filename_snip,
+                      snippet(memories_fts, 3, '<mark>', '</mark>', '...', 30) as tags_snip
+               FROM memories m
+               JOIN memories_fts fts ON m.id = fts.id
+               WHERE memories_fts MATCH ?1 AND m.kind_name = ?2
+               ORDER BY rank
+               LIMIT ?3 OFFSET ?4"#
+        } else {
+            r#"SELECT m.id, m.path, m.source_json, m.kind_json, m.metadata_json, m.tags_json,
+                      m.embedding_id, m.connections_json, m.is_favorite, m.created_at, m.modified_at, m.indexed_at,
+                      bm25(memories_fts, 0.0, 10.0, 8.0, 7.0) as rank,
+                      snippet(memories_fts, 1, '<mark>', '</mark>', '...', 30) as title_snip,
+                      snippet(memories_fts, 2, '<mark>', '</mark>', '...', 30) as filename_snip,
+                      snippet(memories_fts, 3, '<mark>', '</mark>', '...', 30) as tags_snip
+               FROM memories m
+               JOIN memories_fts fts ON m.id = fts.id
+               WHERE memories_fts MATCH ?1
+               ORDER BY rank
+               LIMIT ?2 OFFSET ?3"#
+        };
+
+        let result: std::result::Result<Vec<Fts5SearchResult>, rusqlite::Error> = (|| {
+            let mut stmt = db.prepare(sql)?;
+            let results: Vec<Fts5SearchResult> = if let Some(k) = kind {
+                stmt.query_map(params![fts_query, k, limit as i64, offset as i64], |row| {
+                    Ok(Fts5SearchResult {
+                        memory: Memory {
+                            id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                            path: PathBuf::from(row.get::<_, String>(1)?),
+                            source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+                            kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+                            metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+                            tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+                            embedding_id: row.get(6)?,
+                            connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+                            is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
+                            created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                            modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                            indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                        },
+                        fts5_rank: row.get(12)?,
+                        title_snippet: row.get(13)?,
+                        filename_snippet: row.get(14)?,
+                        tags_snippet: row.get(15)?,
+                    })
+                })?
+                .filter_map(|r| r.ok())
+                .collect()
+            } else {
+                stmt.query_map(params![fts_query, limit as i64, offset as i64], |row| {
+                    Ok(Fts5SearchResult {
+                        memory: Memory {
+                            id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                            path: PathBuf::from(row.get::<_, String>(1)?),
+                            source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+                            kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+                            metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+                            tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+                            embedding_id: row.get(6)?,
+                            connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+                            is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
+                            created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                            modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                            indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                        },
+                        fts5_rank: row.get(12)?,
+                        title_snippet: row.get(13)?,
+                        filename_snippet: row.get(14)?,
+                        tags_snippet: row.get(15)?,
+                    })
+                })?
+                .filter_map(|r| r.ok())
+                .collect()
+            };
+            Ok(results)
+        })();
+
+        match result {
+            Ok(results) if !results.is_empty() => Ok(results),
+            _ => Ok(Vec::new()),
+        }
+    }
+
+    /// Count FTS5 search results for pagination
+    pub async fn count_fts5_results(&self, fts_query: &str, kind: Option<&str>) -> Result<usize> {
+        let db = self.get_db()?;
+
+        let result: std::result::Result<usize, rusqlite::Error> = (|| {
+            if let Some(k) = kind {
+                db.query_row(
+                    r#"SELECT COUNT(*) FROM memories m
+                       JOIN memories_fts fts ON m.id = fts.id
+                       WHERE memories_fts MATCH ?1 AND m.kind_name = ?2"#,
+                    params![fts_query, k],
+                    |row| row.get(0),
+                )
+            } else {
+                db.query_row(
+                    r#"SELECT COUNT(*) FROM memories_fts WHERE memories_fts MATCH ?1"#,
+                    params![fts_query],
+                    |row| row.get(0),
+                )
+            }
+        })();
+
+        Ok(result.unwrap_or(0))
+    }
+
+    /// Rebuild the FTS5 index from scratch
+    pub async fn rebuild_fts_index(&self) -> Result<usize> {
+        let db = self.get_db()?;
+
+        // Delete all FTS entries
+        let _ = db.execute(
+            "INSERT INTO memories_fts(memories_fts) VALUES('delete-all')",
+            [],
+        );
+
+        // Repopulate from memories table
+        let count: usize = db.execute(
+            r#"INSERT INTO memories_fts(rowid, id, title, filename, tags_text)
+               SELECT rowid, id, title, filename, tags_text FROM memories
+               WHERE title IS NOT NULL OR filename IS NOT NULL"#,
+            [],
+        ).unwrap_or(0);
+
+        info!("Rebuilt FTS5 index with {} entries", count);
+        Ok(count)
     }
 
     /// Search memories using LIKE pattern matching (fallback when FTS fails)

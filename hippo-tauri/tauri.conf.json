@@ -55,5 +55,9 @@
       "minimumSystemVersion": "10.15"
     }
   },
-  "plugins": {}
+  "plugins": {
+    "notification": {
+      "registerActionTypes": []
+    }
+  }
 }
