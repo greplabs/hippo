@@ -57,6 +57,14 @@ hippo/
 │       └── sources/              # Source connectors (local only, cloud planned)
 │           └── mod.rs
 │
+├── hippo-cli/                    # CLI application
+│   ├── Cargo.toml
+│   └── src/
+│       ├── main.rs               # CLI commands (chomp, sniff, remember, etc.)
+│       └── tui/                  # Interactive terminal UI
+│           ├── mod.rs            # TUI app logic (ratatui + crossterm)
+│           └── widgets.rs        # Custom widgets (SearchInput, FileList, etc.)
+│
 └── hippo-tauri/                  # Desktop application
     ├── Cargo.toml
     ├── tauri.conf.json           # Tauri config (withGlobalTauri: true)
@@ -1340,10 +1348,6 @@ sequenceDiagram
 ### Advanced Features
 - Face clustering (without recognition)
 - Knowledge graph visualization (D3.js)
-- Full-text search with FTS5
-- Advanced filters (file size ranges, date comparisons)
-- Batch operations (multi-select, bulk tagging)
-- Dark mode theme
 
 ---
 
@@ -1460,6 +1464,9 @@ cargo tauri build
 | UI changes | `hippo-tauri/ui/dist/index.html` |
 | Data models | `hippo-core/src/models.rs` |
 | Error types | `hippo-core/src/error.rs` |
+| Interactive TUI | `hippo-cli/src/tui/mod.rs`, `hippo-cli/src/tui/widgets.rs` |
+| FTS5 search | `hippo-core/src/storage/mod.rs` (search_fts5_with_snippets) |
+| Desktop notifications | `hippo-tauri/src/main.rs` (send_notification) |
 
 ---
 
@@ -1572,9 +1579,98 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ---
 
-## Current Work In Progress (December 2025)
+## Current Work In Progress
 
-### Latest Checkpoint (December 28, 2025 - Session 12)
+### Latest Checkpoint (February 8, 2026 - Session 13)
+
+**Commit**: `da69f79` on `main` branch - All PRs merged through #80
+
+**Session 13 PR**:
+| PR | Description |
+|----|-------------|
+| #80 | feat: Session 13 mega features - TUI, notifications, FTS5, and UI enhancements |
+
+**Session 13 Features** (12 features across 17 files, +3,074 lines):
+
+**Interactive TUI** (`hippo-cli/src/tui/`):
+- ✅ Full ratatui-based terminal interface (`hippo-cli tui` or `hippo-cli ui`)
+- ✅ Search bar with real-time filtering
+- ✅ Tabs: Files, Favorites, Tags, Duplicates
+- ✅ 3-pane layout: sidebar (sources/tags), file list, detail panel
+- ✅ Vim keybindings: j/k (navigate), q (quit), / (search), f (favorite), Tab (switch pane)
+- ✅ Help overlay (press ?)
+- ✅ Custom widgets: SearchInput, FileList, DetailPanel, TagCloud
+
+**Desktop Notifications** (`hippo-tauri/src/main.rs`):
+- ✅ `tauri-plugin-notification` integration
+- ✅ `send_notification` Tauri IPC command
+- ✅ Indexing complete notification in UI
+- ✅ Notification permissions in capabilities/default.json
+
+**Enhanced FTS5 Search** (`hippo-core/src/storage/mod.rs`, `hippo-core/src/search/mod.rs`):
+- ✅ `text_preview` as 5th FTS5 column for content search (BM25 weight 5.0)
+- ✅ Auto-rebuild FTS5 table on column count change (4->5 migration)
+- ✅ `Fts5SearchResult` struct with `content_snippet` field
+- ✅ `search_fts5_with_snippets()` with weighted BM25 ranking: title=10, filename=8, tags=7, content=5
+- ✅ `search_fts5()` in Searcher with full query syntax support
+- ✅ `build_fts5_query()` / `fts5_term()` for safe query construction
+- ✅ Prefix queries (`vaca*`), column-specific (`title:vacation`), boolean (`AND`/`OR`/`NOT`), phrases (`"exact match"`)
+- ✅ `search_with_operators_fts5()` mapping `ParsedSearchTerms` to native FTS5
+- ✅ `parsed_terms_to_fts5()` conversion helper
+- ✅ `text_preview` denormalized column with migration from `metadata_json`
+- ✅ `rebuild_fts_index()` and `count_fts5_results()` utilities
+
+**UI Features** (`hippo-tauri/ui/dist/index.html`, +729 lines):
+- ✅ Dark mode toggle with system preference detection
+- ✅ Favorites view with dedicated filter
+- ✅ Collections/Albums management UI (create, add files, view)
+- ✅ Timeline view for chronological browsing
+- ✅ Duplicate file manager with merge/delete UI
+- ✅ Advanced filters (file size, date range, dimensions)
+- ✅ Bulk operations (delete, tag, export selected files)
+- ✅ Export search results to JSON/CSV
+- ✅ Bulk delete button with confirmation dialog
+
+**New Dependencies**:
+```toml
+# Workspace (Cargo.toml)
+ratatui = "0.29"
+crossterm = "0.28"
+
+# hippo-tauri
+tauri-plugin-notification = "2"
+```
+
+**New Files**:
+| File | Lines | Description |
+|------|-------|-------------|
+| `hippo-cli/src/tui/mod.rs` | 706 | TUI application logic |
+| `hippo-cli/src/tui/widgets.rs` | 381 | Custom ratatui widgets |
+
+**New Tauri Command**:
+```rust
+#[tauri::command]
+async fn send_notification(
+    title: String,
+    body: String,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String>
+```
+
+**New Search API Methods** (`hippo-core/src/search/mod.rs`):
+```rust
+// Direct FTS5 search with BM25 scoring and snippets
+pub async fn search_fts5(&self, query: &str, kind: Option<&str>, limit: usize) -> Result<SearchResults>
+
+// Map ParsedSearchTerms to native FTS5 boolean syntax
+pub async fn search_with_operators_fts5(&self, parsed: &ParsedSearchTerms, kind: Option<&str>, limit: usize) -> Result<SearchResults>
+```
+
+**Test Results**: 286 tests passing (75 unit + 211 integration)
+
+---
+
+### Previous Checkpoint (December 28, 2025 - Session 12)
 
 **Commit**: `bdccb41` on `main` branch - All PRs merged through #78
 
@@ -1599,54 +1695,6 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 - ✅ Fixed scroll position reset after search results load
 - ✅ Fixed ollama_analyze/summarize to support both memoryId and filePaths
 - ✅ Version bump to v1.1.0
-
-**New Content Analysis Functions** (`hippo-core/src/indexer/mod.rs`):
-```rust
-// Vision model for images with fallback to filename-based
-async fn analyze_image_for_tags(ollama, path, filename) -> Vec<String>
-
-// Text extraction for PDF/TXT/MD documents
-async fn analyze_document_for_tags(ollama, path, filename) -> Vec<String>
-
-// Language-specific code analysis with framework detection
-async fn analyze_code_for_tags(ollama, path, language, filename) -> Vec<String>
-
-// Fast fallback for other file types
-async fn filename_based_tags(ollama, kind, filename) -> Vec<String>
-
-// Helper to parse AI responses into clean tags
-fn parse_tags(response: &str) -> Vec<String>
-```
-
-**Updated Tauri Commands** (`hippo-tauri/src/main.rs`):
-```rust
-// Now accepts both single file and multi-file analysis
-async fn ollama_analyze(
-    memory_id: Option<String>,      // For detail panel
-    file_paths: Option<Vec<String>>, // For chat context
-    state: State<'_, AppState>,
-) -> Result<serde_json::Value, String>
-
-async fn ollama_summarize(
-    memory_id: Option<String>,
-    file_paths: Option<Vec<String>>,
-    state: State<'_, AppState>,
-) -> Result<serde_json::Value, String>
-```
-
-**Benchmark Results** (December 28, 2025):
-| Model | Avg (ms) | Min (ms) | Max (ms) | Size | Use Case |
-|-------|----------|----------|----------|------|----------|
-| qwen2:0.5b | 1199 | 341 | 3125 | 352MB | Auto-tagging (fastest) |
-| llama3.2:1b | 1697 | 447 | 4483 | 1.3GB | Balanced |
-| gemma2:2b | 2480 | 679 | 5923 | 1.6GB | Quality analysis |
-
-**Recommended Ollama Models**:
-```bash
-ollama pull qwen2:0.5b        # Ultra-fast tagging (~1.2s)
-ollama pull llava:7b          # Image analysis
-ollama pull nomic-embed-text  # Embeddings (required)
-```
 
 **Session 11 Completed Features** (PR #74):
 - ✅ Ultra-fast auto-tagging with qwen2:0.5b (352MB, ~1.2s response)
@@ -1712,6 +1760,30 @@ ollama pull nomic-embed-text  # Embeddings (required)
 | `feature/fast-indexing` | Fast Indexing Mode | ✅ Merged | #68 |
 | `chore/cleanup-lint` | Clippy Fixes | ✅ Merged | #69 |
 | `release/v1.0.0` | GA Release Version | ✅ Merged | #70 |
+| `feature/session13-mega-features` | Session 13 Mega Features | ✅ Merged | #80 |
+
+### Session 13 Changes (February 8, 2026)
+
+#### Mega Features (PR #80)
+
+**Interactive TUI** (`hippo-cli/src/tui/`):
+- ✅ Full ratatui + crossterm terminal interface with search, tabs, 3-pane layout
+- ✅ Vim keybindings (j/k/q/?/f/Tab), help overlay, custom widgets
+
+**Desktop Notifications** (`hippo-tauri/`):
+- ✅ `tauri-plugin-notification` with `send_notification` command
+- ✅ Automatic notification on indexing completion
+
+**Enhanced FTS5 Search** (`hippo-core/src/storage/mod.rs`, `search/mod.rs`):
+- ✅ `text_preview` as 5th FTS5 column with BM25 weight 5.0
+- ✅ Auto-rebuild migration (4->5 columns)
+- ✅ `search_fts5()` with prefix, column-specific, boolean, and phrase queries
+- ✅ `search_with_operators_fts5()` mapping `ParsedSearchTerms` to native FTS5
+- ✅ `content_snippet` in `Fts5SearchResult`
+
+**8 UI Features** (`hippo-tauri/ui/dist/index.html`, +729 lines):
+- ✅ Dark mode, favorites view, collections, timeline, duplicate manager
+- ✅ Advanced filters, bulk operations, export to JSON/CSV
 
 ### Session 10 Changes (December 27-28, 2025)
 
@@ -2069,7 +2141,8 @@ ollama pull llava:7b          # Optional for image analysis
 | Feature | Status | Notes |
 |---------|--------|-------|
 | File indexing | ✅ Working | 70+ file types supported |
-| Text search | ✅ Working | Fast SQL-based search |
+| Text search | ✅ Working | FTS5 with BM25 ranking |
+| FTS5 content search | ✅ Working | text_preview column, snippets, prefix/boolean queries |
 | Tag filtering | ✅ Working | Include/exclude modes |
 | Semantic search | ✅ Working | Vector similarity via Qdrant |
 | File watcher | ✅ Working | Auto-starts on init, uses notify crate |
@@ -2079,6 +2152,16 @@ ollama pull llava:7b          # Optional for image analysis
 | Code parsing | ✅ Working | Rust, Python, JS, Go |
 | Auto-tagging | ✅ Enabled | Default on with Ollama |
 | Code preview | ✅ Working | Prism.js syntax highlighting |
+| Interactive TUI | ✅ Working | ratatui + crossterm, vim keybindings |
+| Desktop notifications | ✅ Working | tauri-plugin-notification |
+| Dark mode | ✅ Working | System preference detection |
+| Favorites view | ✅ Working | Dedicated filter in UI |
+| Collections/Albums | ✅ Working | Create, manage, view |
+| Timeline view | ✅ Working | Chronological browsing |
+| Duplicate manager | ✅ Working | Merge/delete UI |
+| Advanced filters | ✅ Working | Size, date, dimensions |
+| Bulk operations | ✅ Working | Delete, tag, export selected |
+| Export results | ✅ Working | JSON and CSV formats |
 
 ### Completed (Recent Sessions)
 
