@@ -18,6 +18,7 @@ use tauri::image::Image;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_notification::NotificationExt;
 use tokio::sync::RwLock;
 
 struct AppState {
@@ -61,6 +62,22 @@ async fn initialize(state: State<'_, AppState>) -> Result<String, String> {
             Err(format!("Failed to initialize Hippo: {}", e))
         }
     }
+}
+
+#[tauri::command]
+async fn send_notification(
+    title: String,
+    body: String,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    app_handle
+        .notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show()
+        .map_err(|e| format!("Failed to send notification: {}", e))?;
+    Ok("Notification sent".to_string())
 }
 
 #[tauri::command]
@@ -2837,6 +2854,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState {
             hippo: Arc::new(RwLock::new(None)),
             qdrant_manager,
@@ -2851,6 +2869,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             initialize,
+            send_notification,
             search,
             add_source,
             add_source_path,

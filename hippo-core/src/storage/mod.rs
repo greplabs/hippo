@@ -9,6 +9,17 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
+/// An FTS5 search result with snippet data and BM25 ranking
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Fts5SearchResult {
+    pub memory: Memory,
+    pub fts5_rank: f64,
+    pub title_snippet: Option<String>,
+    pub filename_snippet: Option<String>,
+    pub tags_snippet: Option<String>,
+    pub content_snippet: Option<String>,
+}
+
 /// Helper to parse JSON from database, converting errors to rusqlite errors
 fn parse_json<T: serde::de::DeserializeOwned>(s: &str) -> std::result::Result<T, rusqlite::Error> {
     serde_json::from_str(s).map_err(|e| {
@@ -181,6 +192,12 @@ impl Storage {
         // Migration: Add color column to tags table
         let _ = conn.execute("ALTER TABLE tags ADD COLUMN color TEXT", []);
 
+        // Migration: Add text_preview column for FTS content search
+        let _ = conn.execute(
+            "ALTER TABLE memories ADD COLUMN text_preview TEXT",
+            [],
+        );
+
         // Create indexes for faster queries (5-50x improvement for filtered queries)
         // Core indexes
         let _ = conn.execute(
@@ -234,49 +251,59 @@ impl Storage {
             [],
         );
 
-        // FTS5 full-text search index for fast text matching (5-10x faster than LIKE)
+        // Check if FTS table needs rebuild (to add text_preview column)
+        let needs_fts_rebuild: bool = conn
+            .prepare("SELECT * FROM memories_fts LIMIT 0")
+            .map(|stmt| stmt.column_count() < 5)
+            .unwrap_or(true);
+
+        if needs_fts_rebuild {
+            let _ = conn.execute("DROP TRIGGER IF EXISTS memories_fts_insert", []);
+            let _ = conn.execute("DROP TRIGGER IF EXISTS memories_fts_delete", []);
+            let _ = conn.execute("DROP TRIGGER IF EXISTS memories_fts_update", []);
+            let _ = conn.execute("DROP TABLE IF EXISTS memories_fts", []);
+        }
+
+        // FTS5 with text_preview, porter stemmer, and columnsize for bm25
         let _ = conn.execute(
             r#"CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-                id,
-                title,
-                filename,
-                tags_text,
-                content='memories',
-                content_rowid='rowid',
-                tokenize='porter unicode61'
+                id, title, filename, tags_text, text_preview,
+                content='memories', content_rowid='rowid',
+                tokenize='porter unicode61', columnsize=1
             )"#,
             [],
         );
 
-        // Create triggers to keep FTS index in sync
+        // Triggers updated to include text_preview
         let _ = conn.execute(
             r#"CREATE TRIGGER IF NOT EXISTS memories_fts_insert AFTER INSERT ON memories BEGIN
-                INSERT INTO memories_fts(rowid, id, title, filename, tags_text)
-                VALUES (NEW.rowid, NEW.id, NEW.title, NEW.filename, NEW.tags_text);
+                INSERT INTO memories_fts(rowid, id, title, filename, tags_text, text_preview)
+                VALUES (NEW.rowid, NEW.id, NEW.title, NEW.filename, NEW.tags_text, NEW.text_preview);
             END"#,
             [],
         );
         let _ = conn.execute(
             r#"CREATE TRIGGER IF NOT EXISTS memories_fts_delete AFTER DELETE ON memories BEGIN
-                INSERT INTO memories_fts(memories_fts, rowid, id, title, filename, tags_text)
-                VALUES ('delete', OLD.rowid, OLD.id, OLD.title, OLD.filename, OLD.tags_text);
+                INSERT INTO memories_fts(memories_fts, rowid, id, title, filename, tags_text, text_preview)
+                VALUES ('delete', OLD.rowid, OLD.id, OLD.title, OLD.filename, OLD.tags_text, OLD.text_preview);
             END"#,
             [],
         );
         let _ = conn.execute(
             r#"CREATE TRIGGER IF NOT EXISTS memories_fts_update AFTER UPDATE ON memories BEGIN
-                INSERT INTO memories_fts(memories_fts, rowid, id, title, filename, tags_text)
-                VALUES ('delete', OLD.rowid, OLD.id, OLD.title, OLD.filename, OLD.tags_text);
-                INSERT INTO memories_fts(rowid, id, title, filename, tags_text)
-                VALUES (NEW.rowid, NEW.id, NEW.title, NEW.filename, NEW.tags_text);
+                INSERT INTO memories_fts(memories_fts, rowid, id, title, filename, tags_text, text_preview)
+                VALUES ('delete', OLD.rowid, OLD.id, OLD.title, OLD.filename, OLD.tags_text, OLD.text_preview);
+                INSERT INTO memories_fts(rowid, id, title, filename, tags_text, text_preview)
+                VALUES (NEW.rowid, NEW.id, NEW.title, NEW.filename, NEW.tags_text, NEW.text_preview);
             END"#,
             [],
         );
 
         // Populate FTS index from existing data
         let _ = conn.execute(
-            r#"INSERT OR IGNORE INTO memories_fts(rowid, id, title, filename, tags_text)
-               SELECT rowid, id, title, filename, tags_text FROM memories WHERE title IS NOT NULL"#,
+            r#"INSERT OR IGNORE INTO memories_fts(rowid, id, title, filename, tags_text, text_preview)
+               SELECT rowid, id, title, filename, tags_text, text_preview FROM memories
+               WHERE title IS NOT NULL OR filename IS NOT NULL"#,
             [],
         );
 
@@ -298,6 +325,13 @@ impl Storage {
                 END
             WHERE filename IS NULL OR kind_name IS NULL
         "#,
+            [],
+        );
+
+        // Populate text_preview from metadata_json for existing data
+        let _ = conn.execute(
+            r#"UPDATE memories SET text_preview = json_extract(metadata_json, '$.text_preview')
+               WHERE text_preview IS NULL AND json_extract(metadata_json, '$.text_preview') IS NOT NULL"#,
             [],
         );
 
@@ -345,13 +379,14 @@ impl Storage {
             .map(|t| t.name.clone())
             .collect::<Vec<_>>()
             .join(" ");
+        let text_preview = memory.metadata.text_preview.clone();
 
         db.execute(
             r#"INSERT OR REPLACE INTO memories
                (id, path, source_json, kind_json, metadata_json, tags_json,
                 embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at,
-                title, filename, extension, kind_name, tags_text)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)"#,
+                title, filename, extension, kind_name, tags_text, text_preview)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)"#,
             params![
                 memory.id.to_string(),
                 memory.path.to_string_lossy(),
@@ -370,6 +405,7 @@ impl Storage {
                 extension,
                 kind_name,
                 tags_text,
+                text_preview,
             ],
         )?;
 
@@ -1084,6 +1120,163 @@ impl Storage {
             Ok(memories) if !memories.is_empty() => Ok(memories),
             _ => self.search_like(query, kind, limit, offset).await,
         }
+    }
+
+    /// Search using FTS5 with BM25 ranking and snippet generation
+    /// Returns results with highlighted snippets and relevance scores
+    pub async fn search_fts5_with_snippets(
+        &self,
+        fts_query: &str,
+        kind: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Fts5SearchResult>> {
+        let db = self.get_db()?;
+
+        // BM25 weights: id=0, title=10, filename=8, tags=7, text_preview=5
+        let sql = if kind.is_some() {
+            r#"SELECT m.id, m.path, m.source_json, m.kind_json, m.metadata_json, m.tags_json,
+                      m.embedding_id, m.connections_json, m.is_favorite, m.created_at, m.modified_at, m.indexed_at,
+                      bm25(memories_fts, 0.0, 10.0, 8.0, 7.0, 5.0) as rank,
+                      snippet(memories_fts, 1, '<mark>', '</mark>', '...', 30) as title_snip,
+                      snippet(memories_fts, 2, '<mark>', '</mark>', '...', 30) as filename_snip,
+                      snippet(memories_fts, 3, '<mark>', '</mark>', '...', 30) as tags_snip,
+                      snippet(memories_fts, 4, '<mark>', '</mark>', '...', 40) as content_snip
+               FROM memories m
+               JOIN memories_fts fts ON m.id = fts.id
+               WHERE memories_fts MATCH ?1 AND m.kind_name = ?2
+               ORDER BY rank
+               LIMIT ?3 OFFSET ?4"#
+        } else {
+            r#"SELECT m.id, m.path, m.source_json, m.kind_json, m.metadata_json, m.tags_json,
+                      m.embedding_id, m.connections_json, m.is_favorite, m.created_at, m.modified_at, m.indexed_at,
+                      bm25(memories_fts, 0.0, 10.0, 8.0, 7.0, 5.0) as rank,
+                      snippet(memories_fts, 1, '<mark>', '</mark>', '...', 30) as title_snip,
+                      snippet(memories_fts, 2, '<mark>', '</mark>', '...', 30) as filename_snip,
+                      snippet(memories_fts, 3, '<mark>', '</mark>', '...', 30) as tags_snip,
+                      snippet(memories_fts, 4, '<mark>', '</mark>', '...', 40) as content_snip
+               FROM memories m
+               JOIN memories_fts fts ON m.id = fts.id
+               WHERE memories_fts MATCH ?1
+               ORDER BY rank
+               LIMIT ?2 OFFSET ?3"#
+        };
+
+        let result: std::result::Result<Vec<Fts5SearchResult>, rusqlite::Error> = (|| {
+            let mut stmt = db.prepare(sql)?;
+            let results: Vec<Fts5SearchResult> = if let Some(k) = kind {
+                stmt.query_map(params![fts_query, k, limit as i64, offset as i64], |row| {
+                    Ok(Fts5SearchResult {
+                        memory: Memory {
+                            id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                            path: PathBuf::from(row.get::<_, String>(1)?),
+                            source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+                            kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+                            metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+                            tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+                            embedding_id: row.get(6)?,
+                            connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+                            is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
+                            created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                            modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                            indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                        },
+                        fts5_rank: row.get(12)?,
+                        title_snippet: row.get(13)?,
+                        filename_snippet: row.get(14)?,
+                        tags_snippet: row.get(15)?,
+                        content_snippet: row.get(16)?,
+                    })
+                })?
+                .filter_map(|r| r.ok())
+                .collect()
+            } else {
+                stmt.query_map(params![fts_query, limit as i64, offset as i64], |row| {
+                    Ok(Fts5SearchResult {
+                        memory: Memory {
+                            id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                            path: PathBuf::from(row.get::<_, String>(1)?),
+                            source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+                            kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+                            metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
+                            tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+                            embedding_id: row.get(6)?,
+                            connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+                            is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
+                            created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                            modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                            indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
+                                .unwrap().with_timezone(&chrono::Utc),
+                        },
+                        fts5_rank: row.get(12)?,
+                        title_snippet: row.get(13)?,
+                        filename_snippet: row.get(14)?,
+                        tags_snippet: row.get(15)?,
+                        content_snippet: row.get(16)?,
+                    })
+                })?
+                .filter_map(|r| r.ok())
+                .collect()
+            };
+            Ok(results)
+        })();
+
+        match result {
+            Ok(results) if !results.is_empty() => Ok(results),
+            _ => Ok(Vec::new()),
+        }
+    }
+
+    /// Count FTS5 search results for pagination
+    pub async fn count_fts5_results(&self, fts_query: &str, kind: Option<&str>) -> Result<usize> {
+        let db = self.get_db()?;
+
+        let result: std::result::Result<usize, rusqlite::Error> = (|| {
+            if let Some(k) = kind {
+                db.query_row(
+                    r#"SELECT COUNT(*) FROM memories m
+                       JOIN memories_fts fts ON m.id = fts.id
+                       WHERE memories_fts MATCH ?1 AND m.kind_name = ?2"#,
+                    params![fts_query, k],
+                    |row| row.get(0),
+                )
+            } else {
+                db.query_row(
+                    r#"SELECT COUNT(*) FROM memories_fts WHERE memories_fts MATCH ?1"#,
+                    params![fts_query],
+                    |row| row.get(0),
+                )
+            }
+        })();
+
+        Ok(result.unwrap_or(0))
+    }
+
+    /// Rebuild the FTS5 index from scratch
+    pub async fn rebuild_fts_index(&self) -> Result<usize> {
+        let db = self.get_db()?;
+
+        // Delete all FTS entries
+        let _ = db.execute(
+            "INSERT INTO memories_fts(memories_fts) VALUES('delete-all')",
+            [],
+        );
+
+        // Repopulate from memories table
+        let count: usize = db.execute(
+            r#"INSERT INTO memories_fts(rowid, id, title, filename, tags_text, text_preview)
+               SELECT rowid, id, title, filename, tags_text, text_preview FROM memories
+               WHERE title IS NOT NULL OR filename IS NOT NULL"#,
+            [],
+        ).unwrap_or(0);
+
+        info!("Rebuilt FTS5 index with {} entries", count);
+        Ok(count)
     }
 
     /// Search memories using LIKE pattern matching (fallback when FTS fails)

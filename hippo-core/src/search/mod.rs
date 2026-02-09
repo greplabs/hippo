@@ -764,6 +764,179 @@ impl Searcher {
         })
     }
 
+    /// Perform FTS5 search with full query syntax support.
+    /// Supports prefix queries (vaca*), column-specific (title:vacation),
+    /// boolean operators (AND/OR/NOT), and phrase queries ("exact phrase").
+    /// Returns results with FTS5 snippets and BM25 ranking.
+    pub async fn search_fts5(&self, query: &str, kind: Option<&str>, limit: usize) -> Result<SearchResults> {
+        let fts_query = Self::build_fts5_query(query);
+
+        let fts_results = self.storage.search_fts5_with_snippets(&fts_query, kind, limit, 0).await?;
+        let total_count = self.storage.count_fts5_results(&fts_query, kind).await.unwrap_or(fts_results.len());
+
+        let results: Vec<MemorySearchResult> = fts_results
+            .into_iter()
+            .map(|fts| {
+                let mut highlights = Vec::new();
+                if let Some(snip) = fts.title_snippet {
+                    highlights.push(Highlight { field: "title".into(), snippet: snip });
+                }
+                if let Some(snip) = fts.filename_snippet {
+                    highlights.push(Highlight { field: "filename".into(), snippet: snip });
+                }
+                if let Some(snip) = fts.tags_snippet {
+                    highlights.push(Highlight { field: "tag".into(), snippet: snip });
+                }
+                if let Some(snip) = fts.content_snippet {
+                    highlights.push(Highlight { field: "content".into(), snippet: snip });
+                }
+
+                // Convert BM25 rank (negative, lower is better) to positive score
+                let score = (-fts.fts5_rank * 10.0) as f32;
+
+                MemorySearchResult {
+                    memory: fts.memory,
+                    score: score.max(1.0),
+                    highlights,
+                }
+            })
+            .collect();
+
+        Ok(SearchResults {
+            memories: results,
+            total_count,
+            suggested_tags: vec![],
+            clusters: vec![],
+        })
+    }
+
+    /// Build an FTS5 query string from user input.
+    /// Handles column prefixes, prefix queries, quoted phrases, and plain words.
+    fn build_fts5_query(query: &str) -> String {
+        let mut parts = Vec::new();
+        let mut in_quotes = false;
+        let mut current = String::new();
+
+        for ch in query.chars() {
+            match ch {
+                '"' => {
+                    if in_quotes {
+                        parts.push(format!("\"{}\"", current));
+                        current.clear();
+                        in_quotes = false;
+                    } else {
+                        if !current.is_empty() {
+                            parts.push(Self::fts5_term(&current));
+                            current.clear();
+                        }
+                        in_quotes = true;
+                    }
+                }
+                ' ' | '\t' if !in_quotes => {
+                    if !current.is_empty() {
+                        parts.push(Self::fts5_term(&current));
+                        current.clear();
+                    }
+                }
+                _ => current.push(ch),
+            }
+        }
+        if !current.is_empty() {
+            if in_quotes {
+                parts.push(format!("\"{}\"", current));
+            } else {
+                parts.push(Self::fts5_term(&current));
+            }
+        }
+
+        parts.join(" ")
+    }
+
+    /// Convert a single term to FTS5 syntax
+    fn fts5_term(term: &str) -> String {
+        let upper = term.to_uppercase();
+        // Pass through boolean operators
+        if upper == "AND" || upper == "OR" || upper == "NOT" {
+            return upper;
+        }
+        // Pass through column-specific queries (e.g., "title:vacation")
+        if term.contains(':') {
+            return term.to_string();
+        }
+        // Pass through explicit prefix queries
+        if term.ends_with('*') {
+            return term.to_string();
+        }
+        // Escape and add wildcard for prefix matching
+        let escaped = term.replace('"', "");
+        format!("\"{}\"*", escaped)
+    }
+
+    /// Search using parsed operators mapped to FTS5 boolean syntax.
+    /// Converts ParsedSearchTerms (AND/OR/NOT) into FTS5 query syntax.
+    pub async fn search_with_operators_fts5(
+        &self,
+        parsed: &ParsedSearchTerms,
+        kind: Option<&str>,
+        limit: usize,
+    ) -> Result<SearchResults> {
+        let fts_query = Self::parsed_terms_to_fts5(parsed);
+        if fts_query.is_empty() {
+            return Ok(SearchResults {
+                memories: vec![],
+                total_count: 0,
+                suggested_tags: vec![],
+                clusters: vec![],
+            });
+        }
+        self.search_fts5(&fts_query, kind, limit).await
+    }
+
+    /// Convert ParsedSearchTerms to FTS5 query syntax
+    fn parsed_terms_to_fts5(parsed: &ParsedSearchTerms) -> String {
+        let mut parts = Vec::new();
+
+        // Must match terms (AND - implicit in FTS5)
+        for term in &parsed.must_match {
+            if term.is_phrase {
+                parts.push(format!("\"{}\"", term.value.replace('"', "")));
+            } else {
+                parts.push(format!("\"{}\"*", term.value.replace('"', "")));
+            }
+        }
+
+        // Should match terms (OR)
+        if !parsed.should_match.is_empty() {
+            let or_parts: Vec<String> = parsed
+                .should_match
+                .iter()
+                .map(|term| {
+                    if term.is_phrase {
+                        format!("\"{}\"", term.value.replace('"', ""))
+                    } else {
+                        format!("\"{}\"*", term.value.replace('"', ""))
+                    }
+                })
+                .collect();
+            if or_parts.len() == 1 {
+                parts.push(or_parts.into_iter().next().unwrap());
+            } else {
+                parts.push(format!("({})", or_parts.join(" OR ")));
+            }
+        }
+
+        // Must NOT match terms
+        for term in &parsed.must_not_match {
+            if term.is_phrase {
+                parts.push(format!("NOT \"{}\"", term.value.replace('"', "")));
+            } else {
+                parts.push(format!("NOT \"{}\"*", term.value.replace('"', "")));
+            }
+        }
+
+        parts.join(" ")
+    }
+
     /// Fuzzy search for typo-tolerant matching
     pub async fn fuzzy_search(&self, query: &str, limit: usize) -> Result<SearchResults> {
         // First try exact search

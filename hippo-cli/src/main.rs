@@ -1,5 +1,7 @@
 #![allow(missing_docs)]
 
+mod tui;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
@@ -190,6 +192,10 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+
+    /// Launch the interactive TUI - browse and manage files visually
+    #[command(alias = "ui", alias = "interactive")]
+    Tui,
 }
 
 #[derive(Tabled)]
@@ -1350,6 +1356,9 @@ async fn main() -> Result<()> {
             } else {
                 print_info("Cancelled");
             }
+        }
+        Commands::Tui => {
+            tui::run(&hippo).await?;
         }
     }
 

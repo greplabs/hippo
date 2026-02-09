@@ -91,6 +91,10 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 sha2 = "0.10"              # For duplicate detection
 ctrlc = "3.4"              # For Ctrl+C handling
 
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
 # Memory optimization
 lru = "0.12"               # LRU cache for thumbnails/embeddings
 parking_lot = "0.12"       # Faster mutexes
