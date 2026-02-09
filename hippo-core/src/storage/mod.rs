@@ -17,6 +17,7 @@ pub struct Fts5SearchResult {
     pub title_snippet: Option<String>,
     pub filename_snippet: Option<String>,
     pub tags_snippet: Option<String>,
+    pub content_snippet: Option<String>,
 }
 
 /// Helper to parse JSON from database, converting errors to rusqlite errors
@@ -191,6 +192,12 @@ impl Storage {
         // Migration: Add color column to tags table
         let _ = conn.execute("ALTER TABLE tags ADD COLUMN color TEXT", []);
 
+        // Migration: Add text_preview column for FTS content search
+        let _ = conn.execute(
+            "ALTER TABLE memories ADD COLUMN text_preview TEXT",
+            [],
+        );
+
         // Create indexes for faster queries (5-50x improvement for filtered queries)
         // Core indexes
         let _ = conn.execute(
@@ -244,51 +251,59 @@ impl Storage {
             [],
         );
 
-        // FTS5 full-text search index for fast text matching (5-10x faster than LIKE)
-        // columnsize=1 enables efficient bm25() ranking
+        // Check if FTS table needs rebuild (to add text_preview column)
+        let needs_fts_rebuild: bool = conn
+            .prepare("SELECT * FROM memories_fts LIMIT 0")
+            .map(|stmt| stmt.column_count() < 5)
+            .unwrap_or(true);
+
+        if needs_fts_rebuild {
+            let _ = conn.execute("DROP TRIGGER IF EXISTS memories_fts_insert", []);
+            let _ = conn.execute("DROP TRIGGER IF EXISTS memories_fts_delete", []);
+            let _ = conn.execute("DROP TRIGGER IF EXISTS memories_fts_update", []);
+            let _ = conn.execute("DROP TABLE IF EXISTS memories_fts", []);
+        }
+
+        // FTS5 with text_preview, porter stemmer, and columnsize for bm25
         let _ = conn.execute(
             r#"CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-                id,
-                title,
-                filename,
-                tags_text,
-                content='memories',
-                content_rowid='rowid',
-                tokenize='porter unicode61',
-                columnsize=1
+                id, title, filename, tags_text, text_preview,
+                content='memories', content_rowid='rowid',
+                tokenize='porter unicode61', columnsize=1
             )"#,
             [],
         );
 
-        // Create triggers to keep FTS index in sync
+        // Triggers updated to include text_preview
         let _ = conn.execute(
             r#"CREATE TRIGGER IF NOT EXISTS memories_fts_insert AFTER INSERT ON memories BEGIN
-                INSERT INTO memories_fts(rowid, id, title, filename, tags_text)
-                VALUES (NEW.rowid, NEW.id, NEW.title, NEW.filename, NEW.tags_text);
+                INSERT INTO memories_fts(rowid, id, title, filename, tags_text, text_preview)
+                VALUES (NEW.rowid, NEW.id, NEW.title, NEW.filename, NEW.tags_text, NEW.text_preview);
             END"#,
             [],
         );
         let _ = conn.execute(
             r#"CREATE TRIGGER IF NOT EXISTS memories_fts_delete AFTER DELETE ON memories BEGIN
-                INSERT INTO memories_fts(memories_fts, rowid, id, title, filename, tags_text)
-                VALUES ('delete', OLD.rowid, OLD.id, OLD.title, OLD.filename, OLD.tags_text);
+                INSERT INTO memories_fts(memories_fts, rowid, id, title, filename, tags_text, text_preview)
+                VALUES ('delete', OLD.rowid, OLD.id, OLD.title, OLD.filename, OLD.tags_text, OLD.text_preview);
             END"#,
             [],
         );
         let _ = conn.execute(
             r#"CREATE TRIGGER IF NOT EXISTS memories_fts_update AFTER UPDATE ON memories BEGIN
-                INSERT INTO memories_fts(memories_fts, rowid, id, title, filename, tags_text)
-                VALUES ('delete', OLD.rowid, OLD.id, OLD.title, OLD.filename, OLD.tags_text);
-                INSERT INTO memories_fts(rowid, id, title, filename, tags_text)
-                VALUES (NEW.rowid, NEW.id, NEW.title, NEW.filename, NEW.tags_text);
+                INSERT INTO memories_fts(memories_fts, rowid, id, title, filename, tags_text, text_preview)
+                VALUES ('delete', OLD.rowid, OLD.id, OLD.title, OLD.filename, OLD.tags_text, OLD.text_preview);
+                INSERT INTO memories_fts(rowid, id, title, filename, tags_text, text_preview)
+                VALUES (NEW.rowid, NEW.id, NEW.title, NEW.filename, NEW.tags_text, NEW.text_preview);
             END"#,
             [],
         );
 
         // Populate FTS index from existing data
         let _ = conn.execute(
-            r#"INSERT OR IGNORE INTO memories_fts(rowid, id, title, filename, tags_text)
-               SELECT rowid, id, title, filename, tags_text FROM memories WHERE title IS NOT NULL"#,
+            r#"INSERT OR IGNORE INTO memories_fts(rowid, id, title, filename, tags_text, text_preview)
+               SELECT rowid, id, title, filename, tags_text, text_preview FROM memories
+               WHERE title IS NOT NULL OR filename IS NOT NULL"#,
             [],
         );
 
@@ -310,6 +325,13 @@ impl Storage {
                 END
             WHERE filename IS NULL OR kind_name IS NULL
         "#,
+            [],
+        );
+
+        // Populate text_preview from metadata_json for existing data
+        let _ = conn.execute(
+            r#"UPDATE memories SET text_preview = json_extract(metadata_json, '$.text_preview')
+               WHERE text_preview IS NULL AND json_extract(metadata_json, '$.text_preview') IS NOT NULL"#,
             [],
         );
 
@@ -357,13 +379,14 @@ impl Storage {
             .map(|t| t.name.clone())
             .collect::<Vec<_>>()
             .join(" ");
+        let text_preview = memory.metadata.text_preview.clone();
 
         db.execute(
             r#"INSERT OR REPLACE INTO memories
                (id, path, source_json, kind_json, metadata_json, tags_json,
                 embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at,
-                title, filename, extension, kind_name, tags_text)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)"#,
+                title, filename, extension, kind_name, tags_text, text_preview)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)"#,
             params![
                 memory.id.to_string(),
                 memory.path.to_string_lossy(),
@@ -382,6 +405,7 @@ impl Storage {
                 extension,
                 kind_name,
                 tags_text,
+                text_preview,
             ],
         )?;
 
@@ -1109,14 +1133,15 @@ impl Storage {
     ) -> Result<Vec<Fts5SearchResult>> {
         let db = self.get_db()?;
 
-        // BM25 weights: id=0, title=10, filename=8, tags=7
+        // BM25 weights: id=0, title=10, filename=8, tags=7, text_preview=5
         let sql = if kind.is_some() {
             r#"SELECT m.id, m.path, m.source_json, m.kind_json, m.metadata_json, m.tags_json,
                       m.embedding_id, m.connections_json, m.is_favorite, m.created_at, m.modified_at, m.indexed_at,
-                      bm25(memories_fts, 0.0, 10.0, 8.0, 7.0) as rank,
+                      bm25(memories_fts, 0.0, 10.0, 8.0, 7.0, 5.0) as rank,
                       snippet(memories_fts, 1, '<mark>', '</mark>', '...', 30) as title_snip,
                       snippet(memories_fts, 2, '<mark>', '</mark>', '...', 30) as filename_snip,
-                      snippet(memories_fts, 3, '<mark>', '</mark>', '...', 30) as tags_snip
+                      snippet(memories_fts, 3, '<mark>', '</mark>', '...', 30) as tags_snip,
+                      snippet(memories_fts, 4, '<mark>', '</mark>', '...', 40) as content_snip
                FROM memories m
                JOIN memories_fts fts ON m.id = fts.id
                WHERE memories_fts MATCH ?1 AND m.kind_name = ?2
@@ -1125,10 +1150,11 @@ impl Storage {
         } else {
             r#"SELECT m.id, m.path, m.source_json, m.kind_json, m.metadata_json, m.tags_json,
                       m.embedding_id, m.connections_json, m.is_favorite, m.created_at, m.modified_at, m.indexed_at,
-                      bm25(memories_fts, 0.0, 10.0, 8.0, 7.0) as rank,
+                      bm25(memories_fts, 0.0, 10.0, 8.0, 7.0, 5.0) as rank,
                       snippet(memories_fts, 1, '<mark>', '</mark>', '...', 30) as title_snip,
                       snippet(memories_fts, 2, '<mark>', '</mark>', '...', 30) as filename_snip,
-                      snippet(memories_fts, 3, '<mark>', '</mark>', '...', 30) as tags_snip
+                      snippet(memories_fts, 3, '<mark>', '</mark>', '...', 30) as tags_snip,
+                      snippet(memories_fts, 4, '<mark>', '</mark>', '...', 40) as content_snip
                FROM memories m
                JOIN memories_fts fts ON m.id = fts.id
                WHERE memories_fts MATCH ?1
@@ -1162,6 +1188,7 @@ impl Storage {
                         title_snippet: row.get(13)?,
                         filename_snippet: row.get(14)?,
                         tags_snippet: row.get(15)?,
+                        content_snippet: row.get(16)?,
                     })
                 })?
                 .filter_map(|r| r.ok())
@@ -1190,6 +1217,7 @@ impl Storage {
                         title_snippet: row.get(13)?,
                         filename_snippet: row.get(14)?,
                         tags_snippet: row.get(15)?,
+                        content_snippet: row.get(16)?,
                     })
                 })?
                 .filter_map(|r| r.ok())
@@ -1241,8 +1269,8 @@ impl Storage {
 
         // Repopulate from memories table
         let count: usize = db.execute(
-            r#"INSERT INTO memories_fts(rowid, id, title, filename, tags_text)
-               SELECT rowid, id, title, filename, tags_text FROM memories
+            r#"INSERT INTO memories_fts(rowid, id, title, filename, tags_text, text_preview)
+               SELECT rowid, id, title, filename, tags_text, text_preview FROM memories
                WHERE title IS NOT NULL OR filename IS NOT NULL"#,
             [],
         ).unwrap_or(0);
