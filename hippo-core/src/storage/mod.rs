@@ -1025,6 +1025,7 @@ impl Storage {
 
     /// Search memories using FTS5 full-text search (5-10x faster than LIKE)
     /// Falls back to LIKE search if FTS table doesn't exist
+    #[allow(clippy::await_holding_lock)]
     pub async fn search_fts(
         &self,
         query: &str,
@@ -1236,23 +1237,21 @@ impl Storage {
     pub async fn count_fts5_results(&self, fts_query: &str, kind: Option<&str>) -> Result<usize> {
         let db = self.get_db()?;
 
-        let result: std::result::Result<usize, rusqlite::Error> = (|| {
-            if let Some(k) = kind {
-                db.query_row(
-                    r#"SELECT COUNT(*) FROM memories m
-                       JOIN memories_fts fts ON m.id = fts.id
-                       WHERE memories_fts MATCH ?1 AND m.kind_name = ?2"#,
-                    params![fts_query, k],
-                    |row| row.get(0),
-                )
-            } else {
-                db.query_row(
-                    r#"SELECT COUNT(*) FROM memories_fts WHERE memories_fts MATCH ?1"#,
-                    params![fts_query],
-                    |row| row.get(0),
-                )
-            }
-        })();
+        let result: std::result::Result<usize, rusqlite::Error> = if let Some(k) = kind {
+            db.query_row(
+                r#"SELECT COUNT(*) FROM memories m
+                   JOIN memories_fts fts ON m.id = fts.id
+                   WHERE memories_fts MATCH ?1 AND m.kind_name = ?2"#,
+                params![fts_query, k],
+                |row| row.get(0),
+            )
+        } else {
+            db.query_row(
+                r#"SELECT COUNT(*) FROM memories_fts WHERE memories_fts MATCH ?1"#,
+                params![fts_query],
+                |row| row.get(0),
+            )
+        };
 
         Ok(result.unwrap_or(0))
     }
