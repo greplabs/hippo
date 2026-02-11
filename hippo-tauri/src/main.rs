@@ -2757,6 +2757,170 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
+// === Session 14: Saved Searches, Search History, Recent Files, Batch Rename, Paginated Search ===
+
+#[tauri::command]
+async fn save_search(
+    name: String,
+    query: String,
+    tags: Vec<String>,
+    filters: serde_json::Value,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    hippo
+        .save_search(&name, &query, &tags, &filters)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn list_saved_searches(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    let searches = hippo.list_saved_searches().await.map_err(|e| e.to_string())?;
+    Ok(serde_json::json!(searches))
+}
+
+#[tauri::command]
+async fn delete_saved_search(id: String, state: State<'_, AppState>) -> Result<String, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    hippo.delete_saved_search(&id).await.map_err(|e| e.to_string())?;
+    Ok("Deleted".to_string())
+}
+
+#[tauri::command]
+async fn use_saved_search(id: String, state: State<'_, AppState>) -> Result<String, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    hippo.use_saved_search(&id).await.map_err(|e| e.to_string())?;
+    Ok("Updated".to_string())
+}
+
+#[tauri::command]
+async fn add_search_history(
+    query: String,
+    result_count: usize,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    hippo
+        .add_search_history(&query, result_count)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok("Recorded".to_string())
+}
+
+#[tauri::command]
+async fn get_search_history(
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    let history = hippo
+        .get_search_history(limit.unwrap_or(20))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!(history))
+}
+
+#[tauri::command]
+async fn clear_search_history(state: State<'_, AppState>) -> Result<String, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    hippo.clear_search_history().await.map_err(|e| e.to_string())?;
+    Ok("Cleared".to_string())
+}
+
+#[tauri::command]
+async fn get_recent_files(
+    limit: Option<usize>,
+    days: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    let files = hippo
+        .get_recent_files(limit.unwrap_or(50), days.unwrap_or(7))
+        .await
+        .map_err(|e| e.to_string())?;
+    serde_json::to_value(files).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_recently_modified(
+    limit: Option<usize>,
+    days: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    let files = hippo
+        .get_recently_modified(limit.unwrap_or(50), days.unwrap_or(30))
+        .await
+        .map_err(|e| e.to_string())?;
+    serde_json::to_value(files).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn batch_rename(
+    memory_ids: Vec<String>,
+    template: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let ids: Vec<MemoryId> = memory_ids
+        .iter()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    let results = hippo
+        .batch_rename(&ids, &template)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!(results
+        .iter()
+        .map(|(id, old, new)| serde_json::json!({"id": id, "old_name": old, "new_name": new}))
+        .collect::<Vec<_>>()))
+}
+
+#[tauri::command]
+async fn search_paginated(
+    query: String,
+    tags: Vec<String>,
+    kind: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    let (memories, total) = hippo
+        .search_paginated(
+            &query,
+            &tags,
+            kind.as_deref(),
+            limit.unwrap_or(50),
+            offset.unwrap_or(0),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "memories": serde_json::to_value(&memories).map_err(|e| e.to_string())?,
+        "total": total,
+        "limit": limit.unwrap_or(50),
+        "offset": offset.unwrap_or(0),
+        "has_more": offset.unwrap_or(0) + memories.len() < total,
+    }))
+}
+
 /// Set up system tray with menu and event handlers
 fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Create tray menu items
@@ -2966,6 +3130,18 @@ fn main() {
             // Storage Optimization
             optimize_storage,
             vacuum_database,
+            // Session 14: Search & Navigation
+            save_search,
+            list_saved_searches,
+            delete_saved_search,
+            use_saved_search,
+            add_search_history,
+            get_search_history,
+            clear_search_history,
+            get_recent_files,
+            get_recently_modified,
+            batch_rename,
+            search_paginated,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

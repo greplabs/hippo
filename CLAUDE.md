@@ -1581,7 +1581,75 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress
 
-### Latest Checkpoint (February 8, 2026 - Session 13)
+### Latest Checkpoint (February 8, 2026 - Session 14)
+
+**Commit**: `c85b302` on `feature/session14-search-navigation` branch - PR #83
+
+**Release**: v1.2.0 (Session 13) - GitHub Release available
+
+**Session 14 PR**:
+| PR | Description |
+|----|-------------|
+| #83 | feat: Session 14 - Search & Navigation UX (5 features) |
+
+**Session 14 Features** (5 files changed, +965 lines):
+
+**Saved Searches** (DB-backed):
+- ✅ `saved_searches` SQLite table with CRUD operations
+- ✅ Save current search (query + tags + filters) with custom name
+- ✅ Use tracking (count + last_used_at) for sort-by-frequency
+- ✅ Sidebar section showing saved searches with click-to-run
+- ✅ Delete saved searches, save modal with details preview
+
+**Search History** (DB-backed):
+- ✅ `search_history` SQLite table replacing localStorage
+- ✅ Auto-cleanup at 50 entries
+- ✅ Loads from DB on app init
+- ✅ Result count shown in history dropdown
+- ✅ Clear history persisted to backend
+
+**Recently Added / Recently Modified Views**:
+- ✅ New sidebar nav items with clock/refresh icons
+- ✅ `get_recent_files(limit, days)` - files added in last N days
+- ✅ `get_recently_modified(limit, days)` - files modified in last N days
+- ✅ Optimized queries using `indexed_at` and `modified_at` indexes
+
+**Batch Rename**:
+- ✅ Template engine with `{name}`, `{ext}`, `{date}`, `{counter}`, `{type}`
+- ✅ Live preview modal showing old name → new name
+- ✅ Renames files on disk AND updates database
+- ✅ Bulk bar "Rename" button for selected files
+
+**Paginated Search / Infinite Scroll**:
+- ✅ `search_paginated()` with cursor-based pagination and total count
+- ✅ Infinite scroll: auto-loads more when scrolling near bottom
+- ✅ "Load More" button with remaining count
+- ✅ Result counter shows "X of Y files"
+
+**New Tauri Commands** (11):
+```
+save_search, list_saved_searches, delete_saved_search, use_saved_search,
+add_search_history, get_search_history, clear_search_history,
+get_recent_files, get_recently_modified, batch_rename, search_paginated
+```
+
+**New SQLite Tables**:
+```sql
+saved_searches (id, name, query, tags_json, filters_json, created_at, last_used_at, use_count)
+search_history (id, query, result_count, searched_at)
+```
+
+**Session 14 Roadmap** (planned across Sessions 14-17):
+| Session | Features | Status |
+|---------|----------|--------|
+| 14 | Saved Searches, Search History, Recent Views, Batch Rename, Paginated Search | ✅ Complete |
+| 15 | Drag & Drop, Global Hotkey, Scheduled Auto-indexing | Planned |
+| 16 | Knowledge Graph Visualization, Location Map | Planned |
+| 17 | Smart Collections, Natural Language Queries | Planned |
+
+---
+
+### Previous Checkpoint (February 8, 2026 - Session 13)
 
 **Commit**: `da69f79` on `main` branch - All PRs merged through #80
 
