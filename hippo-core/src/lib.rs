@@ -692,6 +692,140 @@ impl Hippo {
         // Then vacuum to reclaim space
         self.vacuum().await
     }
+
+    // === Saved Searches ===
+
+    pub async fn save_search(
+        &self,
+        name: &str,
+        query: &str,
+        tags: &[String],
+        filters: &serde_json::Value,
+    ) -> Result<String> {
+        let id = uuid::Uuid::new_v4().to_string();
+        self.storage
+            .save_search(&id, name, query, tags, filters)
+            .await?;
+        Ok(id)
+    }
+
+    pub async fn list_saved_searches(&self) -> Result<Vec<serde_json::Value>> {
+        self.storage.list_saved_searches().await
+    }
+
+    pub async fn delete_saved_search(&self, id: &str) -> Result<()> {
+        self.storage.delete_saved_search(id).await
+    }
+
+    pub async fn use_saved_search(&self, id: &str) -> Result<()> {
+        self.storage.use_saved_search(id).await
+    }
+
+    // === Search History ===
+
+    pub async fn add_search_history(&self, query: &str, result_count: usize) -> Result<()> {
+        self.storage.add_search_history(query, result_count).await
+    }
+
+    pub async fn get_search_history(&self, limit: usize) -> Result<Vec<serde_json::Value>> {
+        self.storage.get_search_history(limit).await
+    }
+
+    pub async fn clear_search_history(&self) -> Result<()> {
+        self.storage.clear_search_history().await
+    }
+
+    // === Recent Files ===
+
+    pub async fn get_recent_files(&self, limit: usize, days: usize) -> Result<Vec<Memory>> {
+        self.storage.get_recent_files(limit, days).await
+    }
+
+    pub async fn get_recently_modified(&self, limit: usize, days: usize) -> Result<Vec<Memory>> {
+        self.storage.get_recently_modified(limit, days).await
+    }
+
+    // === Batch Rename ===
+
+    pub async fn batch_rename(
+        &self,
+        memory_ids: &[MemoryId],
+        template: &str,
+    ) -> Result<Vec<(String, String, String)>> {
+        let mut results = Vec::new();
+        for (idx, id) in memory_ids.iter().enumerate() {
+            let memory = self.storage.get_memory(*id).await?;
+            if let Some(memory) = memory {
+                let old_path = memory.path.clone();
+                let old_name = old_path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let stem = old_path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let ext = old_path
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let kind_name = match &memory.kind {
+                    MemoryKind::Image { .. } => "image",
+                    MemoryKind::Video { .. } => "video",
+                    MemoryKind::Audio { .. } => "audio",
+                    MemoryKind::Document { .. } => "document",
+                    MemoryKind::Code { .. } => "code",
+                    _ => "file",
+                };
+                let date_str = memory.created_at.format("%Y-%m-%d").to_string();
+
+                let new_name = template
+                    .replace("{name}", &stem)
+                    .replace("{ext}", &ext)
+                    .replace("{date}", &date_str)
+                    .replace("{counter}", &format!("{:03}", idx + 1))
+                    .replace("{type}", kind_name);
+
+                let new_name = if !new_name.contains('.') && !ext.is_empty() {
+                    format!("{}.{}", new_name, ext)
+                } else {
+                    new_name
+                };
+
+                let new_path = old_path.parent().map(|p| p.join(&new_name));
+                if let Some(new_path) = new_path {
+                    // Rename on disk
+                    if old_path.exists() {
+                        if let Err(e) = std::fs::rename(&old_path, &new_path) {
+                            tracing::warn!("Failed to rename {:?}: {}", old_path, e);
+                            continue;
+                        }
+                    }
+                    // Update in database
+                    self.storage
+                        .rename_memory(&id.to_string(), &new_path)
+                        .await?;
+                    results.push((id.to_string(), old_name, new_name));
+                }
+            }
+        }
+        Ok(results)
+    }
+
+    // === Paginated Search ===
+
+    pub async fn search_paginated(
+        &self,
+        query: &str,
+        tags: &[String],
+        kind: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<(Vec<Memory>, usize)> {
+        self.storage
+            .search_paginated(query, tags, kind, limit, offset)
+            .await
+    }
 }
 
 // Re-export num_cpus for config default

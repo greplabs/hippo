@@ -576,6 +576,27 @@
     body.dark .search-history-clear { border-color: #44403c; }
     .search-history-clear button { font-size: 12px; color: #78716c; background: none; border: none; cursor: pointer; }
     .search-history-clear button:hover { color: #ef4444; }
+    .search-history-item .count { font-size: 11px; color: #a8a29e; background: #f5f5f4; padding: 1px 6px; border-radius: 8px; }
+    body.dark .search-history-item .count { background: #292524; }
+
+    /* Saved Searches */
+    .saved-searches-section { padding: 8px 0; }
+    .saved-search-item {
+      display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+      cursor: pointer; transition: background 0.1s; font-size: 13px; border-radius: 6px; margin: 0 8px;
+    }
+    .saved-search-item:hover { background: #f5f5f4; }
+    body.dark .saved-search-item:hover { background: #292524; }
+    .saved-search-item .icon { color: var(--accent-primary); flex-shrink: 0; }
+    .saved-search-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+    .saved-search-count { font-size: 10px; background: var(--accent-primary); color: white; padding: 1px 6px; border-radius: 8px; }
+    .saved-search-delete { padding: 2px; border-radius: 4px; opacity: 0; transition: opacity 0.1s; background: none; border: none; cursor: pointer; color: var(--text-muted); }
+    .saved-search-item:hover .saved-search-delete { opacity: 1; }
+    .saved-search-delete:hover { background: #e7e5e4; color: #ef4444; }
+    body.dark .saved-search-delete:hover { background: #44403c; }
+
+    /* Modal show state */
+    .modal-overlay.show { display: flex; }
 
     .active-tags { display: flex; gap: 6px; flex-wrap: wrap; }
     .active-tag {
@@ -1964,6 +1985,12 @@
           <button class="sidebar-nav-item" id="navTimeline" data-view="timeline"><span class="icon icon-sm" id="navTimelineIcon"></span> Timeline</button>
           <button class="sidebar-nav-item" id="navCollections" data-view="collections"><span class="icon icon-sm" id="navCollectionsIcon"></span> Collections</button>
           <button class="sidebar-nav-item" id="navDuplicates" data-view="duplicates"><span class="icon icon-sm" id="navDupIcon"></span> Duplicates</button>
+          <button class="sidebar-nav-item" id="navRecent" data-view="recent"><span class="icon icon-sm" id="navRecentIcon"></span> Recently Added</button>
+          <button class="sidebar-nav-item" id="navModified" data-view="modified"><span class="icon icon-sm" id="navModifiedIcon"></span> Recently Modified</button>
+        </div>
+        <div class="saved-searches-section" id="savedSearchesSection">
+          <p class="section-title">Saved Searches</p>
+          <div id="savedSearchesList"></div>
         </div>
         <div class="collections-section" id="collectionsSection" style="display:none;">
           <p class="section-title">Collections</p>
@@ -1999,6 +2026,7 @@
             <button class="search-mode-btn active" id="searchModeText" data-mode="text" title="Search by filename, path, and tags (instant results as you type)"><span class="icon icon-sm" id="searchModeTextIcon"></span> Text</button>
             <button class="search-mode-btn" id="searchModeSemantic" data-mode="semantic" title="AI-powered semantic search (press Enter to search)"><span class="icon icon-sm" id="searchModeSemanticIcon"></span> AI</button>
             <button class="search-mode-btn" id="searchModeSymbol" data-mode="symbol" title="Search code symbols: functions, classes, imports (press Enter)"><span class="icon icon-sm" id="searchModeSymbolIcon"></span> Code</button>
+            <button class="search-mode-btn" id="saveSearchBtn" title="Save current search" style="margin-left:4px;"><span class="icon icon-sm" id="saveSearchIcon"></span></button>
           </div>
         </div>
         <div class="tag-bar" id="tagBar"></div>
@@ -2183,6 +2211,7 @@
     <div class="bulk-divider"></div>
     <button class="bulk-btn" id="bulkFavorite"><span class="icon icon-sm" id="bulkStarIcon"></span> Favorite</button>
     <button class="bulk-btn" id="bulkTag"><span class="icon icon-sm" id="bulkTagIcon"></span> Add Tag</button>
+    <button class="bulk-btn" id="bulkRename"><span class="icon icon-sm" id="bulkRenameIcon"></span> Rename</button>
     <button class="bulk-btn" id="bulkDelete" style="color: #ef4444;"><span class="icon icon-sm" id="bulkDeleteIcon"></span> Delete</button>
     <button class="bulk-btn" id="bulkSelectAll"><span class="icon icon-sm" id="bulkSelectIcon"></span> Select All</button>
     <button class="bulk-close" id="bulkClose"><span class="icon icon-sm" id="bulkCloseIcon"></span></button>
@@ -2251,6 +2280,33 @@
       </div>
       <div style="text-align:right;margin-top:16px;">
         <button class="adv-filter-clear" onclick="closeExportModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch Rename Modal -->
+  <div class="modal-overlay" id="renameModal">
+    <div class="modal" style="min-width:450px;">
+      <h3 class="modal-title">Batch Rename <span id="renameCount">0</span> Files</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Use template variables: {name}, {ext}, {date}, {counter}, {type}</p>
+      <input type="text" class="modal-input" id="renameTemplate" placeholder="{name}_{date}_{counter}" value="{name}_{counter}" autocomplete="off" style="margin-bottom:12px;">
+      <div id="renamePreview" style="max-height:200px;overflow-y:auto;font-size:12px;border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:12px;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="adv-filter-clear" onclick="closeRenameModal()">Cancel</button>
+        <button class="adv-filter-apply" id="renameApplyBtn" onclick="applyBatchRename()">Rename Files</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save Search Modal -->
+  <div class="modal-overlay" id="saveSearchModal">
+    <div class="modal" style="min-width:350px;">
+      <h3 class="modal-title">Save Search</h3>
+      <input type="text" class="modal-input" id="saveSearchName" placeholder="Search name..." autocomplete="off" style="margin-bottom:12px;">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;" id="saveSearchDetails"></p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="adv-filter-clear" onclick="closeSaveSearchModal()">Cancel</button>
+        <button class="adv-filter-apply" onclick="confirmSaveSearch()">Save</button>
       </div>
     </div>
   </div>
@@ -3285,6 +3341,8 @@
         memory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.08"/><circle cx="12" cy="12" r="9"/><path d="M12 6v2"/><path d="M12 16v2"/><path d="M6 12h2"/><path d="M16 12h2"/><circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.2"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>',
         // Clock icon for history
         clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+        bookmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>',
+        edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
         // Organize/magic wand icon
         organize: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 4-1 1 4 4 1-1a2.83 2.83 0 1 0-4-4Z"/><path d="m13 6-8.5 8.5a2.12 2.12 0 1 0 3 3L16 9"/><path d="m8 15 2 2"/><path d="M3 21h4"/><path d="M17 21h4"/><path d="M19 17v4"/><path d="M5 17v4"/></svg>',
         // Keyboard shortcuts icon
@@ -3442,6 +3500,7 @@
         document.getElementById('bulkTagIcon').innerHTML = icons.tag;
         document.getElementById('bulkSelectIcon').innerHTML = icons.checkSquare;
         document.getElementById('bulkDeleteIcon').innerHTML = icons.trash;
+        document.getElementById('bulkRenameIcon').innerHTML = icons.edit;
         document.getElementById('bulkCloseIcon').innerHTML = icons.close;
         // Refresh icon
         document.getElementById('refreshIcon').innerHTML = icons.refresh;
@@ -3451,6 +3510,10 @@
         document.getElementById('navTimelineIcon').innerHTML = icons.calendar;
         document.getElementById('navCollectionsIcon').innerHTML = icons.layers;
         document.getElementById('navDupIcon').innerHTML = icons.copy;
+        document.getElementById('navRecentIcon').innerHTML = icons.clock;
+        document.getElementById('navModifiedIcon').innerHTML = icons.refresh;
+        // Save search icon
+        document.getElementById('saveSearchIcon').innerHTML = icons.bookmark;
         // Filter/export icons
         document.getElementById('advFilterIcon').innerHTML = icons.filter;
         document.getElementById('exportBtnIcon').innerHTML = icons.upload;
@@ -3892,6 +3955,11 @@
               document.documentElement.scrollTop = 0;
             }, 100);
 
+            // Load saved searches and search history from DB
+            loadSavedSearches();
+            loadSearchHistoryFromDB();
+            setupInfiniteScroll();
+
             // Check Ollama status in background
             invoke('ollama_status').then(function(status) {
               ollamaAvailable = status.available;
@@ -3961,34 +4029,37 @@
           }
         }
 
-        // Search history functions
+        // Search history functions (DB-backed)
         function addToSearchHistory(query, resultCount) {
-          // Remove duplicate if exists
+          // Save locally for instant UI
           searchHistory = searchHistory.filter(function(h) { return h.query !== query; });
-          // Add to front
-          searchHistory.unshift({
-            query: query,
-            count: resultCount,
-            time: Date.now()
+          searchHistory.unshift({ query: query, count: resultCount, time: Date.now() });
+          if (searchHistory.length > maxHistoryItems) searchHistory = searchHistory.slice(0, maxHistoryItems);
+          // Persist to backend
+          invoke('add_search_history', { query: query, resultCount: resultCount }).catch(function(e) {
+            console.warn('[Hippo] Failed to save search history:', e);
           });
-          // Limit size
-          if (searchHistory.length > maxHistoryItems) {
-            searchHistory = searchHistory.slice(0, maxHistoryItems);
-          }
-          // Save
-          localStorage.setItem('hippo-search-history', JSON.stringify(searchHistory));
         }
 
         function removeFromSearchHistory(index) {
           searchHistory.splice(index, 1);
-          localStorage.setItem('hippo-search-history', JSON.stringify(searchHistory));
           renderSearchHistory();
         }
 
         function clearSearchHistory() {
           searchHistory = [];
-          localStorage.setItem('hippo-search-history', '[]');
+          invoke('clear_search_history').catch(function() {});
           hideSearchHistory();
+        }
+
+        function loadSearchHistoryFromDB() {
+          invoke('get_search_history', { limit: 20 }).then(function(history) {
+            if (history && history.length > 0) {
+              searchHistory = history.map(function(h) {
+                return { query: h.query, count: h.result_count, time: new Date(h.searched_at).getTime() };
+              });
+            }
+          }).catch(function() {});
         }
 
         function showSearchHistory() {
@@ -4002,16 +4073,14 @@
         }
 
         function renderSearchHistory() {
-          if (searchHistory.length === 0) {
-            hideSearchHistory();
-            return;
-          }
+          if (searchHistory.length === 0) { hideSearchHistory(); return; }
           var html = '<div class="search-history-section">';
           html += '<div class="search-history-label">Recent Searches</div>';
           searchHistory.forEach(function(h, i) {
             html += '<div class="search-history-item" data-index="' + i + '">';
             html += '<span class="icon icon-sm">' + icons.clock + '</span>';
             html += '<span class="query">' + esc(h.query) + '</span>';
+            if (h.count > 0) html += '<span class="count">' + h.count + ' results</span>';
             html += '<span class="time">' + getTimeAgo(h.time) + '</span>';
             html += '<button class="remove" data-index="' + i + '" title="Remove">' + icons.close + '</button>';
             html += '</div>';
@@ -4019,21 +4088,11 @@
           html += '</div>';
           html += '<div class="search-history-clear"><button id="clearHistoryBtn">Clear History</button></div>';
           document.getElementById('searchHistoryDropdown').innerHTML = html;
-
-          // Add clear button handler
           var clearBtn = document.getElementById('clearHistoryBtn');
-          if (clearBtn) {
-            clearBtn.onclick = clearSearchHistory;
-          }
-
-          // Add click handlers
+          if (clearBtn) clearBtn.onclick = clearSearchHistory;
           document.querySelectorAll('.search-history-item').forEach(function(item) {
             item.onclick = function(e) {
-              if (e.target.closest('.remove')) {
-                e.stopPropagation();
-                removeFromSearchHistory(parseInt(item.dataset.index));
-                return;
-              }
+              if (e.target.closest('.remove')) { e.stopPropagation(); removeFromSearchHistory(parseInt(item.dataset.index)); return; }
               var query = searchHistory[parseInt(item.dataset.index)].query;
               document.getElementById('searchInput').value = query;
               search(query);
@@ -4051,6 +4110,240 @@
           if (hours < 24) return hours + 'h ago';
           var days = Math.floor(hours / 24);
           return days + 'd ago';
+        }
+
+        // === Saved Searches ===
+        var savedSearches = [];
+
+        function loadSavedSearches() {
+          invoke('list_saved_searches').then(function(searches) {
+            savedSearches = searches || [];
+            renderSavedSearches();
+          }).catch(function() {});
+        }
+
+        function renderSavedSearches() {
+          var el = document.getElementById('savedSearchesList');
+          if (!el) return;
+          if (savedSearches.length === 0) {
+            el.innerHTML = '<p style="font-size:11px;color:var(--text-muted);padding:4px 12px;">No saved searches yet</p>';
+            return;
+          }
+          var html = '';
+          savedSearches.forEach(function(s) {
+            html += '<div class="saved-search-item" data-id="' + s.id + '">';
+            html += '<span class="icon icon-sm">' + icons.search + '</span>';
+            html += '<span class="saved-search-name">' + esc(s.name) + '</span>';
+            if (s.use_count > 0) html += '<span class="saved-search-count">' + s.use_count + '</span>';
+            html += '<button class="saved-search-delete" data-id="' + s.id + '" title="Delete">' + icons.close + '</button>';
+            html += '</div>';
+          });
+          el.innerHTML = html;
+          el.querySelectorAll('.saved-search-item').forEach(function(item) {
+            item.onclick = function(e) {
+              if (e.target.closest('.saved-search-delete')) {
+                e.stopPropagation();
+                var id = e.target.closest('.saved-search-delete').dataset.id;
+                invoke('delete_saved_search', { id: id }).then(function() {
+                  loadSavedSearches();
+                  showToast('Search deleted', 'success');
+                });
+                return;
+              }
+              var ss = savedSearches.find(function(x) { return x.id === item.dataset.id; });
+              if (ss) {
+                document.getElementById('searchInput').value = ss.query || '';
+                activeTags = ss.tags || [];
+                renderActiveTags();
+                search(ss.query || '', true);
+                invoke('use_saved_search', { id: ss.id }).catch(function() {});
+              }
+            };
+          });
+        }
+
+        function openSaveSearchModal() {
+          var query = document.getElementById('searchInput').value.trim();
+          if (!query && activeTags.length === 0) {
+            showToast('Enter a search query or add tags first', 'warning');
+            return;
+          }
+          document.getElementById('saveSearchName').value = '';
+          var details = [];
+          if (query) details.push('Query: "' + query + '"');
+          if (activeTags.length > 0) details.push('Tags: ' + activeTags.join(', '));
+          document.getElementById('saveSearchDetails').textContent = details.join(' | ');
+          document.getElementById('saveSearchModal').classList.add('show');
+          setTimeout(function() { document.getElementById('saveSearchName').focus(); }, 100);
+        }
+
+        function closeSaveSearchModal() {
+          document.getElementById('saveSearchModal').classList.remove('show');
+        }
+
+        function confirmSaveSearch() {
+          var name = document.getElementById('saveSearchName').value.trim();
+          if (!name) { showToast('Enter a name for this search', 'warning'); return; }
+          var query = document.getElementById('searchInput').value.trim();
+          invoke('save_search', {
+            name: name,
+            query: query,
+            tags: activeTags,
+            filters: {}
+          }).then(function() {
+            closeSaveSearchModal();
+            loadSavedSearches();
+            showToast('Search saved: ' + name, 'success');
+          }).catch(function(e) {
+            showToast('Failed to save search: ' + e, 'error');
+          });
+        }
+
+        // === Recent Files Views ===
+
+        function loadRecentFiles() {
+          invoke('get_recent_files', { limit: 100, days: 7 }).then(function(files) {
+            memories = files || [];
+            renderFiles();
+            document.getElementById('resultCount').textContent = memories.length + ' recently added';
+          }).catch(function(e) {
+            console.error('[Hippo] Failed to load recent files:', e);
+          });
+        }
+
+        function loadRecentlyModified() {
+          invoke('get_recently_modified', { limit: 100, days: 30 }).then(function(files) {
+            memories = files || [];
+            renderFiles();
+            document.getElementById('resultCount').textContent = memories.length + ' recently modified';
+          }).catch(function(e) {
+            console.error('[Hippo] Failed to load recently modified:', e);
+          });
+        }
+
+        // === Batch Rename ===
+
+        function openRenameModal() {
+          var selIds = selectedIds;
+          if (selectedIds.length === 0) { showToast('Select files first', 'warning'); return; }
+          document.getElementById('renameCount').textContent = selectedIds.length;
+          document.getElementById('renameTemplate').value = '{name}_{counter}';
+          updateRenamePreview();
+          document.getElementById('renameModal').classList.add('show');
+        }
+
+        function closeRenameModal() {
+          document.getElementById('renameModal').classList.remove('show');
+        }
+
+        function updateRenamePreview() {
+          var template = document.getElementById('renameTemplate').value;
+          var previewEl = document.getElementById('renamePreview');
+          var previews = [];
+          selectedIds.slice(0, 10).forEach(function(id, idx) {
+            var mem = memories.find(function(m) { return m.id === id; });
+            if (!mem) return;
+            var filename = (mem.path || '').split('/').pop() || '';
+            var ext = filename.includes('.') ? filename.split('.').pop() : '';
+            var stem = filename.includes('.') ? filename.slice(0, filename.lastIndexOf('.')) : filename;
+            var kind = (mem.kind && Object.keys(mem.kind)[0]) || 'file';
+            var date = mem.created_at ? mem.created_at.slice(0, 10) : 'unknown';
+            var newName = template
+              .replace(/\{name\}/g, stem)
+              .replace(/\{ext\}/g, ext)
+              .replace(/\{date\}/g, date)
+              .replace(/\{counter\}/g, String(idx + 1).padStart(3, '0'))
+              .replace(/\{type\}/g, kind.toLowerCase());
+            if (!newName.includes('.') && ext) newName += '.' + ext;
+            previews.push('<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-muted);text-decoration:line-through;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(filename) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(newName) + '</span></div>');
+          });
+          if (selectedIds.length > 10) previews.push('<div style="padding:4px 0;color:var(--text-muted);">... and ' + (selectedIds.length - 10) + ' more</div>');
+          previewEl.innerHTML = previews.join('') || '<div style="color:var(--text-muted);">No preview available</div>';
+        }
+
+        function applyBatchRename() {
+          var template = document.getElementById('renameTemplate').value.trim();
+          if (!template) { showToast('Enter a template', 'warning'); return; }
+          invoke('batch_rename', { memoryIds: selectedIds, template: template }).then(function(results) {
+            closeRenameModal();
+            var count = results ? results.length : 0;
+            showToast(count + ' files renamed', 'success');
+            search(lastSearchQuery, true); // Reload
+          }).catch(function(e) {
+            showToast('Rename failed: ' + e, 'error');
+          });
+        }
+
+        // === Paginated Search / Infinite Scroll ===
+        var searchOffset = 0;
+        var searchPageSize = 50;
+        var searchTotal = 0;
+        var isLoadingMore = false;
+        var hasMoreResults = false;
+
+        function searchPaginated(query, tags, reset) {
+          if (reset) {
+            searchOffset = 0;
+            memories = [];
+          }
+          if (isLoadingMore) return;
+          isLoadingMore = true;
+
+          invoke('search_paginated', {
+            query: query || '',
+            tags: tags || activeTags,
+            kind: filterType === 'all' || filterType === 'favorites' ? null : filterType,
+            limit: searchPageSize,
+            offset: searchOffset
+          }).then(function(r) {
+            isLoadingMore = false;
+            searchTotal = r.total;
+            hasMoreResults = r.has_more;
+            var newMemories = r.memories || [];
+            if (reset) {
+              memories = newMemories;
+            } else {
+              memories = memories.concat(newMemories);
+            }
+            searchOffset += newMemories.length;
+            renderFiles();
+            document.getElementById('resultCount').textContent = memories.length + ' of ' + searchTotal + ' files';
+            if (hasMoreResults) {
+              showLoadMoreIndicator();
+            }
+          }).catch(function(e) {
+            isLoadingMore = false;
+            console.error('[Hippo] Paginated search failed:', e);
+          });
+        }
+
+        function showLoadMoreIndicator() {
+          var content = document.getElementById('content');
+          var existing = document.getElementById('loadMoreIndicator');
+          if (existing) existing.remove();
+          if (!hasMoreResults) return;
+          var indicator = document.createElement('div');
+          indicator.id = 'loadMoreIndicator';
+          indicator.style.cssText = 'text-align:center;padding:20px;color:var(--text-muted);font-size:13px;';
+          indicator.innerHTML = '<button onclick="loadMoreResults()" style="background:var(--accent-primary);color:white;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;">Load More (' + (searchTotal - memories.length) + ' remaining)</button>';
+          content.appendChild(indicator);
+        }
+
+        function loadMoreResults() {
+          var query = document.getElementById('searchInput').value.trim();
+          searchPaginated(query, activeTags, false);
+        }
+
+        function setupInfiniteScroll() {
+          var content = document.getElementById('content');
+          if (!content) return;
+          content.addEventListener('scroll', function() {
+            if (isLoadingMore || !hasMoreResults) return;
+            var threshold = 200;
+            if (content.scrollHeight - content.scrollTop - content.clientHeight < threshold) {
+              loadMoreResults();
+            }
+          });
         }
 
         function renderSources() {
@@ -5993,6 +6286,12 @@
           } else if (view === 'duplicates') {
             openDupManager();
             filterType = 'all';
+          } else if (view === 'recent') {
+            filterType = 'all';
+            loadRecentFiles();
+          } else if (view === 'modified') {
+            filterType = 'all';
+            loadRecentlyModified();
           } else {
             filterType = 'all';
             renderFiles();
@@ -6775,6 +7074,20 @@
 
         document.getElementById('bulkTag').onclick = function() {
           openTagModal();
+        };
+
+        document.getElementById('bulkRename').onclick = function() {
+          openRenameModal();
+        };
+
+        // Save search button
+        document.getElementById('saveSearchBtn').onclick = function() {
+          openSaveSearchModal();
+        };
+
+        // Rename template live preview
+        document.getElementById('renameTemplate').oninput = function() {
+          updateRenamePreview();
         };
 
         document.getElementById('bulkSelectAll').onclick = function() {

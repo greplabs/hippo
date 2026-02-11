@@ -335,6 +335,33 @@ impl Storage {
             [],
         );
 
+        // === Session 14: Saved Searches & Search History tables ===
+
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS saved_searches (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                query TEXT NOT NULL DEFAULT '',
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                filters_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                last_used_at TEXT,
+                use_count INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS search_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                query TEXT NOT NULL,
+                result_count INTEGER NOT NULL DEFAULT 0,
+                searched_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_search_history_searched_at
+                ON search_history(searched_at DESC);
+            "#,
+        )?;
+
         Ok(())
     }
 
@@ -1775,6 +1802,285 @@ impl Storage {
         );
 
         Ok(stats)
+    }
+
+    // === Saved Searches ===
+
+    pub async fn save_search(
+        &self,
+        id: &str,
+        name: &str,
+        query: &str,
+        tags: &[String],
+        filters: &serde_json::Value,
+    ) -> Result<()> {
+        let db = self.get_db()?;
+        let now = chrono::Utc::now().to_rfc3339();
+        db.execute(
+            "INSERT OR REPLACE INTO saved_searches (id, name, query, tags_json, filters_json, created_at, last_used_at, use_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 0)",
+            params![
+                id,
+                name,
+                query,
+                serde_json::to_string(tags).unwrap_or_else(|_| "[]".to_string()),
+                serde_json::to_string(filters).unwrap_or_else(|_| "{}".to_string()),
+                now
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub async fn list_saved_searches(&self) -> Result<Vec<serde_json::Value>> {
+        let db = self.get_db()?;
+        let mut stmt = db.prepare(
+            "SELECT id, name, query, tags_json, filters_json, created_at, last_used_at, use_count
+             FROM saved_searches ORDER BY use_count DESC, last_used_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let tags_str: String = row.get(3)?;
+            let filters_str: String = row.get(4)?;
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "name": row.get::<_, String>(1)?,
+                "query": row.get::<_, String>(2)?,
+                "tags": serde_json::from_str::<serde_json::Value>(&tags_str).unwrap_or(serde_json::json!([])),
+                "filters": serde_json::from_str::<serde_json::Value>(&filters_str).unwrap_or(serde_json::json!({})),
+                "created_at": row.get::<_, String>(5)?,
+                "last_used_at": row.get::<_, Option<String>>(6)?,
+                "use_count": row.get::<_, i64>(7)?,
+            }))
+        })?;
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row?);
+        }
+        Ok(results)
+    }
+
+    pub async fn delete_saved_search(&self, id: &str) -> Result<()> {
+        let db = self.get_db()?;
+        db.execute("DELETE FROM saved_searches WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub async fn use_saved_search(&self, id: &str) -> Result<()> {
+        let db = self.get_db()?;
+        let now = chrono::Utc::now().to_rfc3339();
+        db.execute(
+            "UPDATE saved_searches SET use_count = use_count + 1, last_used_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        Ok(())
+    }
+
+    // === Search History ===
+
+    pub async fn add_search_history(&self, query: &str, result_count: usize) -> Result<()> {
+        let db = self.get_db()?;
+        let now = chrono::Utc::now().to_rfc3339();
+        db.execute(
+            "INSERT INTO search_history (query, result_count, searched_at) VALUES (?1, ?2, ?3)",
+            params![query, result_count as i64, now],
+        )?;
+        // Keep max 50 entries
+        db.execute(
+            "DELETE FROM search_history WHERE id NOT IN (SELECT id FROM search_history ORDER BY searched_at DESC LIMIT 50)",
+            [],
+        )?;
+        Ok(())
+    }
+
+    pub async fn get_search_history(&self, limit: usize) -> Result<Vec<serde_json::Value>> {
+        let db = self.get_db()?;
+        let mut stmt = db.prepare(
+            "SELECT id, query, result_count, searched_at FROM search_history ORDER BY searched_at DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, i64>(0)?,
+                "query": row.get::<_, String>(1)?,
+                "result_count": row.get::<_, i64>(2)?,
+                "searched_at": row.get::<_, String>(3)?,
+            }))
+        })?;
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row?);
+        }
+        Ok(results)
+    }
+
+    pub async fn clear_search_history(&self) -> Result<()> {
+        let db = self.get_db()?;
+        db.execute("DELETE FROM search_history", [])?;
+        Ok(())
+    }
+
+    // === Recent Files ===
+
+    pub async fn get_recent_files(&self, limit: usize, days: usize) -> Result<Vec<Memory>> {
+        let db = self.get_db()?;
+        let cutoff = (chrono::Utc::now() - chrono::Duration::days(days as i64)).to_rfc3339();
+        let mut stmt = db.prepare(
+            "SELECT id, path, source_json, kind_json, metadata_json, tags_json,
+                    embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
+             FROM memories WHERE indexed_at >= ?1 ORDER BY indexed_at DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![cutoff, limit as i64], |row| {
+            Ok(Memory {
+                id: parse_uuid(&row.get::<_, String>(0)?)?,
+                path: std::path::PathBuf::from(row.get::<_, String>(1)?),
+                source: parse_json(&row.get::<_, String>(2)?)?,
+                kind: parse_json(&row.get::<_, String>(3)?)?,
+                metadata: parse_json(&row.get::<_, String>(4)?)?,
+                tags: parse_json(&row.get::<_, String>(5)?)?,
+                embedding_id: row.get(6)?,
+                connections: parse_json(&row.get::<_, String>(7)?)?,
+                is_favorite: row.get::<_, i32>(8)? != 0,
+                created_at: parse_datetime(&row.get::<_, String>(9)?)?,
+                modified_at: parse_datetime(&row.get::<_, String>(10)?)?,
+                indexed_at: parse_datetime(&row.get::<_, String>(11)?)?,
+            })
+        })?;
+        Ok(rows.flatten().collect())
+    }
+
+    pub async fn get_recently_modified(&self, limit: usize, days: usize) -> Result<Vec<Memory>> {
+        let db = self.get_db()?;
+        let cutoff = (chrono::Utc::now() - chrono::Duration::days(days as i64)).to_rfc3339();
+        let mut stmt = db.prepare(
+            "SELECT id, path, source_json, kind_json, metadata_json, tags_json,
+                    embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
+             FROM memories WHERE modified_at >= ?1 ORDER BY modified_at DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![cutoff, limit as i64], |row| {
+            Ok(Memory {
+                id: parse_uuid(&row.get::<_, String>(0)?)?,
+                path: std::path::PathBuf::from(row.get::<_, String>(1)?),
+                source: parse_json(&row.get::<_, String>(2)?)?,
+                kind: parse_json(&row.get::<_, String>(3)?)?,
+                metadata: parse_json(&row.get::<_, String>(4)?)?,
+                tags: parse_json(&row.get::<_, String>(5)?)?,
+                embedding_id: row.get(6)?,
+                connections: parse_json(&row.get::<_, String>(7)?)?,
+                is_favorite: row.get::<_, i32>(8)? != 0,
+                created_at: parse_datetime(&row.get::<_, String>(9)?)?,
+                modified_at: parse_datetime(&row.get::<_, String>(10)?)?,
+                indexed_at: parse_datetime(&row.get::<_, String>(11)?)?,
+            })
+        })?;
+        Ok(rows.flatten().collect())
+    }
+
+    // === Batch Rename ===
+
+    pub async fn rename_memory(&self, memory_id: &str, new_path: &std::path::Path) -> Result<()> {
+        let db = self.get_db()?;
+        let new_filename = new_path
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let new_extension = new_path
+            .extension()
+            .map(|e| e.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let new_title = new_path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        db.execute(
+            "UPDATE memories SET path = ?1, filename = ?2, extension = ?3, title = ?4 WHERE id = ?5",
+            params![
+                new_path.to_string_lossy(),
+                new_filename,
+                new_extension,
+                new_title,
+                memory_id
+            ],
+        )?;
+        Ok(())
+    }
+
+    // === Paginated Search ===
+
+    pub async fn search_paginated(
+        &self,
+        query: &str,
+        tags: &[String],
+        kind: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<(Vec<Memory>, usize)> {
+        let db = self.get_db()?;
+
+        // Build WHERE clause
+        let mut conditions = Vec::new();
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if !query.is_empty() {
+            conditions.push(
+                "(title LIKE ?1 OR filename LIKE ?1 OR tags_text LIKE ?1 OR path LIKE ?1)".to_string(),
+            );
+            param_values.push(Box::new(format!("%{}%", query)));
+        }
+
+        for (i, tag) in tags.iter().enumerate() {
+            let param_idx = param_values.len() + 1;
+            conditions.push(format!("tags_text LIKE ?{}", param_idx));
+            param_values.push(Box::new(format!("%{}%", tag)));
+            let _ = i; // silence unused warning
+        }
+
+        if let Some(k) = kind {
+            let param_idx = param_values.len() + 1;
+            conditions.push(format!("kind_name = ?{}", param_idx));
+            param_values.push(Box::new(k.to_string()));
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        // Get total count
+        let count_sql = format!("SELECT COUNT(*) FROM memories {}", where_clause);
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let total: usize = db.query_row(&count_sql, params_ref.as_slice(), |r| r.get(0))?;
+
+        // Get paginated results
+        let limit_idx = param_values.len() + 1;
+        let offset_idx = param_values.len() + 2;
+        let select_sql = format!(
+            "SELECT id, path, source_json, kind_json, metadata_json, tags_json,
+                    embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
+             FROM memories {} ORDER BY modified_at DESC LIMIT ?{} OFFSET ?{}",
+            where_clause, limit_idx, offset_idx
+        );
+        param_values.push(Box::new(limit as i64));
+        param_values.push(Box::new(offset as i64));
+        let params_ref2: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+
+        let mut stmt = db.prepare(&select_sql)?;
+        let rows = stmt.query_map(params_ref2.as_slice(), |row| {
+            Ok(Memory {
+                id: parse_uuid(&row.get::<_, String>(0)?)?,
+                path: std::path::PathBuf::from(row.get::<_, String>(1)?),
+                source: parse_json(&row.get::<_, String>(2)?)?,
+                kind: parse_json(&row.get::<_, String>(3)?)?,
+                metadata: parse_json(&row.get::<_, String>(4)?)?,
+                tags: parse_json(&row.get::<_, String>(5)?)?,
+                embedding_id: row.get(6)?,
+                connections: parse_json(&row.get::<_, String>(7)?)?,
+                is_favorite: row.get::<_, i32>(8)? != 0,
+                created_at: parse_datetime(&row.get::<_, String>(9)?)?,
+                modified_at: parse_datetime(&row.get::<_, String>(10)?)?,
+                indexed_at: parse_datetime(&row.get::<_, String>(11)?)?,
+            })
+        })?;
+        let results: Vec<Memory> = rows.flatten().collect();
+        Ok((results, total))
     }
 }
 
