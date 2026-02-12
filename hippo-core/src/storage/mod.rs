@@ -813,6 +813,83 @@ impl Storage {
         Ok(sources)
     }
 
+    /// Update the last_sync timestamp for a source
+    pub async fn update_source_last_sync(&self, source: &Source) -> Result<()> {
+        let db = self.get_db()?;
+        let now = chrono::Utc::now();
+        // Read all sources, update matching one, write back
+        let mut stmt = db.prepare("SELECT id, config_json FROM sources")?;
+        let rows: Vec<(String, String)> = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        for (id, config_json) in rows {
+            if let Ok(mut config) = serde_json::from_str::<SourceConfig>(&config_json) {
+                if std::mem::discriminant(&config.source) == std::mem::discriminant(source) {
+                    let source_path = match source {
+                        Source::Local { root_path } => root_path.to_string_lossy().to_string(),
+                        _ => continue,
+                    };
+                    let config_path = match &config.source {
+                        Source::Local { root_path } => root_path.to_string_lossy().to_string(),
+                        _ => continue,
+                    };
+                    if source_path == config_path {
+                        config.last_sync = Some(now);
+                        let new_json = serde_json::to_string(&config)?;
+                        db.execute(
+                            "UPDATE sources SET config_json = ?1, last_sync = ?2 WHERE id = ?3",
+                            params![new_json, now.to_rfc3339(), id],
+                        )?;
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Update source sync interval
+    pub async fn set_source_sync_interval(
+        &self,
+        source: &Source,
+        interval_secs: u64,
+    ) -> Result<()> {
+        let db = self.get_db()?;
+        let mut stmt = db.prepare("SELECT id, config_json FROM sources")?;
+        let rows: Vec<(String, String)> = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        for (id, config_json) in rows {
+            if let Ok(mut config) = serde_json::from_str::<SourceConfig>(&config_json) {
+                let matches = match (source, &config.source) {
+                    (
+                        Source::Local { root_path: a },
+                        Source::Local { root_path: b },
+                    ) => a == b,
+                    _ => false,
+                };
+                if matches {
+                    config.sync_interval_secs = interval_secs;
+                    let new_json = serde_json::to_string(&config)?;
+                    db.execute(
+                        "UPDATE sources SET config_json = ?1 WHERE id = ?2",
+                        params![new_json, id],
+                    )?;
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
     // === Cluster Operations ===
 
     pub async fn list_clusters(&self) -> Result<Vec<Cluster>> {

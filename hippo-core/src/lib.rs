@@ -77,6 +77,7 @@ pub mod search;
 pub mod sources;
 pub mod storage;
 pub mod thumbnails;
+pub mod scheduler;
 pub mod watcher;
 
 pub use error::{HippoError, Result};
@@ -97,6 +98,9 @@ pub use ai::{
 
 // Re-export watcher types
 pub use watcher::{FileWatcher, WatchEvent, WatchStats};
+
+// Re-export scheduler types
+pub use scheduler::{Scheduler, SchedulerConfig, SchedulerStats};
 
 // Re-export duplicates types
 pub use duplicates::{
@@ -249,6 +253,11 @@ impl Hippo {
             organizer,
             config,
         })
+    }
+
+    /// Get a reference to the storage layer
+    pub fn storage(&self) -> &Arc<storage::Storage> {
+        &self.storage
     }
 
     // === Source Management ===
