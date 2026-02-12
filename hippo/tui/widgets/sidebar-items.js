@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["detail_line_owned","format_bytes","kind_color","kind_icon","kind_label"],"struct":["DetailPanel","FileList","SearchInput","TagCloud"]};

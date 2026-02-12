@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CODE_EMBEDDING_DIM","IMAGE_EMBEDDING_DIM","TEXT_EMBEDDING_DIM"],"enum":["EmbeddingProvider"],"struct":["Embedder","EmbedderConfig","VectorIndex"]};

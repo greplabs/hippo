@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HIPPO_ART","HIPPO_TAGLINE"],"enum":["Commands"],"fn":["format_bytes","format_bytes_colored","format_tags","get_kind_icon","get_kind_string","main","print_error","print_header","print_hippo","print_info","print_memory_card","print_success"],"mod":["tui"],"struct":["Cli","MemoryRow","SourceRow"]};

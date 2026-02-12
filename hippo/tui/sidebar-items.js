@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AppTab","InputMode","Panel"],"fn":["handle_editing_key","handle_normal_key","help_line","load_data","render_detail_panel","render_file_list","render_help_overlay","render_search_bar","render_sidebar","render_status_bar","render_tabs","run","search_files","ui"],"mod":["widgets"],"struct":["App"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AnalysisResult"],"fn":["analyze_code","analyze_document","analyze_file","analyze_image","analyze_video"],"struct":["CodeAnalysis","Color","DetectedObject","DocumentAnalysis","ExtractedEntities","FunctionInfo","ImageAnalysis","VideoAnalysis"]};
