@@ -579,6 +579,23 @@
     .search-history-item .count { font-size: 11px; color: #a8a29e; background: #f5f5f4; padding: 1px 6px; border-radius: 8px; }
     body.dark .search-history-item .count { background: #292524; }
 
+    /* Drag & Drop Overlay */
+    .drag-drop-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999;
+      background: rgba(59, 130, 246, 0.15); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .drag-drop-overlay.active { display: flex; }
+    .drag-drop-content {
+      background: white; border: 3px dashed var(--accent-primary); border-radius: 20px;
+      padding: 48px 64px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    }
+    body.dark .drag-drop-content { background: #1c1917; border-color: var(--accent-primary); }
+    .drag-drop-icon { font-size: 48px; margin-bottom: 12px; color: var(--accent-primary); }
+    .drag-drop-title { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+    .drag-drop-desc { font-size: 13px; color: var(--text-muted); }
+
     /* Saved Searches */
     .saved-searches-section { padding: 8px 0; }
     .saved-search-item {
@@ -2284,6 +2301,15 @@
     </div>
   </div>
 
+  <!-- Drag & Drop Overlay -->
+  <div class="drag-drop-overlay" id="dragDropOverlay">
+    <div class="drag-drop-content">
+      <div class="drag-drop-icon">&darr;</div>
+      <div class="drag-drop-title">Drop to Add</div>
+      <div class="drag-drop-desc">Drop folders to index or files to view</div>
+    </div>
+  </div>
+
   <!-- Batch Rename Modal -->
   <div class="modal-overlay" id="renameModal">
     <div class="modal" style="min-width:450px;">
@@ -3959,6 +3985,7 @@
             loadSavedSearches();
             loadSearchHistoryFromDB();
             setupInfiniteScroll();
+            setupDragDrop();
 
             // Check Ollama status in background
             invoke('ollama_status').then(function(status) {
@@ -4343,6 +4370,65 @@
             if (content.scrollHeight - content.scrollTop - content.clientHeight < threshold) {
               loadMoreResults();
             }
+          });
+        }
+
+        // === Drag & Drop ===
+        function setupDragDrop() {
+          var overlay = document.getElementById('dragDropOverlay');
+          // Use Tauri's built-in drag-drop event (withGlobalTauri: true)
+          if (window.__TAURI__ && window.__TAURI__.webview) {
+            window.__TAURI__.webview.getCurrentWebview().onDragDropEvent(function(event) {
+              var type = event.payload.type;
+              if (type === 'enter' || type === 'over') {
+                overlay.classList.add('active');
+              } else if (type === 'leave' || type === 'cancelled') {
+                overlay.classList.remove('active');
+              } else if (type === 'drop') {
+                overlay.classList.remove('active');
+                handleDroppedPaths(event.payload.paths || []);
+              }
+            });
+            console.log('[Hippo] Drag & drop initialized');
+          } else {
+            // Fallback: HTML5 drag-drop for dev mode
+            document.addEventListener('dragover', function(e) { e.preventDefault(); overlay.classList.add('active'); });
+            document.addEventListener('dragleave', function(e) {
+              if (e.relatedTarget === null) overlay.classList.remove('active');
+            });
+            document.addEventListener('drop', function(e) { e.preventDefault(); overlay.classList.remove('active'); });
+            console.log('[Hippo] Drag & drop: fallback mode (no Tauri API)');
+          }
+        }
+
+        function handleDroppedPaths(paths) {
+          if (paths.length === 0) return;
+          var added = 0;
+          var total = paths.length;
+
+          paths.forEach(function(path) {
+            // Try to add each path as a source (directories work best)
+            invoke('add_source_path', { path: path }).then(function() {
+              added++;
+              if (added === total) {
+                showToast(added + ' source(s) added from drop', 'success');
+                loadData();
+              }
+            }).catch(function(e) {
+              added++;
+              // If it fails (e.g., it's a file not a directory), show info
+              console.log('[Hippo] Drop path not a source:', path, e);
+              if (added === total && added === 1) {
+                // Single file dropped - try to show its info
+                invoke('search', { query: path.split('/').pop() || '', tags: [] }).then(function(r) {
+                  if (r.memories && r.memories.length > 0) {
+                    showToast('Found file in index', 'success');
+                  } else {
+                    showToast('Drop folders to index them', 'info');
+                  }
+                });
+              }
+            });
           });
         }
 

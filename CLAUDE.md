@@ -1581,7 +1581,49 @@ This documentation is comprehensive and up-to-date as of the current codebase. F
 
 ## Current Work In Progress
 
-### Latest Checkpoint (February 8, 2026 - Session 14)
+### Latest Checkpoint (February 8, 2026 - Session 15)
+
+**Commit**: `1b74bbd` on `feature/session15-desktop-experience` branch - PR #84
+
+**Release**: v1.2.0 (Session 13) - GitHub Release available
+
+**Session 15 PR**:
+| PR | Description |
+|----|-------------|
+| #84 | feat: Session 15 - Desktop Experience (3 features) |
+
+**Session 15 Features** (12 files changed, +700 lines):
+
+**Global Hotkey (Cmd+Shift+H)**:
+- ✅ `tauri-plugin-global-shortcut = "2"` integration
+- ✅ Registers system-wide Cmd+Shift+H to show/focus Hippo window
+- ✅ Works from any app - shows, unminimizes, and focuses window
+- ✅ Updated capabilities/default.json with global-shortcut permissions
+
+**Drag & Drop**:
+- ✅ Tauri's native `onDragDropEvent` API (not HTML5 fallback)
+- ✅ Visual overlay with drop zone feedback (enter/over/leave states)
+- ✅ Dropped folders auto-added as sources and trigger indexing
+- ✅ Dropped files added to existing source or shown as notification
+
+**Scheduled Auto-indexing**:
+- ✅ New `hippo-core/src/scheduler/mod.rs` module
+- ✅ Background tokio task with configurable check interval (default: 5 min)
+- ✅ Per-source `sync_interval_secs` with `last_sync` tracking
+- ✅ `SchedulerStats` with running state, check counts, sync triggers
+- ✅ Storage methods: `update_source_last_sync()`, `set_source_sync_interval()`
+- ✅ 3 new Tauri commands: `start_scheduler`, `get_scheduler_status`, `set_source_sync_interval`
+- ✅ 2 unit tests for scheduler config and stats
+
+**New SQLite Columns** (via ALTER TABLE migration):
+```sql
+ALTER TABLE sources ADD COLUMN sync_interval_secs INTEGER NOT NULL DEFAULT 3600;
+ALTER TABLE sources ADD COLUMN last_sync TEXT;
+```
+
+---
+
+### Previous Checkpoint (February 8, 2026 - Session 14)
 
 **Commit**: `c85b302` on `feature/session14-search-navigation` branch - PR #83
 
@@ -1643,7 +1685,7 @@ search_history (id, query, result_count, searched_at)
 | Session | Features | Status |
 |---------|----------|--------|
 | 14 | Saved Searches, Search History, Recent Views, Batch Rename, Paginated Search | ✅ Complete |
-| 15 | Drag & Drop, Global Hotkey, Scheduled Auto-indexing | Planned |
+| 15 | Drag & Drop, Global Hotkey, Scheduled Auto-indexing | ✅ Complete |
 | 16 | Knowledge Graph Visualization, Location Map | Planned |
 | 17 | Smart Collections, Natural Language Queries | Planned |
 
