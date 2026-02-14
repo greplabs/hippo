@@ -50,7 +50,7 @@
     }
 
     /* Smooth global transitions */
-    html { scroll-behavior: smooth; }
+    html, body { height: 100%; overflow: hidden; scroll-behavior: smooth; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
@@ -61,6 +61,8 @@
       -moz-osx-font-smoothing: grayscale;
       letter-spacing: -0.01em;
       line-height: 1.5;
+      margin: 0;
+      padding: 0;
     }
     body.dark { background: var(--bg-primary); }
 
@@ -404,7 +406,7 @@
     body.dark .card-star .icon { color: #57534e; }
     body.dark .card-star.active .icon { color: white; }
 
-    .app { display: flex; height: 100vh; width: 100%; }
+    .app { display: flex; height: 100%; width: 100%; position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 
     /* Sidebar */
     .sidebar {
@@ -653,11 +655,13 @@
     .filter-bar {
       background: white;
       border-bottom: 1px solid rgba(0,0,0,0.04);
-      padding: 12px 24px;
+      padding: 10px 24px;
       display: flex;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      flex-wrap: wrap;
+      min-height: 0;
     }
     body.dark .filter-bar { background: #1a1918; border-color: rgba(255,255,255,0.04); }
     .filter-btn {
@@ -1911,7 +1915,7 @@
 </head>
 <body>
   <!-- File Type Icon Symbols -->
-  <svg style="display: none;">
+  <svg style="display:none;position:absolute;width:0;height:0;overflow:hidden;">
     <defs>
       <!-- Image icon -->
       <symbol id="icon-image" viewBox="0 0 24 24">
@@ -2162,6 +2166,14 @@
           <div class="info-row"><span class="info-label">Type</span><span class="info-value" id="detailType">-</span></div>
           <div class="info-row"><span class="info-label">Size</span><span class="info-value" id="detailSize">-</span></div>
           <div class="info-row"><span class="info-label">Modified</span><span class="info-value" id="detailDate">-</span></div>
+          <div class="info-row"><span class="info-label">Created</span><span class="info-value" id="detailCreated">-</span></div>
+          <div class="info-row"><span class="info-label">Indexed</span><span class="info-value" id="detailIndexed">-</span></div>
+          <div class="info-row" id="detailExtRow" style="display:none;"><span class="info-label">Extension</span><span class="info-value" id="detailExt">-</span></div>
+          <div class="info-row" id="detailDimsRow" style="display:none;"><span class="info-label">Dimensions</span><span class="info-value" id="detailDims">-</span></div>
+          <div class="info-row" id="detailDurationRow" style="display:none;"><span class="info-label">Duration</span><span class="info-value" id="detailDuration">-</span></div>
+          <div class="info-row" id="detailLangRow" style="display:none;"><span class="info-label">Language</span><span class="info-value" id="detailLang">-</span></div>
+          <div class="info-row" id="detailLinesRow" style="display:none;"><span class="info-label">Lines</span><span class="info-value" id="detailLines">-</span></div>
+          <div class="info-row" id="detailHashRow" style="display:none;"><span class="info-label">Hash</span><span class="info-value" id="detailHash" style="font-family:monospace;font-size:10px;word-break:break-all;">-</span></div>
         </div>
         <div class="code-preview-section" id="codePreviewSection" style="display:none;">
           <div class="code-preview-header">
@@ -3819,6 +3831,7 @@
       }
 
       function setFilter(type) {
+        hideTagColorPicker();
         filterType = type;
         document.querySelectorAll('.filter-btn').forEach(function(b) {
           b.classList.toggle('active', b.dataset.filter === type);
@@ -3881,8 +3894,8 @@
       function startIndexingProgress() {
         // Check if indexing is actually happening before showing overlay
         invoke('get_indexing_progress').then(function(p) {
-          // Only show if there's real work (total > 0 or scanning stage)
-          if (p.total > 0 || p.stage === 'Scanning') {
+          // Only show if there's real work (total > 0 AND not complete)
+          if (p.total > 0 && p.stage !== 'Complete') {
             document.getElementById('indexingOverlay').style.display = 'block';
             indexingZeroCount = 0;
             startIndexingPolling();
@@ -3906,7 +3919,7 @@
               document.getElementById('indexingEta').textContent = 'Processing...';
             }
             // Stop if complete or no activity
-            if (p.stage === 'Complete' || (p.total === 0 && p.processed === 0 && ++indexingZeroCount >= 3)) {
+            if (p.stage === 'Complete' || (p.total === 0 && p.processed === 0 && ++indexingZeroCount >= 2)) {
               stopIndexingProgress();
             } else if (p.total > 0) {
               indexingZeroCount = 0;
@@ -3942,6 +3955,9 @@
       waitForTauri(function() {
         invoke = window.__TAURI__.core.invoke;
         convertFileSrc = window.__TAURI__.core.convertFileSrc;
+
+        // Ensure indexing overlay is hidden on startup
+        document.getElementById('indexingOverlay').style.display = 'none';
 
         invoke('initialize').then(function() {
           // Start file watcher after initialization
@@ -4614,6 +4630,12 @@
         document.addEventListener('click', function(e) {
           var picker = document.getElementById('tagColorPicker');
           if (picker.style.display === 'block' && !picker.contains(e.target) && !e.target.classList.contains('tag-btn')) {
+            hideTagColorPicker();
+          }
+        });
+        // Close color picker on Escape key
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && document.getElementById('tagColorPicker').style.display === 'block') {
             hideTagColorPicker();
           }
         });
@@ -6252,6 +6274,47 @@
           document.getElementById('detailType').textContent = getTypeName(mem.kind);
           document.getElementById('detailSize').textContent = formatSize(mem.metadata ? mem.metadata.file_size : 0);
           document.getElementById('detailDate').textContent = mem.modified_at ? new Date(mem.modified_at).toLocaleDateString() : '-';
+          document.getElementById('detailCreated').textContent = mem.created_at ? new Date(mem.created_at).toLocaleDateString() : '-';
+          document.getElementById('detailIndexed').textContent = mem.indexed_at ? new Date(mem.indexed_at).toLocaleDateString() : '-';
+
+          // Extension
+          var ext = mem.path.split('.').pop();
+          if (ext && ext.length < 10) {
+            document.getElementById('detailExt').textContent = '.' + ext;
+            document.getElementById('detailExtRow').style.display = '';
+          } else { document.getElementById('detailExtRow').style.display = 'none'; }
+
+          // Image dimensions
+          if (mem.kind && mem.kind.Image && mem.kind.Image.width) {
+            document.getElementById('detailDims').textContent = mem.kind.Image.width + ' x ' + mem.kind.Image.height;
+            document.getElementById('detailDimsRow').style.display = '';
+          } else { document.getElementById('detailDimsRow').style.display = 'none'; }
+
+          // Audio/Video duration
+          var dur = (mem.kind && (mem.kind.Video || mem.kind.Audio)) ? (mem.kind.Video || mem.kind.Audio).duration_ms : null;
+          if (dur) {
+            var secs = Math.floor(dur / 1000); var mins = Math.floor(secs / 60); secs = secs % 60;
+            document.getElementById('detailDuration').textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
+            document.getElementById('detailDurationRow').style.display = '';
+          } else { document.getElementById('detailDurationRow').style.display = 'none'; }
+
+          // Code language/lines
+          if (mem.kind && mem.kind.Code) {
+            document.getElementById('detailLang').textContent = mem.kind.Code.language || '-';
+            document.getElementById('detailLangRow').style.display = '';
+            document.getElementById('detailLines').textContent = mem.kind.Code.lines || '-';
+            document.getElementById('detailLinesRow').style.display = '';
+          } else {
+            document.getElementById('detailLangRow').style.display = 'none';
+            document.getElementById('detailLinesRow').style.display = 'none';
+          }
+
+          // Hash
+          if (mem.metadata && mem.metadata.hash) {
+            document.getElementById('detailHash').textContent = mem.metadata.hash.substring(0, 16) + '...';
+            document.getElementById('detailHash').title = mem.metadata.hash;
+            document.getElementById('detailHashRow').style.display = '';
+          } else { document.getElementById('detailHashRow').style.display = 'none'; }
 
           // Star button
           var starBtn = document.getElementById('starBtn');
@@ -6379,6 +6442,7 @@
 
         function switchView(view) {
           currentView = view;
+          hideTagColorPicker();
           document.querySelectorAll('.sidebar-nav-item').forEach(function(btn) {
             btn.classList.toggle('active', btn.dataset.view === view);
           });
