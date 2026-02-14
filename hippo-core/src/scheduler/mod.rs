@@ -4,6 +4,7 @@
 //! when the configured interval has elapsed since the last sync.
 
 use crate::error::Result;
+use crate::indexer::Indexer;
 use crate::models::Source;
 use crate::storage::Storage;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -44,6 +45,7 @@ impl Default for SchedulerConfig {
 pub struct Scheduler {
     config: SchedulerConfig,
     storage: Arc<Storage>,
+    indexer: Arc<Indexer>,
     running: Arc<AtomicBool>,
     stats: Arc<RwLock<SchedulerInternalStats>>,
     task_handle: Option<tokio::task::JoinHandle<()>>,
@@ -56,10 +58,11 @@ struct SchedulerInternalStats {
 }
 
 impl Scheduler {
-    pub fn new(storage: Arc<Storage>, config: SchedulerConfig) -> Self {
+    pub fn new(storage: Arc<Storage>, indexer: Arc<Indexer>, config: SchedulerConfig) -> Self {
         Self {
             config,
             storage,
+            indexer,
             running: Arc::new(AtomicBool::new(false)),
             stats: Arc::new(RwLock::new(SchedulerInternalStats {
                 total_checks: 0,
@@ -85,6 +88,7 @@ impl Scheduler {
 
         let running = self.running.clone();
         let storage = self.storage.clone();
+        let indexer = self.indexer.clone();
         let stats = self.stats.clone();
         let check_interval = self.config.check_interval_secs;
         let default_sync_interval = self.config.default_sync_interval_secs;
@@ -126,21 +130,25 @@ impl Scheduler {
                             };
 
                             if needs_sync {
-                                let path = match &source_config.source {
+                                let source = source_config.source.clone();
+                                let path = match &source {
                                     Source::Local { root_path } => {
                                         root_path.to_string_lossy().to_string()
                                     }
-                                    _ => continue, // Skip non-local sources
+                                    _ => continue,
                                 };
 
-                                info!(
-                                    "Scheduler: triggering re-index for {}",
-                                    path
-                                );
+                                info!("Scheduler: triggering re-index for {}", path);
+
+                                // Actually trigger re-indexing via the indexer
+                                if let Err(e) = indexer.queue_source(source.clone()).await {
+                                    warn!("Scheduler: failed to queue re-index for {}: {}", path, e);
+                                    continue;
+                                }
 
                                 // Update last_sync timestamp
                                 if let Err(e) = storage
-                                    .update_source_last_sync(&source_config.source)
+                                    .update_source_last_sync(&source)
                                     .await
                                 {
                                     warn!("Scheduler: failed to update last_sync: {}", e);

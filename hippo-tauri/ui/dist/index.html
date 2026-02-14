@@ -4027,14 +4027,34 @@
           setSearchLoading(true);
           showSearchSkeletons();
 
-          invoke('search', { query: query || '', tags: activeTags }).then(function(r) {
-            memories = (r.memories || []).map(function(x) { return x.memory; });
+          // Use paginated search for better performance
+          searchOffset = 0;
+          hasMoreResults = false;
+          searchTotal = 0;
+
+          invoke('search_paginated', {
+            query: query || '',
+            tags: activeTags,
+            kind: filterType === 'all' || filterType === 'favorites' ? null : filterType,
+            limit: searchPageSize,
+            offset: 0
+          }).then(function(r) {
+            memories = r.memories || [];
+            searchTotal = r.total || memories.length;
+            hasMoreResults = r.has_more || false;
+            searchOffset = memories.length;
             isSearching = false;
             setSearchLoading(false);
             renderFiles();
+            if (searchTotal > memories.length) {
+              document.getElementById('resultCount').textContent = memories.length + ' of ' + searchTotal + ' files';
+            }
+            if (hasMoreResults) {
+              showLoadMoreIndicator();
+            }
             // Add to history if query is meaningful
             if (query && query.trim().length >= 2) {
-              addToSearchHistory(query.trim(), memories.length);
+              addToSearchHistory(query.trim(), searchTotal);
             }
           }).catch(function(e) {
             isSearching = false;
@@ -4069,6 +4089,12 @@
         }
 
         function removeFromSearchHistory(index) {
+          var entry = searchHistory[index];
+          if (entry && entry.dbId) {
+            invoke('delete_search_history_entry', { id: entry.dbId }).catch(function(e) {
+              console.warn('[Hippo] Failed to delete history entry:', e);
+            });
+          }
           searchHistory.splice(index, 1);
           renderSearchHistory();
         }
@@ -4083,7 +4109,7 @@
           invoke('get_search_history', { limit: 20 }).then(function(history) {
             if (history && history.length > 0) {
               searchHistory = history.map(function(h) {
-                return { query: h.query, count: h.result_count, time: new Date(h.searched_at).getTime() };
+                return { dbId: h.id, query: h.query, count: h.result_count, time: new Date(h.searched_at).getTime() };
               });
             }
           }).catch(function() {});
@@ -4345,7 +4371,7 @@
         }
 
         function showLoadMoreIndicator() {
-          var content = document.getElementById('content');
+          var content = document.querySelector('.content');
           var existing = document.getElementById('loadMoreIndicator');
           if (existing) existing.remove();
           if (!hasMoreResults) return;
@@ -4362,7 +4388,7 @@
         }
 
         function setupInfiniteScroll() {
-          var content = document.getElementById('content');
+          var content = document.querySelector('.content');
           if (!content) return;
           content.addEventListener('scroll', function() {
             if (isLoadingMore || !hasMoreResults) return;
@@ -6820,7 +6846,7 @@
           btn.innerHTML = '<span class="icon">' + icons.refresh + '</span> Searching...';
           btn.disabled = true;
 
-          invoke('get_similar', { memoryId: selectedMemory.id, limit: 5 }).then(function(results) {
+          invoke('get_similar_files', { memoryId: selectedMemory.id, limit: 5 }).then(function(results) {
             similarFilesLoading = false;
             btn.innerHTML = '<span class="icon">' + icons.sparkles + '</span> Find Similar Files';
             btn.disabled = false;
