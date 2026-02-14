@@ -2957,6 +2957,18 @@ async fn start_scheduler(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn stop_scheduler(state: State<'_, AppState>) -> Result<String, String> {
+    let mut sched_lock = state.scheduler.write().await;
+    if let Some(mut scheduler) = sched_lock.take() {
+        scheduler.stop();
+        println!("[Hippo] Scheduler stopped");
+        Ok("Scheduler stopped".to_string())
+    } else {
+        Ok("Scheduler not running".to_string())
+    }
+}
+
+#[tauri::command]
 async fn get_scheduler_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let sched_lock = state.scheduler.read().await;
     match sched_lock.as_ref() {
@@ -3234,6 +3246,7 @@ fn main() {
             vacuum_database,
             // Session 15: Desktop Experience
             start_scheduler,
+            stop_scheduler,
             get_scheduler_status,
             set_source_sync_interval,
             // Session 14: Search & Navigation
