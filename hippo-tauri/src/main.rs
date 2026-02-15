@@ -9,8 +9,8 @@
 
 use chrono::Utc;
 use hippo_core::{
-    ClaudeClient, Hippo, MemoryId, OllamaClient, QdrantManager, SearchQuery, Source, Tag,
-    UnifiedAiClient,
+    ClaudeClient, Hippo, MemoryId, OllamaClient, QdrantManager, Scheduler, SchedulerConfig,
+    SearchQuery, Source, Tag, UnifiedAiClient,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,6 +25,7 @@ use tokio::sync::RwLock;
 struct AppState {
     hippo: Arc<RwLock<Option<Hippo>>>,
     qdrant_manager: Arc<QdrantManager>,
+    scheduler: Arc<RwLock<Option<Scheduler>>>,
 }
 
 #[tauri::command]
@@ -2838,6 +2839,17 @@ async fn clear_search_history(state: State<'_, AppState>) -> Result<String, Stri
 }
 
 #[tauri::command]
+async fn delete_search_history_entry(
+    id: i64,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    hippo.delete_search_history_entry(id).await.map_err(|e| e.to_string())?;
+    Ok("Deleted".to_string())
+}
+
+#[tauri::command]
 async fn get_recent_files(
     limit: Option<usize>,
     days: Option<usize>,
@@ -2927,21 +2939,52 @@ async fn search_paginated(
 #[tauri::command]
 async fn start_scheduler(state: State<'_, AppState>) -> Result<String, String> {
     let hippo_lock = state.hippo.read().await;
-    let _hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    // The scheduler is managed at the app level via the storage
-    // For now, return status that it's handled by the watcher
-    Ok("Scheduler running (via file watcher)".to_string())
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let mut sched_lock = state.scheduler.write().await;
+    if sched_lock.is_some() {
+        return Ok("Scheduler already running".to_string());
+    }
+
+    let storage = hippo.storage().clone();
+    let indexer = hippo.indexer.clone();
+    let config = SchedulerConfig::default();
+    let mut scheduler = Scheduler::new(storage, indexer, config);
+    scheduler.start().map_err(|e| e.to_string())?;
+    *sched_lock = Some(scheduler);
+    println!("[Hippo] Scheduler started");
+    Ok("Scheduler started".to_string())
+}
+
+#[tauri::command]
+async fn stop_scheduler(state: State<'_, AppState>) -> Result<String, String> {
+    let mut sched_lock = state.scheduler.write().await;
+    if let Some(mut scheduler) = sched_lock.take() {
+        scheduler.stop();
+        println!("[Hippo] Scheduler stopped");
+        Ok("Scheduler stopped".to_string())
+    } else {
+        Ok("Scheduler not running".to_string())
+    }
 }
 
 #[tauri::command]
 async fn get_scheduler_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    let hippo_lock = state.hippo.read().await;
-    let _hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    Ok(serde_json::json!({
-        "running": true,
-        "mode": "file_watcher",
-        "description": "Sources are auto-indexed via file watcher"
-    }))
+    let sched_lock = state.scheduler.read().await;
+    match sched_lock.as_ref() {
+        Some(scheduler) => {
+            let stats = scheduler.stats().await;
+            serde_json::to_value(stats).map_err(|e| e.to_string())
+        }
+        None => Ok(serde_json::json!({
+            "running": false,
+            "check_interval_secs": 300,
+            "total_checks": 0,
+            "total_syncs_triggered": 0,
+            "last_check": null,
+            "next_check": null
+        })),
+    }
 }
 
 #[tauri::command]
@@ -3064,6 +3107,7 @@ fn main() {
         .manage(AppState {
             hippo: Arc::new(RwLock::new(None)),
             qdrant_manager,
+            scheduler: Arc::new(RwLock::new(None)),
         })
         .setup(|app| {
             println!("[Hippo] Application started. Qdrant will be auto-managed.");
@@ -3202,6 +3246,7 @@ fn main() {
             vacuum_database,
             // Session 15: Desktop Experience
             start_scheduler,
+            stop_scheduler,
             get_scheduler_status,
             set_source_sync_interval,
             // Session 14: Search & Navigation
@@ -3212,6 +3257,7 @@ fn main() {
             add_search_history,
             get_search_history,
             clear_search_history,
+            delete_search_history_entry,
             get_recent_files,
             get_recently_modified,
             batch_rename,

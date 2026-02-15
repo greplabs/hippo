@@ -1994,6 +1994,15 @@ impl Storage {
         Ok(())
     }
 
+    pub async fn delete_search_history_entry(&self, id: i64) -> Result<()> {
+        if id <= 0 {
+            return Err(crate::error::HippoError::Other("Invalid history entry ID".to_string()));
+        }
+        let db = self.get_db()?;
+        db.execute("DELETE FROM search_history WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
     // === Recent Files ===
 
     pub async fn get_recent_files(&self, limit: usize, days: usize) -> Result<Vec<Memory>> {

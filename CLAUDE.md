@@ -1,4 +1,4 @@
-# Hippo - Complete Project Documentation
+# Hippo - Project Documentation
 
 ## Overview
 
@@ -6,832 +6,125 @@ Hippo ("The Memory That Never Forgets") is a local-first, cross-platform file or
 
 **Architecture**: Rust core library + Tauri 2 desktop app with standalone HTML/JS UI (no build step)
 
----
-
-## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Module Documentation](#module-documentation)
-3. [Data Models](#data-models)
-4. [Tauri IPC Commands](#tauri-ipc-commands)
-5. [Development Guide](#development-guide)
-6. [Dependency Graph](#dependency-graph)
+**Current Version**: v1.2.0 | **Latest Session**: 15 | **Latest PR**: #84
 
 ---
 
-## Architecture Overview
+## Architecture
 
 ```
 hippo/
 ├── Cargo.toml                    # Workspace config
 ├── hippo-core/                   # Core Rust library
-│   ├── Cargo.toml
 │   └── src/
 │       ├── lib.rs                # Main Hippo struct & public API
 │       ├── models.rs             # All data types (Memory, Tag, Source, etc.)
 │       ├── error.rs              # HippoError enum
 │       ├── indexer/              # File discovery & metadata extraction
-│       │   ├── mod.rs
-│       │   ├── extractors.rs
-│       │   └── code_parser.rs
-│       ├── thumbnails/           # Image/video/PDF thumbnail generation
-│       │   └── mod.rs
-│       ├── embeddings/           # Vector embeddings (Ollama/OpenAI/fallback)
-│       │   └── mod.rs
-│       ├── storage/              # SQLite + Qdrant hybrid storage
-│       │   └── mod.rs
+│       │   ├── mod.rs            # Orchestration, progress, batch processing
+│       │   ├── extractors.rs     # EXIF, document metadata, file stats
+│       │   └── code_parser.rs    # AST parsing (Rust/Python/JS/Go)
+│       ├── storage/mod.rs        # SQLite + Qdrant hybrid storage
 │       ├── search/               # Hybrid search (text + semantic + fuzzy)
 │       │   ├── mod.rs
 │       │   └── advanced_filter.rs
-│       ├── ollama/               # Ollama AI integration
-│       │   └── mod.rs
-│       ├── watcher/              # Real-time file system monitoring
-│       │   └── mod.rs
+│       ├── embeddings/mod.rs     # Vector embeddings (Ollama/OpenAI/fallback)
+│       ├── ollama/mod.rs         # Ollama AI integration
+│       ├── watcher/mod.rs        # Real-time file system monitoring
+│       ├── thumbnails/mod.rs     # Image/video/PDF thumbnail generation
 │       ├── qdrant/               # Vector database management
 │       │   ├── mod.rs
 │       │   └── manager.rs
-│       ├── duplicates/           # Hash-based duplicate detection
-│       │   └── mod.rs
-│       ├── graph/                # Knowledge graph (partial)
-│       │   └── mod.rs
-│       └── sources/              # Source connectors (local only, cloud planned)
-│           └── mod.rs
-│
+│       ├── scheduler/mod.rs      # Scheduled auto-indexing
+│       ├── duplicates/mod.rs     # Hash-based duplicate detection
+│       ├── graph/mod.rs          # Knowledge graph (partial)
+│       └── sources/mod.rs        # Source connectors
 ├── hippo-cli/                    # CLI application
-│   ├── Cargo.toml
 │   └── src/
 │       ├── main.rs               # CLI commands (chomp, sniff, remember, etc.)
-│       └── tui/                  # Interactive terminal UI
-│           ├── mod.rs            # TUI app logic (ratatui + crossterm)
-│           └── widgets.rs        # Custom widgets (SearchInput, FileList, etc.)
-│
+│       └── tui/                  # Interactive terminal UI (ratatui + crossterm)
+│           ├── mod.rs
+│           └── widgets.rs
 └── hippo-tauri/                  # Desktop application
     ├── Cargo.toml
-    ├── tauri.conf.json           # Tauri config (withGlobalTauri: true)
-    ├── capabilities/
-    │   └── default.json          # Permissions (core, dialog, shell)
-    ├── icons/                    # App icons
-    ├── src/
-    │   └── main.rs               # Tauri commands (IPC handlers)
-    └── ui/
-        └── dist/
-            └── index.html        # Complete standalone UI (no build step)
+    ├── tauri.conf.json
+    ├── capabilities/default.json # Permissions
+    ├── src/main.rs               # Tauri IPC commands
+    └── ui/dist/index.html        # Complete standalone UI (no build step)
 ```
 
 ---
 
-## Module Documentation
-
-### 1. Indexer (`hippo-core/src/indexer/`)
-
-**Purpose**: File discovery, metadata extraction, and background indexing orchestration.
-
-**Key Components**:
-
-- **File Discovery**: Uses `walkdir` to recursively scan directories
-- **Batch Processing**: Processes files in parallel batches (configurable size)
-- **Progress Tracking**: Real-time progress with ETA calculation
-- **Metadata Extraction**: EXIF, code parsing, audio/video duration
-- **Auto-tagging**: Optional AI-powered tagging via Ollama
-
-**Architecture**:
-
-```rust
-// Indexer orchestrates the entire indexing pipeline
-pub struct Indexer {
-    storage: Arc<Storage>,
-    embedder: Arc<Embedder>,
-    config: IndexerConfig,
-    state: Arc<IndexingState>,    // Progress tracking
-}
-
-// Progress tracking with multiple stages
-pub enum IndexingStage {
-    Scanning,      // Walking directories
-    Embedding,     // Generating embeddings
-    Tagging,       // AI auto-tagging
-    Complete,
-}
-```
-
-**Supported File Types** (70+ extensions):
-- Images: jpg, jpeg, png, gif, webp, bmp, tiff, heic, heif, raw, cr2, nef
-- Videos: mp4, mov, avi, mkv, webm, m4v
-- Audio: mp3, wav, flac, m4a, ogg, aac
-- Documents: pdf, doc, docx, txt, md, rtf, odt
-- Code: rs, py, js, ts, jsx, tsx, go, java, c, cpp, rb, php, swift, kt, scala, sh, sql, html, css, json, yaml, toml, xml
-- Archives: zip, tar, gz, 7z, rar
-
-**Indexing Pipeline**:
-
-```mermaid
-graph LR
-    A[Scan Directory] --> B[Filter Extensions]
-    B --> C[Parallel Batch Processing]
-    C --> D[Extract Metadata]
-    D --> E[Generate Embedding]
-    E --> F[Store in SQLite + Qdrant]
-    F --> G[Auto-tag with AI]
-    G --> H[Update Progress]
-```
-
-**Example Usage**:
-
-```rust
-// Queue a source for indexing
-hippo.add_source(Source::Local {
-    root_path: PathBuf::from("/path/to/photos")
-}).await?;
-
-// Monitor progress
-let progress = hippo.get_indexing_progress().await?;
-println!("Progress: {}%", progress.percentage());
-```
-
-**Key Files**:
-- `mod.rs`: Main indexer orchestration, progress tracking, batch processing
-- `extractors.rs`: EXIF extraction, document metadata, basic file stats
-- `code_parser.rs`: AST parsing for Rust/Python/JavaScript/Go
-
----
-
-### 2. Storage (`hippo-core/src/storage/mod.rs`)
-
-**Purpose**: Hybrid storage layer combining SQLite (metadata) and Qdrant (vectors).
-
-**Database Schema**:
-
-```sql
--- Core memories table
-CREATE TABLE memories (
-    id TEXT PRIMARY KEY,
-    path TEXT NOT NULL,
-    source_json TEXT NOT NULL,
-    kind_json TEXT NOT NULL,
-    metadata_json TEXT NOT NULL,
-    tags_json TEXT NOT NULL,
-    embedding_id TEXT,
-    connections_json TEXT NOT NULL,
-    is_favorite INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    modified_at TEXT NOT NULL,
-    indexed_at TEXT NOT NULL,
-    -- Searchable denormalized columns
-    title TEXT,
-    filename TEXT,
-    extension TEXT,
-    kind_name TEXT,
-    tags_text TEXT
-);
-
--- Indexes for fast queries
-CREATE INDEX idx_memories_path ON memories(path);
-CREATE INDEX idx_memories_created ON memories(created_at);
-CREATE INDEX idx_memories_modified ON memories(modified_at);
-CREATE INDEX idx_memories_kind ON memories(kind_name);
-CREATE INDEX idx_memories_favorite ON memories(is_favorite);
-
--- Sources configuration
-CREATE TABLE sources (
-    id TEXT PRIMARY KEY,
-    config_json TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    last_sync TEXT
-);
-
--- Tag index with counts
-CREATE TABLE tags (
-    name TEXT PRIMARY KEY,
-    count INTEGER NOT NULL DEFAULT 0
-);
-
--- Embeddings (SQLite fallback when Qdrant unavailable)
-CREATE TABLE embeddings (
-    memory_id TEXT PRIMARY KEY,
-    embedding BLOB NOT NULL,  -- f32 array serialized
-    model TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
--- Clusters for organization
-CREATE TABLE clusters (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    memory_ids_json TEXT NOT NULL,
-    cover_id TEXT,
-    auto_generated INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    metadata_json TEXT NOT NULL
-);
-```
-
-**Key Operations**:
-
-```rust
-// Memory CRUD
-storage.upsert_memory(&memory).await?;
-storage.get_memory(memory_id).await?;
-storage.delete_memory(memory_id).await?;
-storage.toggle_favorite(memory_id).await?;
-
-// Tag operations
-storage.add_tag(memory_id, tag).await?;
-storage.remove_tag(memory_id, "tag_name").await?;
-storage.list_tags().await?;  // Returns Vec<(String, u64)>
-
-// Source management
-storage.add_source(source).await?;
-storage.list_sources().await?;
-storage.remove_source(&source).await?;
-
-// Search operations (optimized SQL)
-storage.search_with_tags(query, tags, kind, limit, offset).await?;
-storage.count_search_results(query, tags, kind).await?;
-
-// Vector operations (Qdrant or SQLite fallback)
-storage.store_embedding_with_qdrant(id, embedding, model, kind).await?;
-storage.search_vectors(query_embedding, kind_filter, limit).await?;
-storage.find_similar(memory_id, limit).await?;
-```
-
-**Performance Features**:
-- Denormalized search columns for fast LIKE queries
-- JSON columns for flexible schema evolution
-- Prepared statement caching
-- Batch operations for indexing
-- Cosine similarity in SQLite as fallback
-
----
-
-### 3. Search (`hippo-core/src/search/`)
-
-**Purpose**: Multi-modal search combining SQL, fuzzy matching, and semantic vectors.
-
-**Search Modes**:
-
-1. **Text Search**: Fast SQL LIKE queries on denormalized columns
-2. **Semantic Search**: Vector similarity via Qdrant or SQLite fallback
-3. **Hybrid Search**: Weighted combination of text + semantic
-4. **Fuzzy Search**: Typo-tolerant with Levenshtein distance
-5. **Natural Language**: Parses queries like "photos from last week"
-
-**Search Architecture**:
-
-```rust
-pub struct Searcher {
-    storage: Arc<Storage>,
-    embedder: Arc<Embedder>,
-    hybrid_config: HybridSearchConfig,  // Configurable weights
-}
-
-// Hybrid search scoring
-pub struct HybridSearchConfig {
-    pub semantic_weight: f32,  // 0.0 - 1.0 (default: 0.7)
-    pub keyword_weight: f32,   // 0.0 - 1.0 (default: 0.3)
-}
-```
-
-**Search Flow**:
-
-```mermaid
-graph TD
-    A[Search Query] --> B{Query Type?}
-    B -->|Text Only| C[SQL LIKE Search]
-    B -->|Semantic| D[Generate Embedding]
-    B -->|Hybrid| E[Both Paths]
-
-    C --> F[Score by Relevance]
-    D --> G[Qdrant Vector Search]
-    E --> H[Combine Scores]
-
-    F --> I[Apply Filters]
-    G --> I
-    H --> I
-
-    I --> J[Sort by Score]
-    J --> K[Return Results]
-```
-
-**Example Usage**:
-
-```rust
-// Basic text search
-let results = searcher.search(SearchQuery {
-    text: Some("vacation photos".to_string()),
-    tags: vec![
-        TagFilter { tag: "beach".to_string(), mode: Include }
-    ],
-    kinds: vec![MemoryKind::Image { .. }],
-    date_range: Some(DateRange {
-        start: Some(last_month),
-        end: Some(now)
-    }),
-    limit: 50,
-    offset: 0,
-}).await?;
-
-// Semantic search
-let results = searcher.semantic_search("sunset beach", 20).await?;
-
-// Hybrid search (best of both)
-let results = searcher.hybrid_search("family photos", 30).await?;
-
-// Natural language parsing
-let parsed = searcher.parse_natural_query("photos from last week")?;
-// Returns: ParsedQuery {
-//     keywords: Some("photos"),
-//     file_types: vec![MemoryKind::Image],
-//     date_range: Some(DateRange { ... }),
-// }
-```
-
-**Scoring Algorithm**:
-
-```rust
-// Text search scoring
-if title_contains_query { score += 10.0; }
-if title_starts_with_query { score += 5.0; }
-if filename_contains_query { score += 8.0; }
-if filename_starts_with_query { score += 4.0; }
-if tag_contains_query { score += 7.0; }
-
-// Recency boost
-if age_days < 7 { score *= 1.1; }
-else if age_days < 30 { score *= 1.05; }
-
-// Hybrid scoring
-final_score = (semantic_score * semantic_weight)
-            + (keyword_score * keyword_weight);
-```
-
-**Fuzzy Matching**:
-- Levenshtein distance calculation
-- Character transposition detection
-- Common substitutions (a↔e, i↔y, o↔u, c↔k)
-- Prefix matching bonus
-- Jaccard similarity for character overlap
-
----
-
-### 4. Embeddings (`hippo-core/src/embeddings/mod.rs`)
-
-**Purpose**: Generate vector embeddings for semantic search.
-
-**Supported Backends**:
-
-1. **Ollama** (recommended): Local models like `nomic-embed-text` (768-dim)
-2. **OpenAI**: `text-embedding-ada-002` (1536-dim) via API
-3. **Hash Fallback**: Deterministic hash-based embeddings for offline use
-
-**Architecture**:
-
-```rust
-pub struct Embedder {
-    config: EmbedderConfig,
-    ollama: Option<OllamaClient>,
-    client: Client,  // For OpenAI API
-}
-
-pub enum EmbeddingProvider {
-    Local,    // Hash-based fallback
-    Ollama,   // Local Ollama server
-    OpenAI,   // Cloud API
-}
-```
-
-**Embedding Strategy by File Type**:
-
-```rust
-match memory.kind {
-    MemoryKind::Image { .. } => {
-        // Perceptual hash: resize to 16x16, extract RGB features
-        // Normalize to 512-dim vector
-    }
-    MemoryKind::Code { language, .. } => {
-        // Hash-based text embedding + language features
-        // 768-dim with language one-hot encoding
-    }
-    MemoryKind::Document { .. } => {
-        // Ollama/OpenAI if available, else hash-based
-        // 1536-dim for compatibility
-    }
-    _ => {
-        // Generic: path + tags + metadata
-        // Hash-based 1536-dim
-    }
-}
-```
-
-**Example Usage**:
-
-```rust
-// Automatic embedding during indexing
-let embedding = embedder.embed_memory(&memory).await?;
-storage.store_embedding_with_qdrant(memory.id, &embedding, "text", &memory.kind).await?;
-
-// Query embedding
-let query_vec = embedder.embed_query("search text").await?;
-let similar = storage.search_vectors(query_vec, None, 10).await?;
-
-// Batch processing
-let texts = vec!["doc1".to_string(), "doc2".to_string()];
-let embeddings = embedder.embed_batch(&texts).await?;
-```
-
-**Hash-Based Fallback Algorithm**:
-
-```rust
-fn hash_embed(&self, text: &str, dim: usize) -> Vec<f32> {
-    let tokens: Vec<&str> = text.split_whitespace().collect();
-    let mut embedding = vec![0.0; dim];
-
-    for (pos, token) in tokens.iter().enumerate() {
-        let hash = simple_hash(token);
-        let position_weight = 1.0 - (pos as f32 / tokens.len() as f32) * 0.5;
-
-        // Multi-probe hashing (3 positions per token)
-        for i in 0..3 {
-            let idx = (hash + i * 7919) % dim;
-            embedding[idx] += position_weight / (i + 1) as f32;
-        }
-
-        // Bigram features
-        if pos > 0 {
-            let bigram_hash = simple_hash(&format!("{}_{}", tokens[pos-1], token));
-            embedding[bigram_hash % dim] += position_weight * 0.5;
-        }
-    }
-
-    normalize(&mut embedding);  // L2 normalization
-    embedding
-}
-```
-
----
-
-### 5. Ollama Integration (`hippo-core/src/ollama/mod.rs`)
-
-**Purpose**: Local AI capabilities (embeddings, chat, analysis) via Ollama.
-
-**Recommended Models**:
-
-```rust
-// Fast models (~1-2GB) - quick responses
-pub const FAST: &[&str] = &[
-    "gemma2:2b",     // Google's Gemma2 2B - best quality/speed
-    "qwen2.5:1.5b",  // Alibaba's Qwen - very fast
-    "llama3.2:1b",   // Meta's smallest Llama
-];
-
-// Balanced models (~4-8GB) - good quality
-pub const BALANCED: &[&str] = &[
-    "gemma2:9b",     // High quality
-    "llama3.2:3b",
-    "qwen2.5:7b",
-    "mistral:7b",
-];
-
-// Embeddings
-pub const EMBEDDINGS: &[&str] = &[
-    "nomic-embed-text",   // 768-dim, general purpose (recommended)
-    "mxbai-embed-large",  // Higher quality
-    "all-minilm",         // Fast, smaller dims
-];
-
-// Vision models
-pub const VISION: &[&str] = &[
-    "llava:7b",    // Image understanding
-    "bakllava",
-];
-```
-
-**Key Features**:
-
-1. **Embeddings**: Local vector generation
-2. **Text Generation**: Context-aware completions
-3. **Chat**: Multi-turn conversations with streaming
-4. **Document Analysis**: Structured JSON extraction
-5. **Code Analysis**: Language-specific insights
-6. **RAG**: Retrieval-augmented generation
-7. **Vision**: Image captioning (llava)
-
-**Example Usage**:
-
-```rust
-let ollama = OllamaClient::new();
-
-// Check availability
-if !ollama.is_available().await {
-    ollama.pull_model("gemma2:2b").await?;
-}
-
-// Generate embeddings
-let embedding = ollama.embed_single("some text").await?;
-
-// Text generation
-let response = ollama.generate(
-    "Explain Rust ownership",
-    Some("You are a helpful Rust tutor.")
-).await?;
-
-// Streaming chat
-let messages = vec![
-    ChatMessage::new("user", "What is Hippo?"),
-];
-ollama.stream_chat(&messages, cancel_token, |chunk| {
-    print!("{}", chunk);  // Real-time output
-}).await?;
-
-// Document analysis (returns structured JSON)
-let analysis = ollama.analyze_document(content, "report.pdf").await?;
-// Returns: LocalAnalysis {
-//     summary, key_topics, suggested_tags, document_type, language
-// }
-
-// Image captioning
-let caption = ollama.caption_image(Path::new("photo.jpg")).await?;
-```
-
-**Streaming Protocol**:
-
-```rust
-// Stream responses in real-time with cancellation
-pub async fn stream_chat<F>(
-    &self,
-    messages: &[ChatMessage],
-    cancellation_token: CancellationToken,
-    mut on_chunk: F,
-) -> Result<String>
-where
-    F: FnMut(String) + Send,
-{
-    // Yields chunks as they arrive via callback
-    // Supports user cancellation
-    // Returns full response when done
-}
-```
-
----
-
-### 6. Watcher (`hippo-core/src/watcher/mod.rs`)
-
-**Purpose**: Real-time file system monitoring with automatic re-indexing using the `notify` crate.
-
-**Architecture**:
-
-```rust
-pub struct FileWatcher {
-    state: Arc<WatcherState>,
-    event_tx: broadcast::Sender<WatchEvent>,
-    storage: Arc<Storage>,
-    indexer: Option<Arc<Indexer>>,  // For automatic re-indexing
-    watcher: Option<RecommendedWatcher>,  // notify crate watcher
-}
-
-pub enum WatchEvent {
-    Created { path, source },
-    Modified { path, source },
-    Deleted { path },
-    Renamed { from, to, source },
-    WatcherStarted,
-    WatcherStopped,
-    Error { message },
-}
-```
-
-**Key Features**:
-
-1. **Native File Watching**: Uses `notify` crate's `RecommendedWatcher` for platform-native file system events
-2. **Automatic Re-indexing**: When a file is created or modified, the watcher automatically calls `indexer.index_single_file()` to update the index
-3. **Automatic Deletion**: When a file is deleted, the corresponding memory is removed from the index
-4. **Background Event Processing**: Events are processed in a dedicated async task
-5. **Pause/Resume**: Can temporarily pause event processing while maintaining watchers
-
-**Event Handling Flow**:
-
-```mermaid
-graph LR
-    A[File System Change] --> B[notify event]
-    B --> C[Background Task]
-    C --> D{Event Type?}
-    D -->|Create| E[index_single_file]
-    D -->|Modify| F[remove + index_single_file]
-    D -->|Delete| G[remove_memory_by_path]
-```
-
-**Example Usage**:
-
-```rust
-// Create watcher with indexer
-let mut watcher = FileWatcher::new(storage.clone(), Some(500))?;
-watcher.set_indexer(indexer.clone());  // Enable auto re-indexing
-
-// Watch a path - automatically starts notify watcher
-watcher.watch(&path, source).await?;
-
-// Subscribe to events (optional - for custom handling)
-let mut rx = watcher.subscribe();
-tokio::spawn(async move {
-    while let Ok(event) = rx.recv().await {
-        match event {
-            WatchEvent::Created { path, .. } => {
-                println!("New file indexed: {:?}", path);
-            }
-            WatchEvent::Modified { path, .. } => {
-                println!("File re-indexed: {:?}", path);
-            }
-            WatchEvent::Deleted { path } => {
-                println!("File removed from index: {:?}", path);
-            }
-            _ => {}
-        }
-    }
-});
-
-// Pause/resume
-watcher.pause().await?;
-watcher.resume().await?;
-
-// Get stats
-let stats = watcher.stats().await;
-println!("Watching {} paths, {} events processed",
-    stats.total_watched_paths,
-    stats.events_processed
-);
-```
-
----
-
-### 7. Thumbnails (`hippo-core/src/thumbnails/mod.rs`)
-
-**Purpose**: Fast thumbnail generation with disk + memory caching.
-
-**Supported Formats**:
-- Images: jpg, png, gif, bmp, webp, tiff, ico
-- Videos: mp4, mov, avi, mkv, webm (via ffmpeg)
-- PDFs: First page rendering (via pdfium)
-- Office: docx, xlsx, pptx (embedded thumbnails)
-
-**Caching Strategy**:
-
-```rust
-pub struct ThumbnailManager {
-    cache_dir: PathBuf,  // Disk cache (~/.cache/Hippo/thumbnails)
-    memory_cache: LruCache<String, CachedThumbnail>,  // Hot cache
-    cache_memory_usage: usize,  // Current RAM usage
-}
-
-// Two-tier caching:
-// 1. Memory cache: LRU, 500 entries, max 50MB
-// 2. Disk cache: Persistent, SHA256-named files
-```
-
-**Thumbnail Generation**:
-
-```mermaid
-graph LR
-    A[Request Thumbnail] --> B{In Memory Cache?}
-    B -->|Yes| C[Return Immediately]
-    B -->|No| D{On Disk?}
-    D -->|Yes| E[Load from Disk]
-    D -->|No| F{File Type?}
-
-    F -->|Image| G[Resize to 256x256]
-    F -->|Video| H[Extract Frame @ 2s]
-    F -->|PDF| I[Render First Page]
-    F -->|Office| J[Extract Embedded]
-
-    G --> K[Save to Disk]
-    H --> K
-    I --> K
-    J --> K
-
-    K --> L[Add to Memory Cache]
-    E --> L
-    L --> C
-```
-
-**Example Usage**:
-
-```rust
-let thumbs = ThumbnailManager::new()?;
-
-// Get or generate thumbnail
-let thumb_data = thumbs.get_thumbnail_data(&image_path)?;
-
-// Check if exists
-if thumbs.has_thumbnail(&path) {
-    let thumb_path = thumbs.get_thumbnail_path(&path);
-}
-
-// Video thumbnail (requires ffmpeg)
-let thumb_path = thumbs.generate_video_thumbnail(&video_path)?;
-
-// PDF thumbnail (requires pdfium)
-let thumb_path = thumbs.generate_pdf_thumbnail(&pdf_path)?;
-
-// Memory cache stats
-let stats = thumbs.memory_cache_stats();
-println!("Cache: {} entries, {} MB",
-    stats.entries,
-    stats.memory_bytes / 1024 / 1024
-);
-
-// Clear caches
-thumbs.clear_memory_cache();
-thumbs.clear_cache()?;  // Disk cache
-```
-
-**Cache Invalidation**:
-
-```rust
-// Smart invalidation: regenerate if source file modified
-if thumbnail_path.exists() {
-    let src_time = fs::metadata(image_path)?.modified()?;
-    let thumb_time = fs::metadata(&thumbnail_path)?.modified()?;
-
-    if thumb_time >= src_time {
-        return Ok(thumbnail_path);  // Still valid
-    }
-}
-// Regenerate if outdated
-```
-
----
-
-### 8. Qdrant Integration (`hippo-core/src/qdrant/`)
-
-**Purpose**: Managed Qdrant vector database for semantic search.
-
-**Collections**:
-
-```rust
-// Separate collections by embedding type
-pub const COLLECTION_TEXT: &str = "hippo_text";      // 768-dim
-pub const COLLECTION_IMAGE: &str = "hippo_image";    // 512-dim
-pub const COLLECTION_CODE: &str = "hippo_code";      // 768-dim
-```
-
-**QdrantManager**:
-
-```rust
-pub struct QdrantManager {
-    binary_path: PathBuf,
-    data_dir: PathBuf,
-    process: Arc<RwLock<Option<Child>>>,  // Managed process
-    client: QdrantClient,
-}
-
-// Auto-download, start, and manage Qdrant
-impl QdrantManager {
-    pub async fn ensure_running(&self) -> Result<()>;
-    pub async fn stop(&self) -> Result<()>;
-    pub async fn status(&self) -> QdrantStatus;
-    pub async fn cleanup(&self) -> Result<()>;  // Remove data
-}
-```
-
-**Example Usage**:
-
-```rust
-let manager = QdrantManager::new(data_dir).await?;
-
-// Start Qdrant (downloads if needed)
-manager.ensure_running().await?;
-
-// Check status
-let status = manager.status().await;
-println!("Running: {}, Collections: {}", status.running, status.collections);
-
-// Use via Storage
-let storage = Storage::new(&config).await?;
-storage.store_embedding_with_qdrant(id, embedding, "text", &kind).await?;
-
-// Vector search
-let results = storage.search_vectors(query_embedding, Some(&kind), 10).await?;
-
-// Shutdown
-manager.stop().await?;
-```
+## Core Modules
+
+### Indexer (`hippo-core/src/indexer/`)
+- File discovery via `walkdir` with 70+ supported extensions
+- Parallel batch processing with configurable size
+- Progress tracking with ETA calculation
+- EXIF extraction, code parsing, audio/video duration
+- Smart re-indexing (skip unchanged files via mtime comparison)
+- Skip patterns: `.git`, `node_modules`, `.venv`, `__pycache__`, `target`, `build`, `dist`
+- Fast mode (default): skips Ollama embeddings for 100x faster indexing
+
+### Storage (`hippo-core/src/storage/mod.rs`)
+- SQLite with FTS5, WAL mode, 1GB cache, 1GB mmap
+- Qdrant vector database integration with SQLite fallback
+- Denormalized search columns for fast queries
+- Mutex poisoning recovery via `get_db()` helper
+- Tables: `memories`, `sources`, `tags`, `embeddings`, `clusters`, `saved_searches`, `search_history`
+
+### Search (`hippo-core/src/search/`)
+- **Text**: FTS5 with BM25 ranking (title=10, filename=8, tags=7, content=5)
+- **Semantic**: Vector similarity via Qdrant/SQLite
+- **Hybrid**: Weighted combination (semantic 0.7 + keyword 0.3)
+- **Fuzzy**: Levenshtein distance with optimized single-row algorithm
+- **Natural Language**: Parses queries like "photos from last week"
+- **Operators**: AND, OR, NOT, "quoted phrases", prefix queries, column-specific
+- Paginated search with cursor-based pagination and total count
+
+### Embeddings (`hippo-core/src/embeddings/mod.rs`)
+- **Ollama**: `nomic-embed-text` (768-dim, recommended)
+- **OpenAI**: `text-embedding-ada-002` (1536-dim)
+- **Hash Fallback**: Deterministic for offline use
+- LRU cache: 5000 entries, 1-hour TTL
+
+### Ollama (`hippo-core/src/ollama/mod.rs`)
+- Embeddings, text generation, streaming chat, document analysis
+- Code analysis, image captioning (llava), RAG
+- Default model: `gemma2:2b`, fast tagging: `qwen2:0.5b`
+- Cancellation token support for streaming
+
+### Watcher (`hippo-core/src/watcher/mod.rs`)
+- `notify` crate for platform-native file system events
+- Auto re-indexing on create/modify, auto deletion on remove
+- Debounced events, pause/resume, shutdown flag
+- Skip patterns for `.git`, `node_modules`, etc.
+
+### Thumbnails (`hippo-core/src/thumbnails/mod.rs`)
+- Two-tier caching: memory LRU (2000 entries, 100MB) + disk (SHA256-named)
+- Images, videos (ffmpeg), PDFs (pdfium), Office docs
+- Smart cache invalidation based on file mtime
+
+### Scheduler (`hippo-core/src/scheduler/mod.rs`)
+- Background tokio task for periodic source re-indexing
+- Configurable check interval (default: 300s) and per-source sync interval (default: 3600s)
+- Tracks `last_sync` timestamp per source
+
+### Qdrant (`hippo-core/src/qdrant/`)
+- Managed process: auto-download, start, stop
+- Collections: `hippo_text` (768-dim), `hippo_image` (512-dim), `hippo_code` (768-dim)
+- Silent SQLite fallback on dimension mismatch
 
 ---
 
 ## Data Models
 
-### Core Types
-
 ```rust
-/// Unique identifier for any memory
-pub type MemoryId = Uuid;
-
-/// A Memory represents any indexed item
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Memory {
-    pub id: MemoryId,
+    pub id: MemoryId,           // UUID
     pub path: PathBuf,
     pub source: Source,
-    pub kind: MemoryKind,
+    pub kind: MemoryKind,       // Image, Video, Audio, Document, Code, etc.
     pub metadata: MemoryMetadata,
     pub tags: Vec<Tag>,
     pub embedding_id: Option<String>,
@@ -842,94 +135,17 @@ pub struct Memory {
     pub indexed_at: DateTime<Utc>,
 }
 
-/// File type variants
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MemoryKind {
-    Image { width: u32, height: u32, format: String },
-    Video { duration_ms: u64, format: String },
-    Audio { duration_ms: u64, format: String },
-    Document { format: DocumentFormat, page_count: Option<u32> },
-    Code { language: String, lines: u32 },
-    Spreadsheet { sheet_count: u32 },
-    Presentation { slide_count: u32 },
-    Archive { item_count: u32 },
-    Database,
-    Folder,
-    Unknown,
-}
-
-/// Where files come from
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Source {
     Local { root_path: PathBuf },
-    GoogleDrive { account_id: String },  // stub
-    ICloud { account_id: String },       // stub
-    Dropbox { account_id: String },      // stub
-    OneDrive { account_id: String },     // stub
-    S3 { bucket: String, region: String },  // stub
-    Custom { name: String },
+    // Cloud stubs: GoogleDrive, ICloud, Dropbox, OneDrive, S3, Custom
 }
 
-/// Rich metadata extracted from files
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MemoryMetadata {
-    pub title: Option<String>,
-    pub description: Option<String>,
-    pub file_size: u64,
-    pub mime_type: Option<String>,
-    pub hash: Option<String>,  // SHA256 for deduplication
-
-    // Media-specific
-    pub exif: Option<ExifData>,
-    pub dimensions: Option<(u32, u32)>,
-    pub duration: Option<f64>,
-    pub location: Option<GeoLocation>,
-
-    // Document-specific
-    pub text_preview: Option<String>,
-    pub word_count: Option<u32>,
-
-    // Code-specific
-    pub code_info: Option<CodeInfo>,
-
-    // AI-generated
-    pub ai_summary: Option<String>,
-    pub ai_tags: Vec<String>,
-    pub ai_caption: Option<String>,
-
-    pub custom: HashMap<String, serde_json::Value>,
-}
-
-/// Tags for organization
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tag {
     pub name: String,
-    pub kind: TagKind,
-    pub confidence: u8,  // 0-100 for AI tags
-}
-
-pub enum TagKind {
-    User,      // Manually added
-    System,    // Auto-generated (type:image, folder:vacation)
-    AI,        // AI-suggested
-}
-
-/// Search query structure
-#[derive(Debug, Clone, Default)]
-pub struct SearchQuery {
-    pub text: Option<String>,
-    pub tags: Vec<TagFilter>,
-    pub sources: Vec<Source>,
-    pub kinds: Vec<MemoryKind>,
-    pub date_range: Option<DateRange>,
-    pub sort: SortOrder,
-    pub limit: usize,
-    pub offset: usize,
-}
-
-pub struct TagFilter {
-    pub tag: String,
-    pub mode: TagFilterMode,  // Include or Exclude
+    pub kind: TagKind,          // User, System, AI
+    pub confidence: u8,         // 0-100 for AI tags
+    pub color: Option<String>,
+    pub parent: Option<String>, // Hierarchical: "project/hippo"
 }
 ```
 
@@ -937,1388 +153,122 @@ pub struct TagFilter {
 
 ## Tauri IPC Commands
 
-All commands are async and return `Result<T, String>`.
-
-| Command | Parameters | Returns | Description |
-|---------|-----------|---------|-------------|
-| `initialize` | - | `String` | Create Hippo instance, start Qdrant |
-| `search` | `query: String, tags: Vec<String>` | `SearchResults` | Search memories with text and tags |
-| `add_source` | `sourceType: String, path: String` | `String` | Add folder to index |
-| `remove_source` | `path: String, deleteFiles: bool` | `String` | Remove source, optionally delete memories |
-| `reindex_source` | `path: String` | `String` | Re-scan a folder |
-| `get_sources` | - | `Vec<SourceConfig>` | List configured sources |
-| `get_stats` | - | `StorageStats` | Get index statistics |
-| `get_tags` | - | `Vec<(String, u64)>` | List all tags with counts |
-| `add_tag` | `memoryId: String, tag: String` | `String` | Add tag to memory |
-| `remove_tag` | `memoryId: String, tag: String` | `String` | Remove tag from memory |
-| `toggle_favorite` | `memoryId: String` | `bool` | Star/unstar a file |
-| `reset_index` | - | `String` | Delete all data and reinitialize |
-| `open_file` | `path: String` | `String` | Open file with default app |
-| `open_in_finder` | `path: String` | `String` | Reveal file in Finder/Explorer |
-| `get_thumbnail` | `path: String` | `Vec<u8>` | Get or generate thumbnail |
-| `get_indexing_progress` | - | `IndexingProgress` | Get current indexing status |
-| `semantic_search` | `query: String, limit: usize` | `SearchResults` | Vector similarity search |
-| `get_similar` | `memoryId: String, limit: usize` | `Vec<Memory>` | Find similar files |
-| `chat_with_ai` | `messages: Vec<ChatMessage>` | `String` | Chat with Ollama/Claude |
-| `analyze_file` | `path: String` | `LocalAnalysis` | AI analysis of file |
-
-**Example IPC Usage (JavaScript)**:
-
-```javascript
-// Initialize
-await invoke('initialize');
-
-// Add source
-await invoke('add_source', {
-    sourceType: 'local',
-    path: '/Users/me/Photos'
-});
-
-// Monitor progress
-const progress = await invoke('get_indexing_progress');
-console.log(`${progress.percentage}% complete`);
-
-// Search
-const results = await invoke('search', {
-    query: 'vacation',
-    tags: ['beach', 'summer']
-});
-
-// Semantic search
-const similar = await invoke('semantic_search', {
-    query: 'sunset photos',
-    limit: 20
-});
-
-// Toggle favorite
-const isFav = await invoke('toggle_favorite', {
-    memoryId: '123e4567-e89b-12d3-a456-426614174000'
-});
-
-// Get thumbnail
-const thumbData = await invoke('get_thumbnail', {
-    path: '/path/to/image.jpg'
-});
-const blob = new Blob([new Uint8Array(thumbData)], { type: 'image/jpeg' });
-const url = URL.createObjectURL(blob);
-
-// Chat with AI
-const response = await invoke('chat_with_ai', {
-    messages: [
-        { role: 'user', content: 'Explain this code file' }
-    ]
-});
-```
+| Command | Description |
+|---------|-------------|
+| `initialize` | Create Hippo instance, start Qdrant |
+| `search` | Search memories with text and tags |
+| `add_source` / `remove_source` | Manage indexed folders |
+| `reindex_source` | Re-scan a folder |
+| `get_sources` / `get_stats` / `get_tags` | Query state |
+| `add_tag` / `remove_tag` | Tag management |
+| `toggle_favorite` | Star/unstar a file |
+| `get_thumbnail` | Get or generate thumbnail |
+| `get_indexing_progress` | Current indexing status |
+| `semantic_search` / `get_similar` | Vector search |
+| `chat_with_ai` / `analyze_file` | AI features |
+| `send_notification` | Desktop notification |
+| `open_file` / `open_in_finder` | File actions |
+| `save_search` / `list_saved_searches` / `delete_saved_search` / `use_saved_search` | Saved searches |
+| `add_search_history` / `get_search_history` / `clear_search_history` | Search history |
+| `get_recent_files` / `get_recently_modified` | Recent views |
+| `batch_rename` | Bulk rename with templates |
+| `search_paginated` | Paginated search with total count |
+| `start_scheduler` / `get_scheduler_status` / `set_source_sync_interval` | Scheduler |
+| `reset_index` | Delete all data and reinitialize |
 
 ---
 
 ## Development Guide
 
-### Common Tasks
-
-#### Adding a New File Type
-
-1. **Update supported extensions** in `hippo-core/src/indexer/mod.rs`:
-
-```rust
-impl Default for IndexerConfig {
-    fn default() -> Self {
-        Self {
-            supported_extensions: vec![
-                // ... existing extensions ...
-                "your_new_ext",  // Add here
-            ]
-        }
-    }
-}
-```
-
-2. **Add MemoryKind variant** in `hippo-core/src/models.rs`:
-
-```rust
-pub enum MemoryKind {
-    // ... existing variants ...
-    YourNewKind { custom_field: String },
-}
-```
-
-3. **Update detection logic** in `indexer/mod.rs`:
-
-```rust
-fn detect_kind(path: &Path) -> Result<MemoryKind> {
-    match ext.as_str() {
-        // ... existing matches ...
-        "your_ext" => MemoryKind::YourNewKind {
-            custom_field: extract_custom_field(path)?
-        },
-    }
-}
-```
-
-4. **Add metadata extraction** in `indexer/extractors.rs`:
-
-```rust
-pub fn extract_metadata(path: &Path, kind: &MemoryKind) -> Result<MemoryMetadata> {
-    match kind {
-        MemoryKind::YourNewKind { .. } => {
-            // Extract specific metadata
-        }
-    }
-}
-```
-
-#### Adding a New Search Filter
-
-1. **Update SearchQuery** in `models.rs`:
-
-```rust
-pub struct SearchQuery {
-    // ... existing fields ...
-    pub your_filter: Option<YourFilterType>,
-}
-```
-
-2. **Implement filter logic** in `search/mod.rs`:
-
-```rust
-pub async fn search(&self, query: SearchQuery) -> Result<SearchResults> {
-    let mut results = self.get_base_results(&query).await?;
-
-    // Apply your filter
-    if let Some(filter) = &query.your_filter {
-        results = results.into_iter()
-            .filter(|m| your_filter_logic(m, filter))
-            .collect();
-    }
-
-    Ok(results)
-}
-```
-
-#### Adding a New Tauri Command
-
-1. **Define command** in `hippo-tauri/src/main.rs`:
-
-```rust
-#[tauri::command]
-async fn your_command(
-    param: String,
-    state: State<'_, AppState>,
-) -> Result<YourReturnType, String> {
-    let hippo_lock = state.hippo.read().await;
-    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-
-    hippo.your_method(param).await
-        .map_err(|e| e.to_string())
-}
-```
-
-2. **Register command** in `main()`:
-
-```rust
-fn main() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            // ... existing commands ...
-            your_command,
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
-}
-```
-
-3. **Call from UI** in `index.html`:
-
-```javascript
-const result = await window.__TAURI__.invoke('your_command', {
-    param: 'value'
-});
-```
-
-#### Running Tests
+### Running
 
 ```bash
-# All tests
-cargo test --workspace
-
-# Specific module
-cargo test -p hippo-core --lib storage
-
-# With output
-cargo test -- --nocapture
-
-# Single test
-cargo test test_name
+cargo tauri dev                    # Development (Tauri app)
+cargo run -p hippo-cli -- --help   # CLI
+cargo test --workspace             # All tests
+cargo tauri build                  # Production build
 ```
 
-#### Building for Release
-
-```bash
-# Build core library
-cd hippo-core
-cargo build --release
-
-# Build desktop app
-cd hippo-tauri
-cargo tauri build
-
-# Output locations:
-# - macOS: target/release/bundle/dmg/
-# - Windows: target/release/bundle/msi/
-# - Linux: target/release/bundle/appimage/
-```
-
----
-
-## Dependency Graph
-
-### Module Dependencies
-
-```mermaid
-graph TD
-    A[lib.rs - Main Hippo API] --> B[indexer]
-    A --> C[storage]
-    A --> D[search]
-    A --> E[watcher]
-
-    B --> C
-    B --> F[embeddings]
-    B --> G[ollama]
-    B --> H[extractors]
-
-    D --> C
-    D --> F
-
-    E --> C
-
-    C --> I[qdrant]
-
-    F --> G
-
-    J[thumbnails] -.optional.-> C
-    K[duplicates] --> C
-
-    L[models] --> A
-    L --> B
-    L --> C
-    L --> D
-
-    M[error] --> A
-    M --> B
-    M --> C
-    M --> D
-```
-
-### Indexing Pipeline
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Hippo
-    participant Indexer
-    participant Storage
-    participant Embedder
-    participant Qdrant
-
-    User->>Hippo: add_source(path)
-    Hippo->>Indexer: queue_source(source)
-
-    loop For each file
-        Indexer->>Indexer: extract_metadata()
-        Indexer->>Storage: upsert_memory(memory)
-        Indexer->>Embedder: embed_memory(memory)
-        Embedder->>Qdrant: store_vector(id, embedding)
-        Indexer->>Hippo: update_progress()
-    end
-
-    Indexer->>Hippo: indexing_complete
-    Hippo->>User: return success
-```
-
-### Search Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant UI
-    participant Searcher
-    participant Storage
-    participant Qdrant
-
-    User->>UI: enter search query
-    UI->>Searcher: search(query)
-
-    alt Semantic Search
-        Searcher->>Searcher: embed_query()
-        Searcher->>Qdrant: vector_search()
-        Qdrant-->>Searcher: memory IDs + scores
-    else Text Search
-        Searcher->>Storage: search_with_tags()
-        Storage-->>Searcher: matching memories
-    end
-
-    Searcher->>Searcher: score and rank
-    Searcher->>UI: SearchResults
-    UI->>User: display results
-```
-
----
-
-## Working Features
-
-### Indexing
-- Add local folders via native folder picker dialog
-- Background indexing with progress tracking and ETA
-- File discovery with 70+ supported extensions
-- Parallel batch processing (configurable parallelism)
-- EXIF extraction for images (camera, GPS, dimensions)
-- Code parsing for Rust/Python/JS/Go (imports, exports, functions)
-- Audio/video duration extraction (symphonia, ffmpeg)
-- Hash-based duplicate detection
-- Auto-tagging with Ollama AI
-
-### Storage
-- SQLite database with optimized indexes
-- Qdrant vector database integration
-- JSON columns for flexible schema
-- Tag counting and management
-- Source configuration persistence
-- Export/import functionality
-
-### Search
-- Text search (filename, title, path, tags)
-- Tag filtering (include/exclude modes)
-- Semantic vector search via Qdrant
-- Hybrid search (text + semantic combined)
-- Fuzzy matching for typo tolerance
-- Natural language query parsing
-- Real-time search with debouncing
-- Client-side type filtering
-- Multiple sort options
-
-### UI Features
-- Grid and List view modes
-- Type filter pills (All, Images, Videos, Audio, Code, Docs)
-- Sort dropdown (Newest, Oldest, Name A-Z/Z-A, Size)
-- Tag suggestions from search
-- Tab key converts search text to tag filter
-- Detail panel with file info
-- Open file / Reveal in Finder buttons
-- Keyboard shortcuts (Cmd+K to focus search, Esc to close)
-- Image thumbnails (256x256 JPEG, cached)
-- Video thumbnails (frame extraction via ffmpeg)
-- Async thumbnail loading with placeholders
-
-### AI Capabilities
-- Local embeddings via Ollama (nomic-embed-text, mxbai-embed-large)
-- Text generation (gemma2, llama3.2, qwen2.5, mistral)
-- Streaming chat responses
-- Document analysis with structured JSON output
-- Code analysis with language-specific insights
-- Image captioning with llava vision models
-- RAG (Retrieval-Augmented Generation)
-- Summarization
-- Entity extraction
-
-### File Watching
-- Real-time file system monitoring (notify crate)
-- Debounced event processing (configurable delay)
-- Auto-update index on file changes
-- Pause/resume functionality
-- Event statistics tracking
-
-### Thumbnails
-- Two-tier caching (memory LRU + disk)
-- Image thumbnails (all common formats)
-- Video thumbnails (ffmpeg frame extraction)
-- PDF thumbnails (pdfium first page rendering)
-- Office document thumbnails (embedded extraction)
-- Smart cache invalidation based on file mtime
-- Memory-limited cache with auto-eviction
-
----
-
-## Not Yet Implemented
-
-### Cloud Sources
-- Google Drive, iCloud, Dropbox OAuth flows
-- Cloud file syncing
-- S3 bucket integration
-
-### Advanced Features
-- Face clustering (without recognition)
-- Knowledge graph visualization (D3.js)
-
----
-
-## Dependencies
-
-### hippo-core
-
-```toml
-[dependencies]
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-uuid = { version = "1", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
-thiserror = "1"
-anyhow = "1"
-
-# Storage
-rusqlite = { version = "0.32", features = ["bundled"] }
-qdrant-client = "1.12"
-
-# Indexing
-walkdir = "2"
-mime_guess = "2"
-rayon = "1"
-
-# Metadata
-image = "0.25"
-exif = "0.6"
-symphonia = { version = "0.5", features = ["all"] }
-
-# Thumbnails
-pdfium-render = "0.8"
-zip = "2"
-sha2 = "0.10"
-lru = "0.12"
-parking_lot = "0.12"
-
-# AI
-reqwest = { version = "0.12", features = ["json", "stream"] }
-futures-util = "0.3"
-tokio-util = "0.7"
-base64 = "0.22"
-
-# File watching
-notify = "7"
-
-# Utilities
-directories = "5"
-num_cpus = "1"
-tracing = "0.1"
-regex = "1"
-```
-
-### hippo-tauri
-
-```toml
-[dependencies]
-tauri = { version = "2.1", features = [] }
-tauri-plugin-dialog = "2"
-tauri-plugin-fs = "2"
-tauri-plugin-shell = "2"
-hippo-core = { path = "../hippo-core" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "1", features = ["full"] }
-tracing = "0.1"
-directories = "5"
-```
-
----
-
-## Running the App
-
-### Development
-
-```bash
-cd hippo-tauri
-cargo run
-```
-
-### Production Build
-
-```bash
-cd hippo-tauri
-cargo tauri build
-```
-
-**Database locations**:
-- macOS: `~/Library/Application Support/Hippo/hippo.db`
-- Linux: `~/.local/share/Hippo/hippo.db`
-- Windows: `%APPDATA%\Hippo\hippo.db`
-
-**Cache locations**:
-- Thumbnails: `~/.cache/Hippo/thumbnails/` (Linux/macOS)
-- Qdrant data: `<data_dir>/qdrant/`
-
----
-
-## Key Files Reference
+### Key File Reference
 
 | Feature | File(s) |
 |---------|---------|
-| Add new file types | `hippo-core/src/indexer/mod.rs` (SUPPORTED_EXTENSIONS) |
+| File type support | `hippo-core/src/indexer/mod.rs` (SUPPORTED_EXTENSIONS) |
 | Metadata extraction | `hippo-core/src/indexer/extractors.rs` |
-| Code language support | `hippo-core/src/indexer/code_parser.rs` |
+| Code parsing | `hippo-core/src/indexer/code_parser.rs` |
 | Search logic | `hippo-core/src/search/mod.rs` |
 | Storage schema | `hippo-core/src/storage/mod.rs` (init_schema) |
 | Vector search | `hippo-core/src/qdrant/mod.rs` |
 | AI integration | `hippo-core/src/ollama/mod.rs` |
 | File watching | `hippo-core/src/watcher/mod.rs` |
 | Thumbnails | `hippo-core/src/thumbnails/mod.rs` |
-| New Tauri commands | `hippo-tauri/src/main.rs` |
-| UI changes | `hippo-tauri/ui/dist/index.html` |
+| Scheduler | `hippo-core/src/scheduler/mod.rs` |
+| Tauri commands | `hippo-tauri/src/main.rs` |
+| UI | `hippo-tauri/ui/dist/index.html` |
 | Data models | `hippo-core/src/models.rs` |
-| Error types | `hippo-core/src/error.rs` |
-| Interactive TUI | `hippo-cli/src/tui/mod.rs`, `hippo-cli/src/tui/widgets.rs` |
-| FTS5 search | `hippo-core/src/storage/mod.rs` (search_fts5_with_snippets) |
-| Desktop notifications | `hippo-tauri/src/main.rs` (send_notification) |
+| TUI | `hippo-cli/src/tui/mod.rs`, `hippo-cli/src/tui/widgets.rs` |
 
----
+### Adding a New Tauri Command
 
-## Next Steps to Consider
-
-### Features
-- Favorites view (starred files)
-- Collections/Albums (manual grouping)
-- Timeline view (chronological visualization)
-- Duplicate file manager with merge UI
-- Advanced filters UI (size, date ranges, etc.)
-- Export search results to JSON/CSV
-- Batch rename/move files
-- File version history
-- Quick Look preview panel
-
-### Technical Improvements
-- FTS5 full-text search for documents
-- Incremental indexing (only changed files)
-- Background thumbnail generation queue
-- Streaming search results (paginated)
-- Custom embedding models via ONNX
-- Graph database for connections (Neo4j?)
-- Desktop notifications for indexing
-- macOS Spotlight integration
-- Windows Search integration
-
-### AI Enhancements
-- Multi-modal search (text + image query)
-- Smart collections (AI-grouped files)
-- Auto-organize suggestions
-- Conversation-based search
-- File summarization on hover
-- Automatic caption generation for all images
-
----
-
-## Architecture Diagrams
-
-### System Overview
-
-```mermaid
-graph TB
-    subgraph "Frontend (Tauri)"
-        UI[HTML/JS UI]
-    end
-
-    subgraph "Backend (Rust)"
-        API[Hippo Core API]
-
-        subgraph "Indexing Layer"
-            IDX[Indexer]
-            EXT[Extractors]
-            PARSER[Code Parser]
-        end
-
-        subgraph "Storage Layer"
-            SQL[(SQLite)]
-            QD[(Qdrant)]
-        end
-
-        subgraph "Search Layer"
-            SRCH[Searcher]
-            EMB[Embedder]
-        end
-
-        subgraph "AI Layer"
-            OLL[Ollama Client]
-            CLAUDE[Claude Client]
-        end
-
-        subgraph "Utilities"
-            THUMB[Thumbnails]
-            WATCH[File Watcher]
-            DUP[Duplicates]
-        end
-    end
-
-    UI <-->|IPC| API
-
-    API --> IDX
-    IDX --> EXT
-    IDX --> PARSER
-    IDX --> SQL
-    IDX --> EMB
-
-    API --> SRCH
-    SRCH --> SQL
-    SRCH --> QD
-    SRCH --> EMB
-
-    EMB --> OLL
-
-    API --> WATCH
-    WATCH --> SQL
-
-    API --> THUMB
-    API --> DUP
-
-    style UI fill:#e1f5ff
-    style API fill:#fff9c4
-    style SQL fill:#c8e6c9
-    style QD fill:#c8e6c9
-    style OLL fill:#ffe0b2
-```
-
----
-
-This documentation is comprehensive and up-to-date as of the current codebase. For questions or contributions, refer to the individual module source files for implementation details.
-
----
-
-## Current Work In Progress
-
-### Latest Checkpoint (February 8, 2026 - Session 15)
-
-**Commit**: `1b74bbd` on `feature/session15-desktop-experience` branch - PR #84
-
-**Release**: v1.2.0 (Session 13) - GitHub Release available
-
-**Session 15 PR**:
-| PR | Description |
-|----|-------------|
-| #84 | feat: Session 15 - Desktop Experience (3 features) |
-
-**Session 15 Features** (12 files changed, +700 lines):
-
-**Global Hotkey (Cmd+Shift+H)**:
-- ✅ `tauri-plugin-global-shortcut = "2"` integration
-- ✅ Registers system-wide Cmd+Shift+H to show/focus Hippo window
-- ✅ Works from any app - shows, unminimizes, and focuses window
-- ✅ Updated capabilities/default.json with global-shortcut permissions
-
-**Drag & Drop**:
-- ✅ Tauri's native `onDragDropEvent` API (not HTML5 fallback)
-- ✅ Visual overlay with drop zone feedback (enter/over/leave states)
-- ✅ Dropped folders auto-added as sources and trigger indexing
-- ✅ Dropped files added to existing source or shown as notification
-
-**Scheduled Auto-indexing**:
-- ✅ New `hippo-core/src/scheduler/mod.rs` module
-- ✅ Background tokio task with configurable check interval (default: 5 min)
-- ✅ Per-source `sync_interval_secs` with `last_sync` tracking
-- ✅ `SchedulerStats` with running state, check counts, sync triggers
-- ✅ Storage methods: `update_source_last_sync()`, `set_source_sync_interval()`
-- ✅ 3 new Tauri commands: `start_scheduler`, `get_scheduler_status`, `set_source_sync_interval`
-- ✅ 2 unit tests for scheduler config and stats
-
-**New SQLite Columns** (via ALTER TABLE migration):
-```sql
-ALTER TABLE sources ADD COLUMN sync_interval_secs INTEGER NOT NULL DEFAULT 3600;
-ALTER TABLE sources ADD COLUMN last_sync TEXT;
-```
-
----
-
-### Previous Checkpoint (February 8, 2026 - Session 14)
-
-**Commit**: `c85b302` on `feature/session14-search-navigation` branch - PR #83
-
-**Release**: v1.2.0 (Session 13) - GitHub Release available
-
-**Session 14 PR**:
-| PR | Description |
-|----|-------------|
-| #83 | feat: Session 14 - Search & Navigation UX (5 features) |
-
-**Session 14 Features** (5 files changed, +965 lines):
-
-**Saved Searches** (DB-backed):
-- ✅ `saved_searches` SQLite table with CRUD operations
-- ✅ Save current search (query + tags + filters) with custom name
-- ✅ Use tracking (count + last_used_at) for sort-by-frequency
-- ✅ Sidebar section showing saved searches with click-to-run
-- ✅ Delete saved searches, save modal with details preview
-
-**Search History** (DB-backed):
-- ✅ `search_history` SQLite table replacing localStorage
-- ✅ Auto-cleanup at 50 entries
-- ✅ Loads from DB on app init
-- ✅ Result count shown in history dropdown
-- ✅ Clear history persisted to backend
-
-**Recently Added / Recently Modified Views**:
-- ✅ New sidebar nav items with clock/refresh icons
-- ✅ `get_recent_files(limit, days)` - files added in last N days
-- ✅ `get_recently_modified(limit, days)` - files modified in last N days
-- ✅ Optimized queries using `indexed_at` and `modified_at` indexes
-
-**Batch Rename**:
-- ✅ Template engine with `{name}`, `{ext}`, `{date}`, `{counter}`, `{type}`
-- ✅ Live preview modal showing old name → new name
-- ✅ Renames files on disk AND updates database
-- ✅ Bulk bar "Rename" button for selected files
-
-**Paginated Search / Infinite Scroll**:
-- ✅ `search_paginated()` with cursor-based pagination and total count
-- ✅ Infinite scroll: auto-loads more when scrolling near bottom
-- ✅ "Load More" button with remaining count
-- ✅ Result counter shows "X of Y files"
-
-**New Tauri Commands** (11):
-```
-save_search, list_saved_searches, delete_saved_search, use_saved_search,
-add_search_history, get_search_history, clear_search_history,
-get_recent_files, get_recently_modified, batch_rename, search_paginated
-```
-
-**New SQLite Tables**:
-```sql
-saved_searches (id, name, query, tags_json, filters_json, created_at, last_used_at, use_count)
-search_history (id, query, result_count, searched_at)
-```
-
-**Session 14 Roadmap** (planned across Sessions 14-17):
-| Session | Features | Status |
-|---------|----------|--------|
-| 14 | Saved Searches, Search History, Recent Views, Batch Rename, Paginated Search | ✅ Complete |
-| 15 | Drag & Drop, Global Hotkey, Scheduled Auto-indexing | ✅ Complete |
-| 16 | Knowledge Graph Visualization, Location Map | Planned |
-| 17 | Smart Collections, Natural Language Queries | Planned |
-
----
-
-### Previous Checkpoint (February 8, 2026 - Session 13)
-
-**Commit**: `da69f79` on `main` branch - All PRs merged through #80
-
-**Session 13 PR**:
-| PR | Description |
-|----|-------------|
-| #80 | feat: Session 13 mega features - TUI, notifications, FTS5, and UI enhancements |
-
-**Session 13 Features** (12 features across 17 files, +3,074 lines):
-
-**Interactive TUI** (`hippo-cli/src/tui/`):
-- ✅ Full ratatui-based terminal interface (`hippo-cli tui` or `hippo-cli ui`)
-- ✅ Search bar with real-time filtering
-- ✅ Tabs: Files, Favorites, Tags, Duplicates
-- ✅ 3-pane layout: sidebar (sources/tags), file list, detail panel
-- ✅ Vim keybindings: j/k (navigate), q (quit), / (search), f (favorite), Tab (switch pane)
-- ✅ Help overlay (press ?)
-- ✅ Custom widgets: SearchInput, FileList, DetailPanel, TagCloud
-
-**Desktop Notifications** (`hippo-tauri/src/main.rs`):
-- ✅ `tauri-plugin-notification` integration
-- ✅ `send_notification` Tauri IPC command
-- ✅ Indexing complete notification in UI
-- ✅ Notification permissions in capabilities/default.json
-
-**Enhanced FTS5 Search** (`hippo-core/src/storage/mod.rs`, `hippo-core/src/search/mod.rs`):
-- ✅ `text_preview` as 5th FTS5 column for content search (BM25 weight 5.0)
-- ✅ Auto-rebuild FTS5 table on column count change (4->5 migration)
-- ✅ `Fts5SearchResult` struct with `content_snippet` field
-- ✅ `search_fts5_with_snippets()` with weighted BM25 ranking: title=10, filename=8, tags=7, content=5
-- ✅ `search_fts5()` in Searcher with full query syntax support
-- ✅ `build_fts5_query()` / `fts5_term()` for safe query construction
-- ✅ Prefix queries (`vaca*`), column-specific (`title:vacation`), boolean (`AND`/`OR`/`NOT`), phrases (`"exact match"`)
-- ✅ `search_with_operators_fts5()` mapping `ParsedSearchTerms` to native FTS5
-- ✅ `parsed_terms_to_fts5()` conversion helper
-- ✅ `text_preview` denormalized column with migration from `metadata_json`
-- ✅ `rebuild_fts_index()` and `count_fts5_results()` utilities
-
-**UI Features** (`hippo-tauri/ui/dist/index.html`, +729 lines):
-- ✅ Dark mode toggle with system preference detection
-- ✅ Favorites view with dedicated filter
-- ✅ Collections/Albums management UI (create, add files, view)
-- ✅ Timeline view for chronological browsing
-- ✅ Duplicate file manager with merge/delete UI
-- ✅ Advanced filters (file size, date range, dimensions)
-- ✅ Bulk operations (delete, tag, export selected files)
-- ✅ Export search results to JSON/CSV
-- ✅ Bulk delete button with confirmation dialog
-
-**New Dependencies**:
-```toml
-# Workspace (Cargo.toml)
-ratatui = "0.29"
-crossterm = "0.28"
-
-# hippo-tauri
-tauri-plugin-notification = "2"
-```
-
-**New Files**:
-| File | Lines | Description |
-|------|-------|-------------|
-| `hippo-cli/src/tui/mod.rs` | 706 | TUI application logic |
-| `hippo-cli/src/tui/widgets.rs` | 381 | Custom ratatui widgets |
-
-**New Tauri Command**:
+1. Define in `hippo-tauri/src/main.rs`:
 ```rust
 #[tauri::command]
-async fn send_notification(
-    title: String,
-    body: String,
-    app_handle: tauri::AppHandle,
-) -> Result<String, String>
+async fn your_command(param: String, state: State<'_, AppState>) -> Result<T, String> {
+    let hippo = state.hippo.read().await;
+    let hippo = hippo.as_ref().ok_or("Not initialized")?;
+    hippo.your_method(param).await.map_err(|e| e.to_string())
+}
 ```
+2. Register in `generate_handler![]`
+3. Call from UI: `await window.__TAURI__.invoke('your_command', { param: 'value' })`
 
-**New Search API Methods** (`hippo-core/src/search/mod.rs`):
-```rust
-// Direct FTS5 search with BM25 scoring and snippets
-pub async fn search_fts5(&self, query: &str, kind: Option<&str>, limit: usize) -> Result<SearchResults>
-
-// Map ParsedSearchTerms to native FTS5 boolean syntax
-pub async fn search_with_operators_fts5(&self, parsed: &ParsedSearchTerms, kind: Option<&str>, limit: usize) -> Result<SearchResults>
-```
-
-**Test Results**: 286 tests passing (75 unit + 211 integration)
+### Database Locations
+- **macOS**: `~/Library/Application Support/Hippo/hippo.db`
+- **Linux**: `~/.local/share/Hippo/hippo.db`
+- **Thumbnails**: `~/.cache/Hippo/thumbnails/`
+- **Qdrant**: `~/Library/Application Support/com.hippo.app/qdrant/`
 
 ---
 
-### Previous Checkpoint (December 28, 2025 - Session 12)
-
-**Commit**: `bdccb41` on `main` branch - All PRs merged through #78
-
-**Release**: v1.1.0 - Rich AI Content Analysis
-- GitHub Release: https://github.com/greplabs/hippo/releases/tag/v1.1.0
-- Download: `Hippo_1.1.0_macos_aarch64.zip` (~11.3MB) or `.dmg`
-
-**Session 12 PRs**:
-| PR | Description |
-|----|-------------|
-| #76 | feat(ai): Rich content analysis for auto-tagging v1.1.0 |
-| #77 | fix(ui): Scroll position reset and AI analyze/summarize commands |
-| #78 | docs: Session 12 checkpoint update |
-
-**Session 12 Features & Fixes**:
-- ✅ Rich image analysis using llava vision model for scene/object detection
-- ✅ PDF/document text extraction and content analysis (pdf-extract crate)
-- ✅ Code content analysis with language-specific tags and framework detection
-- ✅ AI tagging benchmark (`hippo-core/benches/ai_tagging_benchmark.rs`)
-- ✅ Updated ai_suggest_tags to include file content for better suggestions
-- ✅ 10x faster UI tag suggestions with ultra-fast model (qwen2:0.5b)
-- ✅ Fixed scroll position reset after search results load
-- ✅ Fixed ollama_analyze/summarize to support both memoryId and filePaths
-- ✅ Version bump to v1.1.0
-
-**Session 11 Completed Features** (PR #74):
-- ✅ Ultra-fast auto-tagging with qwen2:0.5b (352MB, ~1.2s response)
-- ✅ Separate tagging_model configuration in OllamaConfig
-- ✅ fast_generate() method for instant tag suggestions
-- ✅ Real-time file tagging via watcher integration (auto_tag_single)
-- ✅ auto_tag_batch uses fast model for 5-10x faster batch tagging
-
-**Session 10 Changes (December 27-28, 2025)**:
-- ✅ Fixed critical memory leaks in background tasks (PR #72)
-- ✅ Phase 2 memory optimizations - cache limits and channel efficiency (PR #73)
-- ✅ JoinHandle tracking for Indexer and FileWatcher
-- ✅ VecDeque for O(1) cache eviction
-- ✅ 50MB memory-based cache limit for embeddings
-- ✅ TTL cleanup for debounced events (5 min max)
-- ✅ Watch channel for progress updates (no buffer accumulation)
-
----
-
-### Previous Checkpoint (December 27, 2025 - v1.0.0 GA Release)
-
-**Commit**: `b52f623` on `main` branch - All PRs merged through #70
-
-**Release**: **v1.0.0 GA** - First general availability release!
-- GitHub Release: https://github.com/greplabs/hippo/releases/tag/v1.0.0
-- macOS Build: `Hippo_1.0.0_aarch64.dmg` available for download
-
-**Major Features in v1.0.0**:
-- ✅ Fixed macOS app icon with proper rounded corners (PR #57)
-- ✅ Added web app icons (favicons, PWA icons, apple-touch-icon) (PR #57)
-- ✅ Major search performance optimizations (PR #59)
-- ✅ Qdrant dimension mismatch fix - silent SQLite fallback (PR #61)
-- ✅ UI scroll fix + thumbnail cache limit + skip patterns (PR #62)
-- ✅ Improved scroll reset with delayed execution (PR #63)
-- ✅ Fixed stuck indexing overlay (PR #64, #65)
-- ✅ Fixed memory leaks causing UI blank screen (PR #67)
-- ✅ **Fast indexing mode** - 100x faster indexing by default (PR #68)
-- ✅ Code cleanup - clippy lints (PR #69)
-- ✅ Version bump to v1.0.0 GA (PR #70)
-
-### Completed Feature Branches
-
-| Branch | Phase | Status | PR |
-|--------|-------|--------|-----|
-| `feature/phase1-visual-polish` | Visual Polish & Consistency | ✅ Merged | #43 |
-| `feature/phase2-smart-tagging` | Smart Tagging & Organization | ✅ Merged | #44 |
-| `feature/phase3-advanced-search` | Advanced Search & Discovery | ✅ Merged | #45 |
-| `feature/phase4-automation` | Smart Automation | ✅ Merged | #46 |
-| `feature/phase5-platform` | Platform & Integrations | ✅ Merged | #48 |
-| `feature/loading-empty-states` | UI Loading States | ✅ Merged | #49 |
-| `feature/tag-colors` | Tag Colors & Bulk Tagging | ✅ Merged | #50 |
-| `fix/crash-bugs` | Stability Fixes | ✅ Merged | #52 |
-| `feature/ui-polish-and-interactions` | UI Polish & Interactions | ✅ Merged | #54 |
-| `feature/core-improvements` | Smart Re-indexing & Tests | ✅ Merged | #55 |
-| `feature/macos-rounded-icons` | macOS Icon Fix | ✅ Merged | #57 |
-| `feature/search-optimizations` | Search Performance | ✅ Merged | #59 |
-| `fix/qdrant-dimension-mismatch` | Qdrant Fallback | ✅ Merged | #61 |
-| `fix/ui-and-performance` | UI Fixes + Performance | ✅ Merged | #62 |
-| `fix/scroll-delay` | Scroll Reset | ✅ Merged | #63 |
-| `fix/indexing-overlay` | Overlay Field Fix | ✅ Merged | #64 |
-| `fix/indexing-overlay-v2` | Smart Overlay Detection | ✅ Merged | #65 |
-| `fix/memory-leak-ui-blank` | Memory Leak Fix | ✅ Merged | #67 |
-| `feature/fast-indexing` | Fast Indexing Mode | ✅ Merged | #68 |
-| `chore/cleanup-lint` | Clippy Fixes | ✅ Merged | #69 |
-| `release/v1.0.0` | GA Release Version | ✅ Merged | #70 |
-| `feature/session13-mega-features` | Session 13 Mega Features | ✅ Merged | #80 |
-
-### Session 13 Changes (February 8, 2026)
-
-#### Mega Features (PR #80)
-
-**Interactive TUI** (`hippo-cli/src/tui/`):
-- ✅ Full ratatui + crossterm terminal interface with search, tabs, 3-pane layout
-- ✅ Vim keybindings (j/k/q/?/f/Tab), help overlay, custom widgets
-
-**Desktop Notifications** (`hippo-tauri/`):
-- ✅ `tauri-plugin-notification` with `send_notification` command
-- ✅ Automatic notification on indexing completion
-
-**Enhanced FTS5 Search** (`hippo-core/src/storage/mod.rs`, `search/mod.rs`):
-- ✅ `text_preview` as 5th FTS5 column with BM25 weight 5.0
-- ✅ Auto-rebuild migration (4->5 columns)
-- ✅ `search_fts5()` with prefix, column-specific, boolean, and phrase queries
-- ✅ `search_with_operators_fts5()` mapping `ParsedSearchTerms` to native FTS5
-- ✅ `content_snippet` in `Fts5SearchResult`
-
-**8 UI Features** (`hippo-tauri/ui/dist/index.html`, +729 lines):
-- ✅ Dark mode, favorites view, collections, timeline, duplicate manager
-- ✅ Advanced filters, bulk operations, export to JSON/CSV
-
-### Session 10 Changes (December 27-28, 2025)
-
-#### Fast Indexing Mode (PR #68)
-
-**Problem**: Indexing was slow due to Ollama embedding generation for every file (1-2 seconds per file)
-
-**Solution** (`hippo-core/src/indexer/mod.rs`):
-- ✅ Added `generate_ai_embeddings: bool` config field (defaults to `false`)
-- ✅ When false: Skip Ollama embeddings entirely for instant indexing
-- ✅ When true: Full AI-powered embeddings for semantic search
-- ✅ Hash-based embeddings still work for basic similarity
-
-**Performance Impact**:
-- Before: ~1-2 seconds per file (with Ollama)
-- After: ~50-100 files per second (instant mode)
-- 100x faster indexing by default
-
-#### Code Cleanup (PR #69)
-- ✅ Fixed clippy lint: Changed `match` to `if let` for single pattern in tray icon handler
-
-#### GA Release (PR #70)
-- ✅ Bumped version from 0.2.0 to 1.0.0 in:
-  - `Cargo.toml` (workspace)
-  - `hippo-tauri/Cargo.toml`
-  - `hippo-tauri/tauri.conf.json`
-- ✅ Created GitHub release with `Hippo_1.0.0_aarch64.dmg`
-
-### Previous Session - Session 10 Early Changes
-
-#### Search Performance Optimizations (PR #59)
-
-**Embedding Cache** (`hippo-core/src/embeddings/mod.rs`):
-- ✅ Added LRU cache with 5000 entries and 1-hour TTL
-- ✅ Caches query embeddings for 2-3x faster semantic searches
-- ✅ Added `cache_stats()` and `clear_cache()` public methods
-
-**FTS5 Full-Text Search** (`hippo-core/src/storage/mod.rs`):
-- ✅ Added FTS5 virtual table for `title`, `filename`, `tags_text`
-- ✅ Auto-sync triggers keep FTS index updated on INSERT/UPDATE/DELETE
-- ✅ 5-10x faster text searches compared to LIKE queries
-- ✅ Graceful fallback to LIKE if FTS fails
-
-**Additional Compound Indexes**:
-- ✅ `idx_memories_favorite_modified` - optimizes favorites sorted by date
-- ✅ `idx_memories_kind_modified` - optimizes type filtering with date sort
-
-**Parallel Tag Suggestions** (`hippo-core/src/search/mod.rs`):
-- ✅ Uses rayon parallel iterator for large tag sets (>100 tags)
-- ✅ 5-10x faster for 1000+ tags
-- ✅ Extracted `score_tag_match()` for parallel processing
-
-#### macOS Icon Fix (PR #57)
-
-**New Icon Assets** (`assets/`):
-- ✅ Created `hippo-icon-macos.svg` - Master icon with 228px corner radius
-- ✅ Created `hippo-icon-square.svg` - Square version for reference
-
-**Desktop App Icons** (`hippo-tauri/icons/`):
-- ✅ Regenerated all PNG sizes (32x32, 128x128, 256x256, 512x512) in RGBA format
-- ✅ Updated `icon.icns` for macOS
-- ✅ Updated `icon.ico` for Windows
-- ✅ Icons now display with proper rounded corners on macOS dock/menu bar
-
-**Web App Icons** (`hippo-web/static/icons/`):
-- ✅ Added `favicon.ico`, `favicon-16.png`, `favicon-32.png`
-- ✅ Added `apple-touch-icon.png` (180x180)
-- ✅ Added PWA icons: `icon-192.png`, `icon-512.png`
-- ✅ Updated `icon.svg` to match new design
-
-**Technical Details**:
-- macOS expects square icons and applies its own rounding via superellipse
-- Previous circular icon with transparent corners appeared with sharp edges
-- New icon has pre-rounded background (228px radius on 1024x1024 canvas)
-- All PNGs converted to RGBA format (required by Tauri)
-
-#### Qdrant Dimension Mismatch Fix (PR #61)
-
-**Problem**: App crashed when indexing 200K+ files due to embedding dimension mismatch warnings
-- Ollama produces 768-dim embeddings but Qdrant collections expected 1536-dim
-- Previous code tried to pad embeddings which caused floods of warnings
-
-**Solution** (`hippo-core/src/qdrant/mod.rs`):
-- Changed from `warn!` to `debug!` log level for dimension mismatch
-- Return `Ok(())` immediately to silently fall back to SQLite storage
-- Keeps semantic search working via SQLite vector fallback
-
-#### UI & Performance Fixes (PR #62)
-
-**Scroll Position Fix** (`hippo-tauri/ui/dist/index.html`):
-- ✅ Scroll content area to top after data loads
-- ✅ Uses setTimeout to ensure DOM is rendered before scrolling
-
-**Thumbnail Cache Limit**:
-- ✅ Added 200-entry LRU cache to prevent memory exhaustion
-- ✅ `addToThumbnailCache()` function with eviction logic
-- ✅ Prevents WebView crashes from unbounded thumbnail loading
-
-**Indexer Skip Patterns** (`hippo-core/src/indexer/mod.rs`):
-- ✅ Added `skip_patterns` config field
-- ✅ Skips: `.git`, `node_modules`, `.venv`, `__pycache__`, `.cache`, `.npm`, `target`, `build`, `dist`
-- ✅ Uses `filter_entry()` in WalkDir to prune directories before traversal
-- ✅ 10-100x faster indexing on repos with large excluded directories
-
-**Watcher Skip Patterns** (`hippo-core/src/watcher/mod.rs`):
-- ✅ Added `should_skip_path()` helper function
-- ✅ Filters events from `.git`, `node_modules`, etc.
-- ✅ Reduces log noise and unnecessary re-indexing
-
-#### Indexing Overlay Fixes (PR #64, #65)
-
-**Field Name Fix** (PR #64):
-- ✅ Changed `p.is_complete` to `p.stage === 'Complete'` (matching backend)
-- ✅ Changed `p.eta_seconds` to `p.estimated_seconds_remaining`
-
-**Smart Overlay Detection** (PR #65):
-- ✅ Pre-check before showing overlay (`total > 0` or `stage === 'Scanning'`)
-- ✅ Separated `startIndexingProgress()` and `startIndexingPolling()`
-- ✅ Reduced auto-hide timeout from 5s to 1.5s
-- ✅ Added close button (×) for manual dismissal
-- ✅ CSS styling for `.indexing-close` button
-
-#### Memory Leak Fix (PR #67)
-
-**Problem**: UI would go blank after running for extended periods due to memory accumulation
-
-**Root Causes Identified**:
-- `thumbnailPending` object grew indefinitely (entries set to true/false but never deleted)
-- No limit on concurrent thumbnail requests overwhelming the system
-- Stale thumbnail requests accumulated between renders
-
-**Solutions** (`hippo-tauri/ui/dist/index.html`):
-- ✅ Added concurrency limit for thumbnail requests (max 5 at a time)
-- ✅ Implemented queue-based thumbnail loading with `processThumbnailQueue()`
-- ✅ Delete `thumbnailPending[p]` after completion instead of just setting `false`
-- ✅ Added `cleanupThumbnailPending()` for periodic cleanup
-- ✅ Clear thumbnail queue on each `renderFiles()` call
-
-**New Features**:
-- ✅ Added **Refresh** button to sidebar (clears all caches and reloads data)
-- ✅ Added **Cmd+R** keyboard shortcut for refresh
-- ✅ Updated shortcuts help modal with refresh shortcut
-
-### Previous Session - Session 9 Changes
-
-#### UI Polish & Interactions (PR #54)
-
-**Micro-interactions** (`hippo-tauri/ui/dist/index.html`):
-- ✅ Added ripple effect on button clicks
-- ✅ Added hover lift effect for cards
-- ✅ Added press scale animation
-- ✅ Added stagger children animation for lists
-- ✅ Added slide-in animations for panels
-- ✅ Added bounce hover animation
-
-**Favorites Counter**:
-- ✅ Real-time favorites count badge on filter button
-- ✅ Updates automatically when files are starred/unstarred
-- ✅ Gradient badge styling with golden colors
-
-**Find Similar Files**:
-- ✅ Prominent "Find Similar Files" button in detail panel
-- ✅ Shows up to 5 similar files with similarity percentage badges
-- ✅ Click results to navigate to similar files
-- ✅ Collapsible panel with close button
-- ✅ Calls `get_similar` backend endpoint
-
-**AI Chat Typing**:
-- ✅ Added typing cursor animation
-- ✅ Added `typeMessage()` function for streaming effect
-- ✅ Click to skip animation feature
-
-**Dark Mode Polish**:
-- ✅ Refined shadows with subtle borders
-- ✅ Improved glow effects on buttons
-- ✅ Better scrollbar styling in dark mode
-- ✅ Focus ring improvements
-
-#### Smart Re-indexing & Tests (PR #55)
-
-**Smart Re-indexing** (`hippo-core/src/indexer/mod.rs`):
-- ✅ Added `smart_reindex: bool` config option (enabled by default)
-- ✅ Added `ReindexStatus` enum: `New`, `Modified`, `Unchanged`, `Error`
-- ✅ Added `needs_reindex()` async method to check file modification times
-- ✅ Compares file mtime against `indexed_at` in database
-- ✅ Skips unchanged files during sync for much faster re-indexing
-- ✅ Logs skipped file count during smart reindex
-
-**New Unit Tests**:
-- ✅ `test_indexer_config_default`: Verifies default config values
-- ✅ `test_indexing_progress_percentage`: Tests progress calculation
-- ✅ `test_reindex_status_variants`: Tests all status variants
-- ✅ `test_supported_extensions_comprehensive`: Tests 30+ file extensions
-- ✅ `test_indexing_stage_serialization`: Tests JSON roundtrip
-
-### Previous Session - Session 8 Changes
-
-#### Critical Bug Fixes (PR #52)
-
-**File Watcher Infinite Loop Fix** (`hippo-core/src/watcher/mod.rs`):
-- ✅ Added `shutdown` flag to `WatcherState` with atomic bool
-- ✅ Implemented `signal_shutdown()` and `is_shutdown()` methods
-- ✅ Updated `process_notify_events()` to check shutdown flag and exit gracefully
-- ✅ Implemented `Drop` trait for `FileWatcher` to cleanup on drop
-- ✅ Updated `start_flush_task()` to respect shutdown signal and return `JoinHandle`
-
-**Database Mutex Poisoning Fix** (`hippo-core/src/storage/mod.rs`):
-- ✅ Added `get_db()` helper method that safely recovers from mutex poisoning
-- ✅ Replaced 31 occurrences of unsafe `.lock().map_err()` pattern
-- ✅ Logs warning when poisoning is detected but recovers gracefully
-- ✅ SQLite connections remain valid after mutex poisoning recovery
-
-**Other Fixes**:
-- ✅ Fixed `.gitignore` to not ignore `src/storage` directory (was catching `hippo-core/src/storage/`)
-
-**Root Causes Addressed**:
-1. Background watcher tasks ran forever with no way to terminate, causing memory leaks
-2. When a thread panicked while holding the database lock, all subsequent DB operations failed permanently
-
-### Previous Session - Session 7 Changes
-
-#### System Tray Support (PR #48)
-- ✅ Added system tray icon with menu integration
-- ✅ Show/hide window from tray menu
-- ✅ Quick access to common actions from tray
-
-#### Loading Skeletons & Progress Overlay (PR #49)
-- ✅ Added loading skeletons for better UX during file loading
-- ✅ Indexing progress overlay with percentage and ETA
-- ✅ Improved empty state handling
-
-#### Tag Colors & Bulk Tagging (PR #50)
-- ✅ Tag color picker with 18-color palette
-- ✅ Tag autocomplete for quick tagging
-- ✅ Enhanced bulk tagging UI with multi-select
-- ✅ Custom SVG file type icons for better visual distinction
-- ✅ Added `list_tags_with_colors()` and `set_tag_color()` public API methods
-- ✅ Updated Tag struct with `color` and `parent` fields
-
-### Previous Session - Session 6 Changes
-
-#### Phase 1: Enhanced Theme System (PR #43)
-- ✅ Added comprehensive CSS variables for theming (--bg-primary, --text-primary, --accent-primary, etc.)
-- ✅ Implemented system preference detection using `prefers-color-scheme` media query
-- ✅ Theme auto-detects system preference on first load
-- ✅ Added listener for real-time system theme changes
-- ✅ Added `data-theme` attribute to HTML element
-
-#### Phase 2: Hierarchical Tags (PR #44)
-- ✅ Added `parent` and `color` fields to Tag struct
-- ✅ Implemented `parse_hierarchical()` for parsing tags like "project/hippo/frontend"
-- ✅ Added helper methods: `full_path()`, `is_child_of()`, `depth()`, `child()`
-- ✅ Tags automatically parse hierarchy from "/" separator
-- ✅ 6 new unit tests for hierarchical tag functionality
-
-#### Phase 3: Search Operators (PR #45)
-- ✅ Added `ParsedSearchTerms` and `SearchTerm` structs
-- ✅ Implemented query parser supporting:
-  - `"quoted phrases"` for exact match
-  - AND (implicit with spaces)
-  - OR for alternatives
-  - NOT or - prefix for exclusion
-- ✅ Added `SearchQuery::with_operators()` constructor
-- ✅ 7 new unit tests for search operators
-
-#### Phase 4: Automation Rules (PR #46)
-- ✅ Added `AutomationRule` struct with triggers, conditions, and actions
-- ✅ Implemented `RuleTrigger` enum: OnFileAdded, OnFileModified, OnTagChanged, etc.
-- ✅ Added `ConditionField` enum: Extension, FileType, FileSize, Tag, etc.
-- ✅ Added `ConditionOp` enum: Equals, Contains, GreaterThan, Matches, etc.
-- ✅ Added `ActionType` enum: AddTag, RunAiAnalysis, AddToCollection, etc.
-- ✅ Created `RuleTemplates` with predefined automation patterns
-- ✅ 7 new unit tests for automation rules
-
-### Previous Session - Release & Distribution
-- ✅ Created v0.2.0 release on GitHub
-- ✅ Built production macOS app (28MB)
-- ✅ Uploaded `Hippo_0.2.0_macos_aarch64.zip` to release
-- ✅ Code cleanup and credits (PR #40)
-
-**Previous Session - Code Cleanup & Quality (PR #40)**:
-- ✅ Fixed clippy warning (abs_diff)
-- ✅ Removed empty cloud source stub files (google_drive.rs, icloud.rs, s3.rs, local.rs)
-- ✅ Fixed dangerous `.expect()` in ThumbnailManager::default() with fallback
-- ✅ Cleaned up `#[allow(dead_code)]` markers with proper documentation
-- ✅ Updated LICENSE to 2024-2025 GrepLabs
-- ✅ Build is now warning-free
-
-**Previous Session - Search UX & Keyboard Shortcuts (PR #38)**:
-- ✅ Search input debouncing (300ms delay to reduce backend calls)
-- ✅ Keyboard shortcuts help modal (press `?` to open)
-- ✅ New keyboard shortcuts: `/`, `G`, `L`, `Cmd+,`, `Cmd+F`, `Cmd+D`, `Cmd+A`, `Cmd+O`
-- ✅ Shortcuts button with keyboard icon in sidebar footer
-- ✅ Updated search placeholder with "/" shortcut hint
-- ✅ CSS animations for search loading states
-- ✅ Click-outside-to-close for shortcut help modal
-
-**New Keyboard Shortcuts Available**:
-| Shortcut | Action |
-|----------|--------|
-| `?` | Open keyboard shortcuts help |
-| `/` | Focus search input (quick search) |
-| `G` | Switch to grid view |
-| `L` | Switch to list view |
-| `Cmd+,` | Open settings |
-| `Cmd+F` | Focus search |
-| `Cmd+D` | Toggle dark mode |
-| `Cmd+A` | Select all files |
-| `Cmd+O` | Add folder |
-| `Cmd+K` | Command palette |
-| `Esc` | Close modals / Deselect |
-| `Tab` | Convert search text to tag filter |
-
-**Previous Session - Performance Optimizations (PR #36, #37)**:
-- ✅ SQLite: 1GB cache, 1GB mmap, WAL optimizations (5-10x faster queries)
-- ✅ Search cache: 500 entries with 60s TTL (2-3x better hit rate)
-- ✅ Levenshtein: Single-row algorithm with early termination (3-5x faster)
-- ✅ Hybrid search: Parallel semantic + keyword via tokio::join! (40-50% faster)
-- ✅ Indexer: 16-core parallelism, 200-file batches (1.5-2x faster)
-- ✅ Ollama: 5000 embedding cache, 15-min model cache, 10-min streaming timeout
-- ✅ Thumbnails: 2000 LRU entries, 100MB memory limit (2-4x hit rate)
-- ✅ Updated app icons with proper hippo mascot
-- ✅ Version bumped to 0.2.0
-
-**AI Quality Improvements**:
-- ✅ Switched default model to `gemma2:2b` (better quality/speed ratio)
-- ✅ Improved RAG with semantic search for context retrieval
-- ✅ Increased context size from 1.5K to 20K+ chars
-- ✅ Enhanced prompts for better AI responses
-- ✅ Lower temperature (0.3) for more focused answers
-- ✅ Increased token limit (2048) for detailed responses
-
-### Current AI Configuration
-
-**Default Models (No API Key Required)**:
-- **Embeddings**: `nomic-embed-text` (768-dim, local via Ollama)
-- **Generation**: `gemma2:2b` (~1.6GB, excellent quality/speed)
-- **Vision/Image**: `llava:7b` (image captioning and analysis)
-
-**Installed Models (Recommended)**:
-```bash
-ollama pull nomic-embed-text  # Required for semantic search
-ollama pull gemma2:2b         # Default generation model
-ollama pull llava:7b          # Optional for image analysis
-```
-
-**Model Priority List (quality-focused)**:
-1. `gemma2:2b` - Default, best quality/speed balance
-2. `llama3.2:3b` - Great quality, slightly larger
-3. `qwen2.5:1.5b` - Very fast alternative
-4. `llama3.2:1b` - Fastest but lower quality
-
-### Working Features
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| File indexing | ✅ Working | 70+ file types supported |
-| Text search | ✅ Working | FTS5 with BM25 ranking |
-| FTS5 content search | ✅ Working | text_preview column, snippets, prefix/boolean queries |
-| Tag filtering | ✅ Working | Include/exclude modes |
-| Semantic search | ✅ Working | Vector similarity via Qdrant |
-| File watcher | ✅ Working | Auto-starts on init, uses notify crate |
-| Thumbnails | ✅ Working | Images, videos, PDFs |
-| AI Chat (RAG) | ✅ Improved | Semantic context retrieval |
-| Image captions | ✅ Working | llava:7b model |
-| Code parsing | ✅ Working | Rust, Python, JS, Go |
-| Auto-tagging | ✅ Enabled | Default on with Ollama |
-| Code preview | ✅ Working | Prism.js syntax highlighting |
-| Interactive TUI | ✅ Working | ratatui + crossterm, vim keybindings |
-| Desktop notifications | ✅ Working | tauri-plugin-notification |
-| Dark mode | ✅ Working | System preference detection |
-| Favorites view | ✅ Working | Dedicated filter in UI |
-| Collections/Albums | ✅ Working | Create, manage, view |
-| Timeline view | ✅ Working | Chronological browsing |
-| Duplicate manager | ✅ Working | Merge/delete UI |
-| Advanced filters | ✅ Working | Size, date, dimensions |
-| Bulk operations | ✅ Working | Delete, tag, export selected |
-| Export results | ✅ Working | JSON and CSV formats |
-
-### Completed (Recent Sessions)
-
-#### System-Wide Performance Optimizations (December 25, 2025)
-- ✅ SQLite: Increased cache to 1GB, mmap to 1GB, added WAL optimizations
-- ✅ Search: 500-entry cache with 60s TTL, parallel hybrid search
-- ✅ Algorithms: Optimized Levenshtein (single-row + early termination)
-- ✅ Indexer: Up to 16-core parallelism, 200-file batch size
-- ✅ Ollama: 5000 embedding cache, extended timeouts, TCP_NODELAY
-- ✅ Thumbnails: 2000 LRU entries, 100MB memory limit
-
-#### AI Quality Improvements
-- ✅ Switched to `gemma2:2b` for better responses
-- ✅ RAG now uses semantic search to find relevant documents
-- ✅ Context includes file content, tags, and metadata
-- ✅ Improved system prompts with clear instructions
-- ✅ Responses reference actual filenames
-
-#### Code Features in UI
-- ✅ Added Prism.js for syntax highlighting (20+ languages)
-- ✅ Added code preview panel in detail view
-- ✅ Auto-detects language from file extension
-
-#### CI/CD Optimization
-- ✅ Parallelized CI into 3 jobs (lint, test, build-check)
-- ✅ Added ci-success aggregation job
-- ✅ Caching for faster builds
-
-#### Documentation (December 25, 2025)
-- ✅ Created comprehensive CLI tutorial (`docs/CLI_TUTORIAL.md`)
-- ✅ Created full feature list (`docs/FEATURES.md`)
-- ✅ Created brand guide with colors, typography (`docs/BRAND_GUIDE.md`)
-- ✅ Created mobile app architecture plan (`docs/MOBILE_APP.md`)
-- ✅ Created SVG icon (`assets/hippo-icon.svg`)
-
-### New Documentation
-
-| Document | Description |
-|----------|-------------|
-| `docs/CLI_TUTORIAL.md` | Complete CLI guide with all 14 commands and examples |
-| `docs/FEATURES.md` | Full feature matrix (70+ features documented) |
-| `docs/BRAND_GUIDE.md` | Colors, typography, iconography, voice & tone |
-| `docs/MOBILE_APP.md` | Mobile app architecture (React Native + Rust) |
-| `assets/hippo-icon.svg` | Vector logo/icon |
-
-### CLI Commands Reference
-
+## Working Features
+
+### Core
+- File indexing with 70+ extensions, parallel batch processing, smart re-indexing
+- SQLite + Qdrant hybrid storage with FTS5 full-text search
+- Text, semantic, hybrid, fuzzy search with BM25 ranking
+- Real-time file watching with auto re-indexing
+- Scheduled auto-indexing (background scheduler)
+- Two-tier thumbnail caching (memory + disk)
+- Hash-based duplicate detection
+
+### UI
+- Grid/List views, type filter pills, sort dropdown
+- Dark mode with system preference detection
+- Tag management (colors, hierarchical, bulk tagging)
+- Favorites view, collections/albums, timeline view
+- Duplicate file manager, advanced filters (size, date, dimensions)
+- Bulk operations (delete, tag, rename, export to JSON/CSV)
+- Saved searches (DB-backed), search history
+- Recently added/modified views
+- Paginated search with infinite scroll
+- Drag & drop folders to add sources
+- Detail panel with file info, code preview (Prism.js)
+- Find similar files with similarity percentages
+- Keyboard shortcuts (?, /, G, L, Cmd+K, Cmd+D, Cmd+R, Cmd+Shift+H)
+
+### AI (via Ollama)
+- Local embeddings (nomic-embed-text)
+- Text generation, streaming chat, RAG
+- Document/code analysis, image captioning (llava)
+- Ultra-fast auto-tagging (qwen2:0.5b)
+
+### Desktop
+- System tray with show/hide
+- Global hotkey (Cmd+Shift+H) to show window
+- Desktop notifications (indexing complete)
+- Drag & drop file/folder import
+
+### CLI
 | Command | Aliases | Description |
 |---------|---------|-------------|
 | `chomp` | eat, index, add | Index a folder |
@@ -2335,158 +285,50 @@ ollama pull llava:7b          # Optional for image analysis
 | `wade` | watch | Watch changes |
 | `den` | config, home | Show config |
 | `forget` | reset, clear | Clear all |
+| `tui` / `ui` | - | Interactive TUI |
 
 ---
 
-## Elite Project Roadmap 🚀
+## Current State
 
-### Phase 1: Visual Polish & Consistency (Next Priority)
+### Latest: Session 15 (February 2026)
 
-#### Icons & Branding
-- [ ] Unified icon set across app, CLI, and system tray
-- [ ] SVG icons for all UI elements (replace emoji where needed)
-- [ ] Consistent hippo mascot in sidebar, about dialog, empty states
-- [ ] App icon variants: light mode, dark mode, monochrome for menu bar
+**Branch**: `feature/session15-desktop-experience` | **PR**: #84
 
-#### Theme System
-- [ ] Complete dark mode implementation
-- [ ] Theme toggle with system preference detection
-- [ ] Consistent color palette (primary, secondary, accent)
-- [ ] Typography improvements (font weights, sizes, line heights)
-- [ ] Smooth theme transitions with CSS variables
+**Session 15 features**: Global Hotkey (Cmd+Shift+H), Drag & Drop, Scheduled Auto-indexing
 
-#### UI Refinements
-- [ ] Loading skeletons during search/indexing
-- [ ] Empty state illustrations
-- [ ] Improved file type icons (custom SVGs per type)
-- [ ] Better thumbnail placeholders
-- [ ] Polished modal designs
+**Bug fixes applied** (Session 15 continuation):
+- Fixed infinite scroll (`getElementById('content')` null)
+- Fixed Find Similar Files wrong command name
+- Fixed CSP for Prism.js code preview
+- Fixed batch rename collision check
+- Fixed search history remove persistence + stuck indexing overlay
+- Scheduler: needs wiring to actual re-indexing (pending task #26)
 
-### Phase 2: Smart Tagging & Organization
+### Release History
+| Version | Date | Key Features |
+|---------|------|-------------|
+| v1.2.0 | Feb 2026 | TUI, notifications, FTS5, 8 UI features, session 14-15 features |
+| v1.1.0 | Dec 2025 | Rich AI content analysis, ultra-fast auto-tagging |
+| v1.0.0 | Dec 2025 | GA release, fast indexing, memory leak fixes, icon fix |
 
-#### Enhanced Tagging
-- [ ] Tag autocomplete with frequency ranking
-- [ ] Hierarchical tags (parent/child: `photos/vacation/beach`)
-- [ ] Tag colors and icons
-- [ ] Bulk tagging UI (select multiple files, apply tags)
-- [ ] Tag merge/rename across all files
-- [ ] Smart tag suggestions based on content similarity
+### Session Roadmap
+| Session | Features | Status |
+|---------|----------|--------|
+| 14 | Saved Searches, Search History, Recent Views, Batch Rename, Paginated Search | Done |
+| 15 | Drag & Drop, Global Hotkey, Scheduled Auto-indexing | Done |
+| 16 | Knowledge Graph Visualization, Location Map | Planned |
+| 17 | Smart Collections, Natural Language Queries | Planned |
 
-#### Auto-Tagging Intelligence
-- [ ] Improved AI tagging with confidence scores
-- [ ] Content-based auto-tags (detect faces, objects, scenes)
-- [ ] Location-based tags from EXIF GPS data
-- [ ] Date-based tags (season, year, event detection)
-- [ ] Code-specific tags (language, framework, patterns)
-- [ ] Document classification (invoice, receipt, contract, etc.)
+### Merged PRs
+#38-#84 (all merged through main)
 
-#### Auto-Organization
-- [ ] Smart folders based on rules (type, date, tags)
-- [ ] AI-suggested folder structures
-- [ ] One-click organize by date/type/project
-- [ ] Virtual collections (non-destructive grouping)
-- [ ] Duplicate detection UI with merge/delete options
+---
 
-### Phase 3: Advanced Search & Discovery
-
-#### Search Enhancements
-- [ ] Natural language queries ("photos from last summer")
-- [ ] Search operators (AND, OR, NOT, quotes for exact)
-- [ ] Date range picker in search UI
-- [ ] File size filters
-- [ ] Saved searches / smart folders
-- [ ] Search history with quick access
-- [ ] Search within results (refine)
-
-#### Discovery Features
-- [ ] "Similar files" one-click from any file
-- [ ] Content clusters visualization
-- [ ] Timeline view (scroll through time)
-- [ ] Location map for geotagged files
-- [ ] Recently modified / recently added views
-- [ ] Trending tags (most used this week)
-
-### Phase 4: Smart Automation
-
-#### Background Intelligence
-- [ ] Scheduled auto-indexing (hourly/daily)
-- [ ] Smart re-indexing (only changed files)
-- [ ] Background embedding generation
-- [ ] Automatic duplicate cleanup suggestions
-- [ ] Storage usage reports and cleanup suggestions
-
-#### Workflows & Rules
-- [ ] Custom automation rules (if X then Y)
-- [ ] Auto-move files based on type/content
-- [ ] Auto-tag rules (filename patterns, folders)
-- [ ] Notification triggers (new duplicates, large files)
-- [ ] Export/import rule configurations
-
-#### AI Assistants
-- [ ] Streaming AI responses (real-time typing)
-- [ ] Context-aware file suggestions
-- [ ] Natural language file operations ("move all PDFs to Documents")
-- [ ] Batch AI analysis for selected files
-- [ ] Custom prompt templates
-
-### Phase 5: Platform & Integrations
-
-#### Cross-Platform
-- [ ] Windows build and testing
-- [ ] Linux AppImage/Flatpak
-- [ ] Menu bar / system tray mode
-- [ ] Global hotkey for quick search
-- [ ] Drag and drop from Finder/Explorer
-
-#### Cloud Integrations (Future)
-- [ ] Google Drive sync
-- [ ] iCloud Drive integration
-- [ ] Dropbox connector
-- [ ] S3 bucket browser
-- [ ] WebDAV support
-
-### Quality Standards
-
-#### Code Quality
-- [ ] 80%+ test coverage on hippo-core
-- [ ] Integration tests for Tauri commands
-- [ ] E2E tests for critical user flows
-- [ ] Performance benchmarks documented
-- [ ] Memory profiling and leak detection
-
-#### Documentation
-- [ ] User guide with screenshots
-- [ ] Video tutorials for key features
-- [ ] API documentation for developers
-- [ ] Architecture decision records (ADRs)
-
-#### Accessibility & Security
-- [ ] Keyboard navigation audit
-- [ ] Screen reader compatibility
-- [ ] Color contrast compliance
-- [ ] Security audit for file handling
-- [ ] Sandboxed file access
-
-### Commands for Testing
-
-```bash
-# Build everything
-cargo build --workspace
-
-# Run tests
-cargo test --workspace
-
-# Run Tauri app
-cargo tauri dev
-
-# Run CLI
-cargo run -p hippo-cli -- --help
-
-# Run web server
-cargo run -p hippo-web
-```
-
-### Database Locations
-- **macOS**: `~/Library/Application Support/Hippo/hippo.db`
-- **Qdrant data**: `~/Library/Application Support/com.hippo.app/qdrant/`
-- **Thumbnails**: `~/.cache/Hippo/thumbnails/`
+## Not Yet Implemented
+- Cloud sources (Google Drive, iCloud, Dropbox, S3)
+- Knowledge graph visualization (D3.js)
+- Location map for geotagged files
+- Smart collections (AI-grouped)
+- Natural language file operations
+- Face clustering

@@ -744,6 +744,10 @@ impl Hippo {
         self.storage.clear_search_history().await
     }
 
+    pub async fn delete_search_history_entry(&self, id: i64) -> Result<()> {
+        self.storage.delete_search_history_entry(id).await
+    }
+
     // === Recent Files ===
 
     pub async fn get_recent_files(&self, limit: usize, days: usize) -> Result<Vec<Memory>> {
@@ -803,12 +807,20 @@ impl Hippo {
 
                 let new_path = old_path.parent().map(|p| p.join(&new_name));
                 if let Some(new_path) = new_path {
+                    // Skip if source file doesn't exist on disk
+                    if !old_path.exists() {
+                        tracing::warn!("Skipping rename: source file not found {:?}", old_path);
+                        continue;
+                    }
+                    // Check for collision — don't overwrite existing files
+                    if new_path.exists() && new_path != old_path {
+                        tracing::warn!("Skipping rename: target already exists {:?}", new_path);
+                        continue;
+                    }
                     // Rename on disk
-                    if old_path.exists() {
-                        if let Err(e) = std::fs::rename(&old_path, &new_path) {
-                            tracing::warn!("Failed to rename {:?}: {}", old_path, e);
-                            continue;
-                        }
+                    if let Err(e) = std::fs::rename(&old_path, &new_path) {
+                        tracing::warn!("Failed to rename {:?}: {}", old_path, e);
+                        continue;
                     }
                     // Update in database
                     self.storage

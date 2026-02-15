@@ -50,7 +50,7 @@
     }
 
     /* Smooth global transitions */
-    html { scroll-behavior: smooth; }
+    html, body { height: 100%; overflow: hidden; scroll-behavior: smooth; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
@@ -61,6 +61,8 @@
       -moz-osx-font-smoothing: grayscale;
       letter-spacing: -0.01em;
       line-height: 1.5;
+      margin: 0;
+      padding: 0;
     }
     body.dark { background: var(--bg-primary); }
 
@@ -404,7 +406,7 @@
     body.dark .card-star .icon { color: #57534e; }
     body.dark .card-star.active .icon { color: white; }
 
-    .app { display: flex; height: 100vh; width: 100%; }
+    .app { display: flex; height: 100%; width: 100%; position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 
     /* Sidebar */
     .sidebar {
@@ -653,11 +655,13 @@
     .filter-bar {
       background: white;
       border-bottom: 1px solid rgba(0,0,0,0.04);
-      padding: 12px 24px;
+      padding: 10px 24px;
       display: flex;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      flex-wrap: wrap;
+      min-height: 0;
     }
     body.dark .filter-bar { background: #1a1918; border-color: rgba(255,255,255,0.04); }
     .filter-btn {
@@ -833,11 +837,17 @@
       box-shadow: -4px 0 24px rgba(0,0,0,0.03);
     }
     .detail.open { display: flex; animation: slideInRight 0.3s ease; }
+    .detail.expanded { width: 600px; }
     @keyframes slideInRight {
       from { opacity: 0; transform: translateX(20px); }
       to { opacity: 1; transform: translateX(0); }
     }
     body.dark .detail { background: #1a1918; border-color: rgba(255,255,255,0.05); box-shadow: -4px 0 24px rgba(0,0,0,0.15); }
+    .detail-expand-btn { background: none; border: none; color: #a8a29e; cursor: pointer; padding: 8px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; }
+    .detail-expand-btn:hover { color: #57534e; background: rgba(0,0,0,0.04); }
+    body.dark .detail-expand-btn:hover { background: rgba(255,255,255,0.06); color: #d6d3d1; }
+    .detail.expanded .detail-tags { max-height: none; }
+    .detail.expanded .code-preview-container { max-height: 600px; }
     .detail-header { padding: 18px 20px; border-bottom: 1px solid rgba(0,0,0,0.04); display: flex; justify-content: space-between; align-items: center; }
     body.dark .detail-header { border-color: rgba(255,255,255,0.04); }
     .detail-header h2 { font-size: 15px; font-weight: 700; color: #1c1917; letter-spacing: -0.02em; }
@@ -1343,6 +1353,22 @@
     .code-stats { display: flex; gap: 12px; margin-top: 8px; font-size: 11px; color: #78716c; }
     body.dark .code-stats { color: #a8a29e; }
     .code-stat { display: flex; align-items: center; gap: 4px; }
+
+    /* Code Preview Enhancements */
+    .code-preview-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+    .code-preview-action-btn { background: none; border: 1px solid #e7e5e4; color: #78716c; cursor: pointer; padding: 3px 8px; border-radius: 4px; font-size: 11px; display: flex; align-items: center; gap: 4px; transition: all 0.15s; }
+    .code-preview-action-btn:hover { background: rgba(0,0,0,0.04); color: #292524; border-color: #d6d3d1; }
+    body.dark .code-preview-action-btn { border-color: #44403c; color: #a8a29e; }
+    body.dark .code-preview-action-btn:hover { background: rgba(255,255,255,0.06); color: #e7e5e4; }
+    .code-preview-action-btn .icon { width: 12px; height: 12px; }
+    .code-preview-container.expanded { max-height: none; }
+    .code-preview-container.line-numbers pre { padding-left: 48px; position: relative; }
+    .code-preview-container.line-numbers code .line-row { display: block; position: relative; }
+    .code-preview-container.line-numbers code .line-row::before { counter-increment: line; content: counter(line); position: absolute; left: -40px; width: 32px; text-align: right; color: #636363; font-size: 11px; user-select: none; -webkit-user-select: none; }
+    .code-preview-container.line-numbers pre code { counter-reset: line; }
+    .code-preview-filename { font-size: 11px; color: #78716c; font-family: 'SF Mono', Monaco, monospace; margin-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+    body.dark .code-preview-filename { color: #a8a29e; }
+    .detail.expanded .code-preview-filename { max-width: 250px; }
 
     /* Tag Color Picker */
     .color-picker-dropdown {
@@ -1911,7 +1937,7 @@
 </head>
 <body>
   <!-- File Type Icon Symbols -->
-  <svg style="display: none;">
+  <svg style="display:none;position:absolute;width:0;height:0;overflow:hidden;">
     <defs>
       <!-- Image icon -->
       <symbol id="icon-image" viewBox="0 0 24 24">
@@ -2127,7 +2153,10 @@
     <aside class="detail" id="detailPanel">
       <div class="detail-header">
         <h2>Details</h2>
-        <button class="close-btn" id="closeDetail"><span class="icon icon-md" id="closeIcon"></span></button>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button class="detail-expand-btn" id="expandDetailBtn" title="Expand panel"><span class="icon icon-md" id="expandDetailIcon"></span></button>
+          <button class="close-btn" id="closeDetail"><span class="icon icon-md" id="closeIcon"></span></button>
+        </div>
       </div>
       <div class="detail-preview" id="detailPreview"><span class="icon icon-2xl" id="previewIcon"></span></div>
       <div class="detail-content">
@@ -2162,13 +2191,26 @@
           <div class="info-row"><span class="info-label">Type</span><span class="info-value" id="detailType">-</span></div>
           <div class="info-row"><span class="info-label">Size</span><span class="info-value" id="detailSize">-</span></div>
           <div class="info-row"><span class="info-label">Modified</span><span class="info-value" id="detailDate">-</span></div>
+          <div class="info-row"><span class="info-label">Created</span><span class="info-value" id="detailCreated">-</span></div>
+          <div class="info-row"><span class="info-label">Indexed</span><span class="info-value" id="detailIndexed">-</span></div>
+          <div class="info-row" id="detailExtRow" style="display:none;"><span class="info-label">Extension</span><span class="info-value" id="detailExt">-</span></div>
+          <div class="info-row" id="detailDimsRow" style="display:none;"><span class="info-label">Dimensions</span><span class="info-value" id="detailDims">-</span></div>
+          <div class="info-row" id="detailDurationRow" style="display:none;"><span class="info-label">Duration</span><span class="info-value" id="detailDuration">-</span></div>
+          <div class="info-row" id="detailLangRow" style="display:none;"><span class="info-label">Language</span><span class="info-value" id="detailLang">-</span></div>
+          <div class="info-row" id="detailLinesRow" style="display:none;"><span class="info-label">Lines</span><span class="info-value" id="detailLines">-</span></div>
+          <div class="info-row" id="detailHashRow" style="display:none;"><span class="info-label">Hash</span><span class="info-value" id="detailHash" style="font-family:monospace;font-size:10px;word-break:break-all;">-</span></div>
         </div>
         <div class="code-preview-section" id="codePreviewSection" style="display:none;">
           <div class="code-preview-header">
             <span class="code-preview-title">Code Preview</span>
+            <span class="code-preview-filename" id="codePreviewFilename"></span>
             <span class="code-lang-badge" id="codeLangBadge"></span>
+            <div class="code-preview-actions">
+              <button class="code-preview-action-btn" id="copyCodeBtn" title="Copy code"><span class="icon" id="copyCodeIcon"></span> Copy</button>
+              <button class="code-preview-action-btn" id="expandCodeBtn" title="Expand code"><span class="icon" id="expandCodeIcon"></span> Expand</button>
+            </div>
           </div>
-          <div class="code-preview-container" id="codePreviewContainer">
+          <div class="code-preview-container line-numbers" id="codePreviewContainer">
             <div class="code-preview-loading">Loading code...</div>
           </div>
           <div class="code-stats" id="codeStats" style="display:none;"></div>
@@ -3384,7 +3426,10 @@
         // Home icon
         home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
         // Plus icon
-        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+        expand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+        shrink: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+        clipboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></svg>'
       };
 
       // State
@@ -3392,6 +3437,9 @@
       var allTags = [];
       var sources = [];
       var selectedMemory = null;
+      var detailExpanded = false;
+      var codeExpanded = false;
+      var currentCodeContent = '';
       var filterType = 'all';
       var activeTags = [];
       var viewMode = 'grid';
@@ -3518,6 +3566,9 @@
         document.getElementById('gridIcon').innerHTML = icons.grid;
         document.getElementById('listIcon').innerHTML = icons.list;
         document.getElementById('closeIcon').innerHTML = icons.close;
+        document.getElementById('expandDetailIcon').innerHTML = icons.expand;
+        document.getElementById('copyCodeIcon').innerHTML = icons.clipboard;
+        document.getElementById('expandCodeIcon').innerHTML = icons.expand;
         document.getElementById('starIcon').innerHTML = icons.star;
         document.getElementById('previewIcon').innerHTML = icons.file;
         document.getElementById('cmdSearchIcon').innerHTML = icons.command;
@@ -3819,6 +3870,7 @@
       }
 
       function setFilter(type) {
+        hideTagColorPicker();
         filterType = type;
         document.querySelectorAll('.filter-btn').forEach(function(b) {
           b.classList.toggle('active', b.dataset.filter === type);
@@ -3881,8 +3933,8 @@
       function startIndexingProgress() {
         // Check if indexing is actually happening before showing overlay
         invoke('get_indexing_progress').then(function(p) {
-          // Only show if there's real work (total > 0 or scanning stage)
-          if (p.total > 0 || p.stage === 'Scanning') {
+          // Only show if there's real work (total > 0 AND not complete)
+          if (p.total > 0 && p.stage !== 'Complete') {
             document.getElementById('indexingOverlay').style.display = 'block';
             indexingZeroCount = 0;
             startIndexingPolling();
@@ -3906,7 +3958,7 @@
               document.getElementById('indexingEta').textContent = 'Processing...';
             }
             // Stop if complete or no activity
-            if (p.stage === 'Complete' || (p.total === 0 && p.processed === 0 && ++indexingZeroCount >= 3)) {
+            if (p.stage === 'Complete' || (p.total === 0 && p.processed === 0 && ++indexingZeroCount >= 2)) {
               stopIndexingProgress();
             } else if (p.total > 0) {
               indexingZeroCount = 0;
@@ -3942,6 +3994,9 @@
       waitForTauri(function() {
         invoke = window.__TAURI__.core.invoke;
         convertFileSrc = window.__TAURI__.core.convertFileSrc;
+
+        // Ensure indexing overlay is hidden on startup
+        document.getElementById('indexingOverlay').style.display = 'none';
 
         invoke('initialize').then(function() {
           // Start file watcher after initialization
@@ -4027,14 +4082,34 @@
           setSearchLoading(true);
           showSearchSkeletons();
 
-          invoke('search', { query: query || '', tags: activeTags }).then(function(r) {
-            memories = (r.memories || []).map(function(x) { return x.memory; });
+          // Use paginated search for better performance
+          searchOffset = 0;
+          hasMoreResults = false;
+          searchTotal = 0;
+
+          invoke('search_paginated', {
+            query: query || '',
+            tags: activeTags,
+            kind: filterType === 'all' || filterType === 'favorites' ? null : filterType,
+            limit: searchPageSize,
+            offset: 0
+          }).then(function(r) {
+            memories = r.memories || [];
+            searchTotal = r.total || memories.length;
+            hasMoreResults = r.has_more || false;
+            searchOffset = memories.length;
             isSearching = false;
             setSearchLoading(false);
             renderFiles();
+            if (searchTotal > memories.length) {
+              document.getElementById('resultCount').textContent = memories.length + ' of ' + searchTotal + ' files';
+            }
+            if (hasMoreResults) {
+              showLoadMoreIndicator();
+            }
             // Add to history if query is meaningful
             if (query && query.trim().length >= 2) {
-              addToSearchHistory(query.trim(), memories.length);
+              addToSearchHistory(query.trim(), searchTotal);
             }
           }).catch(function(e) {
             isSearching = false;
@@ -4069,6 +4144,12 @@
         }
 
         function removeFromSearchHistory(index) {
+          var entry = searchHistory[index];
+          if (entry && entry.dbId) {
+            invoke('delete_search_history_entry', { id: entry.dbId }).catch(function(e) {
+              console.warn('[Hippo] Failed to delete history entry:', e);
+            });
+          }
           searchHistory.splice(index, 1);
           renderSearchHistory();
         }
@@ -4083,7 +4164,7 @@
           invoke('get_search_history', { limit: 20 }).then(function(history) {
             if (history && history.length > 0) {
               searchHistory = history.map(function(h) {
-                return { query: h.query, count: h.result_count, time: new Date(h.searched_at).getTime() };
+                return { dbId: h.id, query: h.query, count: h.result_count, time: new Date(h.searched_at).getTime() };
               });
             }
           }).catch(function() {});
@@ -4345,7 +4426,7 @@
         }
 
         function showLoadMoreIndicator() {
-          var content = document.getElementById('content');
+          var content = document.querySelector('.content');
           var existing = document.getElementById('loadMoreIndicator');
           if (existing) existing.remove();
           if (!hasMoreResults) return;
@@ -4362,7 +4443,7 @@
         }
 
         function setupInfiniteScroll() {
-          var content = document.getElementById('content');
+          var content = document.querySelector('.content');
           if (!content) return;
           content.addEventListener('scroll', function() {
             if (isLoadingMore || !hasMoreResults) return;
@@ -4588,6 +4669,12 @@
         document.addEventListener('click', function(e) {
           var picker = document.getElementById('tagColorPicker');
           if (picker.style.display === 'block' && !picker.contains(e.target) && !e.target.classList.contains('tag-btn')) {
+            hideTagColorPicker();
+          }
+        });
+        // Close color picker on Escape key
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && document.getElementById('tagColorPicker').style.display === 'block') {
             hideTagColorPicker();
           }
         });
@@ -5749,18 +5836,15 @@
               }
               break;
             case 'filterImages':
-              filterType = 'image';
-              render();
+              setFilter('image');
               showToast('Filtered to images', 'success');
               break;
             case 'filterCode':
-              filterType = 'code';
-              render();
+              setFilter('code');
               showToast('Filtered to code files', 'success');
               break;
             case 'filterDocs':
-              filterType = 'document';
-              render();
+              setFilter('document');
               showToast('Filtered to documents', 'success');
               break;
             case 'findDuplicates':
@@ -6226,6 +6310,47 @@
           document.getElementById('detailType').textContent = getTypeName(mem.kind);
           document.getElementById('detailSize').textContent = formatSize(mem.metadata ? mem.metadata.file_size : 0);
           document.getElementById('detailDate').textContent = mem.modified_at ? new Date(mem.modified_at).toLocaleDateString() : '-';
+          document.getElementById('detailCreated').textContent = mem.created_at ? new Date(mem.created_at).toLocaleDateString() : '-';
+          document.getElementById('detailIndexed').textContent = mem.indexed_at ? new Date(mem.indexed_at).toLocaleDateString() : '-';
+
+          // Extension
+          var ext = mem.path.split('.').pop();
+          if (ext && ext.length < 10) {
+            document.getElementById('detailExt').textContent = '.' + ext;
+            document.getElementById('detailExtRow').style.display = '';
+          } else { document.getElementById('detailExtRow').style.display = 'none'; }
+
+          // Image dimensions
+          if (mem.kind && mem.kind.Image && mem.kind.Image.width) {
+            document.getElementById('detailDims').textContent = mem.kind.Image.width + ' x ' + mem.kind.Image.height;
+            document.getElementById('detailDimsRow').style.display = '';
+          } else { document.getElementById('detailDimsRow').style.display = 'none'; }
+
+          // Audio/Video duration
+          var dur = (mem.kind && (mem.kind.Video || mem.kind.Audio)) ? (mem.kind.Video || mem.kind.Audio).duration_ms : null;
+          if (dur) {
+            var secs = Math.floor(dur / 1000); var mins = Math.floor(secs / 60); secs = secs % 60;
+            document.getElementById('detailDuration').textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
+            document.getElementById('detailDurationRow').style.display = '';
+          } else { document.getElementById('detailDurationRow').style.display = 'none'; }
+
+          // Code language/lines
+          if (mem.kind && mem.kind.Code) {
+            document.getElementById('detailLang').textContent = mem.kind.Code.language || '-';
+            document.getElementById('detailLangRow').style.display = '';
+            document.getElementById('detailLines').textContent = mem.kind.Code.lines || '-';
+            document.getElementById('detailLinesRow').style.display = '';
+          } else {
+            document.getElementById('detailLangRow').style.display = 'none';
+            document.getElementById('detailLinesRow').style.display = 'none';
+          }
+
+          // Hash
+          if (mem.metadata && mem.metadata.hash) {
+            document.getElementById('detailHash').textContent = mem.metadata.hash.substring(0, 16) + '...';
+            document.getElementById('detailHash').title = mem.metadata.hash;
+            document.getElementById('detailHashRow').style.display = '';
+          } else { document.getElementById('detailHashRow').style.display = 'none'; }
 
           // Star button
           var starBtn = document.getElementById('starBtn');
@@ -6292,13 +6417,28 @@
           container.innerHTML = '<div class="code-preview-loading">Loading code...</div>';
           badge.textContent = language || 'code';
           stats.style.display = 'none';
+          currentCodeContent = '';
+
+          // Reset code expanded state
+          codeExpanded = false;
+          container.classList.remove('expanded');
+          document.getElementById('expandCodeIcon').innerHTML = icons.expand;
+
+          // Set filename in header
+          var filename = path.split('/').pop();
+          document.getElementById('codePreviewFilename').textContent = filename;
+          document.getElementById('codePreviewFilename').title = path;
 
           invoke('read_file_content', { path: path, maxLines: 500 })
             .then(function(result) {
               if (result.is_binary) {
                 container.innerHTML = '<div class="code-preview-error">Binary file - cannot preview</div>';
+                currentCodeContent = '';
                 return;
               }
+
+              // Store for copy button
+              currentCodeContent = result.content;
 
               var langMap = {
                 'rs': 'rust', 'py': 'python', 'js': 'javascript', 'jsx': 'jsx',
@@ -6314,7 +6454,12 @@
               var prismLang = langMap[ext] || 'plain';
               var escapedContent = esc(result.content);
 
-              container.innerHTML = '<pre><code class="language-' + prismLang + '">' + escapedContent + '</code></pre>';
+              // Wrap lines for CSS line numbers
+              var lines = escapedContent.split('\n');
+              var wrappedContent = lines.map(function(line) {
+                return '<span class="line-row">' + (line || ' ') + '</span>';
+              }).join('\n');
+              container.innerHTML = '<pre><code class="language-' + prismLang + '">' + wrappedContent + '</code></pre>';
 
               if (window.Prism) {
                 Prism.highlightAllUnder(container);
@@ -6330,6 +6475,7 @@
             .catch(function(error) {
               container.innerHTML = '<div class="code-preview-error">Failed to load: ' + error + '</div>';
               stats.style.display = 'none';
+              currentCodeContent = '';
             });
         }
 
@@ -6353,6 +6499,7 @@
 
         function switchView(view) {
           currentView = view;
+          hideTagColorPicker();
           document.querySelectorAll('.sidebar-nav-item').forEach(function(btn) {
             btn.classList.toggle('active', btn.dataset.view === view);
           });
@@ -6820,7 +6967,7 @@
           btn.innerHTML = '<span class="icon">' + icons.refresh + '</span> Searching...';
           btn.disabled = true;
 
-          invoke('get_similar', { memoryId: selectedMemory.id, limit: 5 }).then(function(results) {
+          invoke('get_similar_files', { memoryId: selectedMemory.id, limit: 5 }).then(function(results) {
             similarFilesLoading = false;
             btn.innerHTML = '<span class="icon">' + icons.sparkles + '</span> Find Similar Files';
             btn.disabled = false;
@@ -6913,7 +7060,34 @@
         // Event listeners
         document.getElementById('closeDetail').onclick = function() {
           document.getElementById('detailPanel').classList.remove('open');
+          document.getElementById('detailPanel').classList.remove('expanded');
+          detailExpanded = false;
+          document.getElementById('expandDetailIcon').innerHTML = icons.expand;
           selectedMemory = null;
+        };
+
+        document.getElementById('expandDetailBtn').onclick = function() {
+          var panel = document.getElementById('detailPanel');
+          detailExpanded = !detailExpanded;
+          panel.classList.toggle('expanded', detailExpanded);
+          document.getElementById('expandDetailIcon').innerHTML = detailExpanded ? icons.shrink : icons.expand;
+          document.getElementById('expandDetailBtn').title = detailExpanded ? 'Collapse panel' : 'Expand panel';
+        };
+
+        document.getElementById('copyCodeBtn').onclick = function() {
+          if (currentCodeContent) {
+            navigator.clipboard.writeText(currentCodeContent).then(function() {
+              showToast('Code copied!', 'success');
+            }).catch(function() { showToast('Failed to copy', 'error'); });
+          }
+        };
+
+        document.getElementById('expandCodeBtn').onclick = function() {
+          var container = document.getElementById('codePreviewContainer');
+          codeExpanded = !codeExpanded;
+          container.classList.toggle('expanded', codeExpanded);
+          document.getElementById('expandCodeIcon').innerHTML = codeExpanded ? icons.shrink : icons.expand;
+          document.getElementById('expandCodeBtn').title = codeExpanded ? 'Collapse code' : 'Expand code';
         };
 
         document.getElementById('openBtn').onclick = function() {
@@ -7498,6 +7672,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-ruby.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup-templating.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-php.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-swift.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-kotlin.min.js"></script>
