@@ -111,7 +111,9 @@ impl DebouncedEvents {
     #[allow(dead_code)]
     fn add(&mut self, event: WatchEvent) {
         // Periodic cleanup every 60 seconds or when queue is too large
-        if self.last_cleanup.elapsed() > Duration::from_secs(60) || self.pending.len() > EVENT_MAX_PENDING {
+        if self.last_cleanup.elapsed() > Duration::from_secs(60)
+            || self.pending.len() > EVENT_MAX_PENDING
+        {
             self.cleanup_stale();
         }
 
@@ -151,12 +153,14 @@ impl DebouncedEvents {
         let now = Instant::now();
         let max_ttl = self.max_ttl;
 
-        self.pending.retain(|_, (_, timestamp)| {
-            now.duration_since(*timestamp) < max_ttl
-        });
+        self.pending
+            .retain(|_, (_, timestamp)| now.duration_since(*timestamp) < max_ttl);
 
         self.last_cleanup = now;
-        debug!("Cleaned up stale events, {} pending remain", self.pending.len());
+        debug!(
+            "Cleaned up stale events, {} pending remain",
+            self.pending.len()
+        );
     }
 
     /// Check if there are pending events
@@ -226,7 +230,8 @@ impl WatcherState {
 
     /// Signal shutdown to all background tasks
     fn signal_shutdown(&self) {
-        self.shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.shutdown
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Check if shutdown was signaled

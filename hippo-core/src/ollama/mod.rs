@@ -649,8 +649,8 @@ impl OllamaClient {
             system: None,
             context: None,
             options: GenerateOptions {
-                temperature: Some(0.5),   // Slightly higher for variety in tags
-                num_predict: Some(100),   // Short responses for tags
+                temperature: Some(0.5), // Slightly higher for variety in tags
+                num_predict: Some(100), // Short responses for tags
                 top_p: Some(0.9),
             },
         };

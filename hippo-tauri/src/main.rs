@@ -9,8 +9,8 @@
 
 use chrono::Utc;
 use hippo_core::{
-    ClaudeClient, Hippo, MemoryId, OllamaClient, QdrantManager, SearchQuery, Source, Tag,
-    UnifiedAiClient,
+    ClaudeClient, Hippo, MemoryId, OllamaClient, QdrantManager, Scheduler, SchedulerConfig,
+    SearchQuery, Source, Tag, UnifiedAiClient,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,6 +25,7 @@ use tokio::sync::RwLock;
 struct AppState {
     hippo: Arc<RwLock<Option<Hippo>>>,
     qdrant_manager: Arc<QdrantManager>,
+    scheduler: Arc<RwLock<Option<Scheduler>>>,
 }
 
 #[tauri::command]
@@ -2780,7 +2781,10 @@ async fn save_search(
 async fn list_saved_searches(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    let searches = hippo.list_saved_searches().await.map_err(|e| e.to_string())?;
+    let searches = hippo
+        .list_saved_searches()
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(serde_json::json!(searches))
 }
 
@@ -2788,7 +2792,10 @@ async fn list_saved_searches(state: State<'_, AppState>) -> Result<serde_json::V
 async fn delete_saved_search(id: String, state: State<'_, AppState>) -> Result<String, String> {
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    hippo.delete_saved_search(&id).await.map_err(|e| e.to_string())?;
+    hippo
+        .delete_saved_search(&id)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok("Deleted".to_string())
 }
 
@@ -2796,7 +2803,10 @@ async fn delete_saved_search(id: String, state: State<'_, AppState>) -> Result<S
 async fn use_saved_search(id: String, state: State<'_, AppState>) -> Result<String, String> {
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    hippo.use_saved_search(&id).await.map_err(|e| e.to_string())?;
+    hippo
+        .use_saved_search(&id)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok("Updated".to_string())
 }
 
@@ -2833,8 +2843,25 @@ async fn get_search_history(
 async fn clear_search_history(state: State<'_, AppState>) -> Result<String, String> {
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    hippo.clear_search_history().await.map_err(|e| e.to_string())?;
+    hippo
+        .clear_search_history()
+        .await
+        .map_err(|e| e.to_string())?;
     Ok("Cleared".to_string())
+}
+
+#[tauri::command]
+async fn delete_search_history_entry(
+    id: i64,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let hippo_lock = state.hippo.read().await;
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+    hippo
+        .delete_search_history_entry(id)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok("Deleted".to_string())
 }
 
 #[tauri::command]
@@ -2876,10 +2903,7 @@ async fn batch_rename(
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
-    let ids: Vec<MemoryId> = memory_ids
-        .iter()
-        .filter_map(|s| s.parse().ok())
-        .collect();
+    let ids: Vec<MemoryId> = memory_ids.iter().filter_map(|s| s.parse().ok()).collect();
 
     let results = hippo
         .batch_rename(&ids, &template)
@@ -2927,21 +2951,52 @@ async fn search_paginated(
 #[tauri::command]
 async fn start_scheduler(state: State<'_, AppState>) -> Result<String, String> {
     let hippo_lock = state.hippo.read().await;
-    let _hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    // The scheduler is managed at the app level via the storage
-    // For now, return status that it's handled by the watcher
-    Ok("Scheduler running (via file watcher)".to_string())
+    let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
+
+    let mut sched_lock = state.scheduler.write().await;
+    if sched_lock.is_some() {
+        return Ok("Scheduler already running".to_string());
+    }
+
+    let storage = hippo.storage().clone();
+    let indexer = hippo.indexer.clone();
+    let config = SchedulerConfig::default();
+    let mut scheduler = Scheduler::new(storage, indexer, config);
+    scheduler.start().map_err(|e| e.to_string())?;
+    *sched_lock = Some(scheduler);
+    println!("[Hippo] Scheduler started");
+    Ok("Scheduler started".to_string())
+}
+
+#[tauri::command]
+async fn stop_scheduler(state: State<'_, AppState>) -> Result<String, String> {
+    let mut sched_lock = state.scheduler.write().await;
+    if let Some(mut scheduler) = sched_lock.take() {
+        scheduler.stop();
+        println!("[Hippo] Scheduler stopped");
+        Ok("Scheduler stopped".to_string())
+    } else {
+        Ok("Scheduler not running".to_string())
+    }
 }
 
 #[tauri::command]
 async fn get_scheduler_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    let hippo_lock = state.hippo.read().await;
-    let _hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
-    Ok(serde_json::json!({
-        "running": true,
-        "mode": "file_watcher",
-        "description": "Sources are auto-indexed via file watcher"
-    }))
+    let sched_lock = state.scheduler.read().await;
+    match sched_lock.as_ref() {
+        Some(scheduler) => {
+            let stats = scheduler.stats().await;
+            serde_json::to_value(stats).map_err(|e| e.to_string())
+        }
+        None => Ok(serde_json::json!({
+            "running": false,
+            "check_interval_secs": 300,
+            "total_checks": 0,
+            "total_syncs_triggered": 0,
+            "last_check": null,
+            "next_check": null
+        })),
+    }
 }
 
 #[tauri::command]
@@ -2995,10 +3050,11 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
-                } = event {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
                 // Left click: show/focus the main window
                 if let Some(window) = tray.app_handle().get_webview_window("main") {
                     let _ = window.show();
@@ -3064,6 +3120,7 @@ fn main() {
         .manage(AppState {
             hippo: Arc::new(RwLock::new(None)),
             qdrant_manager,
+            scheduler: Arc::new(RwLock::new(None)),
         })
         .setup(|app| {
             println!("[Hippo] Application started. Qdrant will be auto-managed.");
@@ -3072,17 +3129,13 @@ fn main() {
             setup_system_tray(app)?;
 
             // Register global hotkey: Cmd+Shift+H (macOS) / Ctrl+Shift+H (Windows/Linux)
-            let show_shortcut = Shortcut::new(
-                Some(Modifiers::SUPER | Modifiers::SHIFT),
-                Code::KeyH,
-            );
+            let show_shortcut =
+                Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyH);
 
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(move |app, shortcut, event| {
-                        if shortcut == &show_shortcut
-                            && event.state() == ShortcutState::Pressed
-                        {
+                        if shortcut == &show_shortcut && event.state() == ShortcutState::Pressed {
                             if let Some(window) = app.get_webview_window("main") {
                                 let _ = window.show();
                                 let _ = window.unminimize();
@@ -3202,6 +3255,7 @@ fn main() {
             vacuum_database,
             // Session 15: Desktop Experience
             start_scheduler,
+            stop_scheduler,
             get_scheduler_status,
             set_source_sync_interval,
             // Session 14: Search & Navigation
@@ -3212,6 +3266,7 @@ fn main() {
             add_search_history,
             get_search_history,
             clear_search_history,
+            delete_search_history_entry,
             get_recent_files,
             get_recently_modified,
             batch_rename,

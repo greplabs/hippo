@@ -193,10 +193,7 @@ impl Storage {
         let _ = conn.execute("ALTER TABLE tags ADD COLUMN color TEXT", []);
 
         // Migration: Add text_preview column for FTS content search
-        let _ = conn.execute(
-            "ALTER TABLE memories ADD COLUMN text_preview TEXT",
-            [],
-        );
+        let _ = conn.execute("ALTER TABLE memories ADD COLUMN text_preview TEXT", []);
 
         // Create indexes for faster queries (5-50x improvement for filtered queries)
         // Core indexes
@@ -870,10 +867,7 @@ impl Storage {
         for (id, config_json) in rows {
             if let Ok(mut config) = serde_json::from_str::<SourceConfig>(&config_json) {
                 let matches = match (source, &config.source) {
-                    (
-                        Source::Local { root_path: a },
-                        Source::Local { root_path: b },
-                    ) => a == b,
+                    (Source::Local { root_path: a }, Source::Local { root_path: b }) => a == b,
                     _ => false,
                 };
                 if matches {
@@ -1181,12 +1175,16 @@ impl Storage {
                         created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
                             .unwrap()
                             .with_timezone(&chrono::Utc),
-                        modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
-                        indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
+                        modified_at: chrono::DateTime::parse_from_rfc3339(
+                            &row.get::<_, String>(10)?,
+                        )
+                        .unwrap()
+                        .with_timezone(&chrono::Utc),
+                        indexed_at: chrono::DateTime::parse_from_rfc3339(
+                            &row.get::<_, String>(11)?,
+                        )
+                        .unwrap()
+                        .with_timezone(&chrono::Utc),
                     })
                 })?
                 .filter_map(|r| r.ok())
@@ -1206,12 +1204,16 @@ impl Storage {
                         created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
                             .unwrap()
                             .with_timezone(&chrono::Utc),
-                        modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
-                        indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
+                        modified_at: chrono::DateTime::parse_from_rfc3339(
+                            &row.get::<_, String>(10)?,
+                        )
+                        .unwrap()
+                        .with_timezone(&chrono::Utc),
+                        indexed_at: chrono::DateTime::parse_from_rfc3339(
+                            &row.get::<_, String>(11)?,
+                        )
+                        .unwrap()
+                        .with_timezone(&chrono::Utc),
                     })
                 })?
                 .filter_map(|r| r.ok())
@@ -1282,12 +1284,21 @@ impl Storage {
                             embedding_id: row.get(6)?,
                             connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
                             is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-                            created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                                .unwrap().with_timezone(&chrono::Utc),
-                            modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                                .unwrap().with_timezone(&chrono::Utc),
-                            indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
-                                .unwrap().with_timezone(&chrono::Utc),
+                            created_at: chrono::DateTime::parse_from_rfc3339(
+                                &row.get::<_, String>(9)?,
+                            )
+                            .unwrap()
+                            .with_timezone(&chrono::Utc),
+                            modified_at: chrono::DateTime::parse_from_rfc3339(
+                                &row.get::<_, String>(10)?,
+                            )
+                            .unwrap()
+                            .with_timezone(&chrono::Utc),
+                            indexed_at: chrono::DateTime::parse_from_rfc3339(
+                                &row.get::<_, String>(11)?,
+                            )
+                            .unwrap()
+                            .with_timezone(&chrono::Utc),
                         },
                         fts5_rank: row.get(12)?,
                         title_snippet: row.get(13)?,
@@ -1311,12 +1322,21 @@ impl Storage {
                             embedding_id: row.get(6)?,
                             connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
                             is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-                            created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                                .unwrap().with_timezone(&chrono::Utc),
-                            modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                                .unwrap().with_timezone(&chrono::Utc),
-                            indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
-                                .unwrap().with_timezone(&chrono::Utc),
+                            created_at: chrono::DateTime::parse_from_rfc3339(
+                                &row.get::<_, String>(9)?,
+                            )
+                            .unwrap()
+                            .with_timezone(&chrono::Utc),
+                            modified_at: chrono::DateTime::parse_from_rfc3339(
+                                &row.get::<_, String>(10)?,
+                            )
+                            .unwrap()
+                            .with_timezone(&chrono::Utc),
+                            indexed_at: chrono::DateTime::parse_from_rfc3339(
+                                &row.get::<_, String>(11)?,
+                            )
+                            .unwrap()
+                            .with_timezone(&chrono::Utc),
                         },
                         fts5_rank: row.get(12)?,
                         title_snippet: row.get(13)?,
@@ -1371,12 +1391,14 @@ impl Storage {
         );
 
         // Repopulate from memories table
-        let count: usize = db.execute(
-            r#"INSERT INTO memories_fts(rowid, id, title, filename, tags_text, text_preview)
+        let count: usize = db
+            .execute(
+                r#"INSERT INTO memories_fts(rowid, id, title, filename, tags_text, text_preview)
                SELECT rowid, id, title, filename, tags_text, text_preview FROM memories
                WHERE title IS NOT NULL OR filename IS NOT NULL"#,
-            [],
-        ).unwrap_or(0);
+                [],
+            )
+            .unwrap_or(0);
 
         info!("Rebuilt FTS5 index with {} entries", count);
         Ok(count)
@@ -1994,6 +2016,17 @@ impl Storage {
         Ok(())
     }
 
+    pub async fn delete_search_history_entry(&self, id: i64) -> Result<()> {
+        if id <= 0 {
+            return Err(crate::error::HippoError::Other(
+                "Invalid history entry ID".to_string(),
+            ));
+        }
+        let db = self.get_db()?;
+        db.execute("DELETE FROM search_history WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
     // === Recent Files ===
 
     pub async fn get_recent_files(&self, limit: usize, days: usize) -> Result<Vec<Memory>> {
@@ -2097,7 +2130,8 @@ impl Storage {
 
         if !query.is_empty() {
             conditions.push(
-                "(title LIKE ?1 OR filename LIKE ?1 OR tags_text LIKE ?1 OR path LIKE ?1)".to_string(),
+                "(title LIKE ?1 OR filename LIKE ?1 OR tags_text LIKE ?1 OR path LIKE ?1)"
+                    .to_string(),
             );
             param_values.push(Box::new(format!("%{}%", query)));
         }
@@ -2123,7 +2157,8 @@ impl Storage {
 
         // Get total count
         let count_sql = format!("SELECT COUNT(*) FROM memories {}", where_clause);
-        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
         let total: usize = db.query_row(&count_sql, params_ref.as_slice(), |r| r.get(0))?;
 
         // Get paginated results
@@ -2137,7 +2172,8 @@ impl Storage {
         );
         param_values.push(Box::new(limit as i64));
         param_values.push(Box::new(offset as i64));
-        let params_ref2: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let params_ref2: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
 
         let mut stmt = db.prepare(&select_sql)?;
         let rows = stmt.query_map(params_ref2.as_slice(), |row| {

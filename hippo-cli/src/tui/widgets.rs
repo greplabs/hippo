@@ -129,10 +129,7 @@ impl<'a> SearchInput<'a> {
 
     pub fn render(&self) -> Paragraph<'a> {
         let display_text = if self.query.is_empty() && !self.is_active {
-            Span::styled(
-                "Type / to search...",
-                Style::default().fg(Color::DarkGray),
-            )
+            Span::styled("Type / to search...", Style::default().fg(Color::DarkGray))
         } else {
             Span::styled(self.query, Style::default().fg(Color::White))
         };
@@ -158,16 +155,12 @@ impl<'a> FileList<'a> {
             .files
             .iter()
             .map(|mem| {
-                let name = mem
-                    .metadata
-                    .title
-                    .as_deref()
-                    .unwrap_or_else(|| {
-                        mem.path
-                            .file_name()
-                            .map(|n| n.to_str().unwrap_or("?"))
-                            .unwrap_or("Unknown")
-                    });
+                let name = mem.metadata.title.as_deref().unwrap_or_else(|| {
+                    mem.path
+                        .file_name()
+                        .map(|n| n.to_str().unwrap_or("?"))
+                        .unwrap_or("Unknown")
+                });
 
                 let size = format_bytes(mem.metadata.file_size);
                 let icon = kind_icon(&mem.kind);
@@ -180,10 +173,7 @@ impl<'a> FileList<'a> {
                     ),
                     Span::styled(name.to_string(), Style::default().fg(Color::White)),
                     Span::styled(fav.to_string(), Style::default().fg(Color::Yellow)),
-                    Span::styled(
-                        format!("  {}", size),
-                        Style::default().fg(Color::DarkGray),
-                    ),
+                    Span::styled(format!("  {}", size), Style::default().fg(Color::DarkGray)),
                 ]);
 
                 ListItem::new(line)
@@ -225,17 +215,13 @@ impl<'a> DetailPanel<'a> {
                 Style::default().fg(Color::DarkGray),
             )),
             Some(mem) => {
-                let name = mem
-                    .metadata
-                    .title
-                    .clone()
-                    .unwrap_or_else(|| {
-                        mem.path
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .unwrap_or("Unknown")
-                            .to_string()
-                    });
+                let name = mem.metadata.title.clone().unwrap_or_else(|| {
+                    mem.path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("Unknown")
+                        .to_string()
+                });
 
                 let path = mem.path.display().to_string();
                 let size = format_bytes(mem.metadata.file_size);
@@ -330,10 +316,7 @@ impl<'a> DetailPanel<'a> {
 
 fn detail_line_owned(label: &str, value: String) -> Line<'static> {
     Line::from(vec![
-        Span::styled(
-            format!("  {}: ", label),
-            Style::default().fg(Color::Yellow),
-        ),
+        Span::styled(format!("  {}: ", label), Style::default().fg(Color::Yellow)),
         Span::styled(value, Style::default().fg(Color::White)),
     ])
 }
