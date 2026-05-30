@@ -73,11 +73,11 @@ pub mod models;
 pub mod ollama;
 pub mod organization;
 pub mod qdrant;
+pub mod scheduler;
 pub mod search;
 pub mod sources;
 pub mod storage;
 pub mod thumbnails;
-pub mod scheduler;
 pub mod watcher;
 
 pub use error::{HippoError, Result};

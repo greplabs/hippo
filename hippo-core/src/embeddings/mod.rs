@@ -104,7 +104,8 @@ impl EmbeddingCache {
         let new_size = embedding.len() * std::mem::size_of::<f32>();
 
         // Evict if at entry capacity or memory limit - O(1) with VecDeque::pop_front
-        while (self.entries.len() >= self.max_entries || self.current_bytes + new_size > self.max_bytes)
+        while (self.entries.len() >= self.max_entries
+            || self.current_bytes + new_size > self.max_bytes)
             && !self.access_order.is_empty()
         {
             if let Some(oldest) = self.access_order.pop_front() {

@@ -142,15 +142,15 @@ impl Scheduler {
 
                                 // Actually trigger re-indexing via the indexer
                                 if let Err(e) = indexer.queue_source(source.clone()).await {
-                                    warn!("Scheduler: failed to queue re-index for {}: {}", path, e);
+                                    warn!(
+                                        "Scheduler: failed to queue re-index for {}: {}",
+                                        path, e
+                                    );
                                     continue;
                                 }
 
                                 // Update last_sync timestamp
-                                if let Err(e) = storage
-                                    .update_source_last_sync(&source)
-                                    .await
-                                {
+                                if let Err(e) = storage.update_source_last_sync(&source).await {
                                     warn!("Scheduler: failed to update last_sync: {}", e);
                                 }
 
@@ -202,8 +202,7 @@ impl Scheduler {
     pub async fn stats(&self) -> SchedulerStats {
         let s = self.stats.read().await;
         let next_check = s.last_check.map(|last| {
-            (last + chrono::Duration::seconds(self.config.check_interval_secs as i64))
-                .to_rfc3339()
+            (last + chrono::Duration::seconds(self.config.check_interval_secs as i64)).to_rfc3339()
         });
 
         SchedulerStats {

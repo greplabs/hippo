@@ -768,27 +768,51 @@ impl Searcher {
     /// Supports prefix queries (vaca*), column-specific (title:vacation),
     /// boolean operators (AND/OR/NOT), and phrase queries ("exact phrase").
     /// Returns results with FTS5 snippets and BM25 ranking.
-    pub async fn search_fts5(&self, query: &str, kind: Option<&str>, limit: usize) -> Result<SearchResults> {
+    pub async fn search_fts5(
+        &self,
+        query: &str,
+        kind: Option<&str>,
+        limit: usize,
+    ) -> Result<SearchResults> {
         let fts_query = Self::build_fts5_query(query);
 
-        let fts_results = self.storage.search_fts5_with_snippets(&fts_query, kind, limit, 0).await?;
-        let total_count = self.storage.count_fts5_results(&fts_query, kind).await.unwrap_or(fts_results.len());
+        let fts_results = self
+            .storage
+            .search_fts5_with_snippets(&fts_query, kind, limit, 0)
+            .await?;
+        let total_count = self
+            .storage
+            .count_fts5_results(&fts_query, kind)
+            .await
+            .unwrap_or(fts_results.len());
 
         let results: Vec<MemorySearchResult> = fts_results
             .into_iter()
             .map(|fts| {
                 let mut highlights = Vec::new();
                 if let Some(snip) = fts.title_snippet {
-                    highlights.push(Highlight { field: "title".into(), snippet: snip });
+                    highlights.push(Highlight {
+                        field: "title".into(),
+                        snippet: snip,
+                    });
                 }
                 if let Some(snip) = fts.filename_snippet {
-                    highlights.push(Highlight { field: "filename".into(), snippet: snip });
+                    highlights.push(Highlight {
+                        field: "filename".into(),
+                        snippet: snip,
+                    });
                 }
                 if let Some(snip) = fts.tags_snippet {
-                    highlights.push(Highlight { field: "tag".into(), snippet: snip });
+                    highlights.push(Highlight {
+                        field: "tag".into(),
+                        snippet: snip,
+                    });
                 }
                 if let Some(snip) = fts.content_snippet {
-                    highlights.push(Highlight { field: "content".into(), snippet: snip });
+                    highlights.push(Highlight {
+                        field: "content".into(),
+                        snippet: snip,
+                    });
                 }
 
                 // Convert BM25 rank (negative, lower is better) to positive score
@@ -1065,16 +1089,12 @@ impl Searcher {
         let mut scored_tags: Vec<(String, u64, f32)> = if use_parallel {
             all_tags
                 .into_par_iter()
-                .filter_map(|(name, count)| {
-                    self.score_tag_match(&name, count, &text_lower)
-                })
+                .filter_map(|(name, count)| self.score_tag_match(&name, count, &text_lower))
                 .collect()
         } else {
             all_tags
                 .into_iter()
-                .filter_map(|(name, count)| {
-                    self.score_tag_match(&name, count, &text_lower)
-                })
+                .filter_map(|(name, count)| self.score_tag_match(&name, count, &text_lower))
                 .collect()
         };
 
@@ -1089,7 +1109,12 @@ impl Searcher {
     }
 
     /// Score a single tag match (extracted for parallel processing)
-    fn score_tag_match(&self, name: &str, count: u64, text_lower: &str) -> Option<(String, u64, f32)> {
+    fn score_tag_match(
+        &self,
+        name: &str,
+        count: u64,
+        text_lower: &str,
+    ) -> Option<(String, u64, f32)> {
         let name_lower = name.to_lowercase();
 
         // Calculate base score based on match type
