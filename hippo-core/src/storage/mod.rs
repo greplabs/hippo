@@ -47,14 +47,14 @@ fn parse_datetime(s: &str) -> std::result::Result<chrono::DateTime<chrono::Utc>,
 /// into a vector. Returns an error if the byte length is not a multiple of 4,
 /// rather than silently zeroing a partial chunk (which would corrupt the vector).
 fn bytes_to_f32_vec(bytes: &[u8]) -> Result<Vec<f32>> {
-    if bytes.len() % 4 != 0 {
+    if !bytes.len().is_multiple_of(4) {
         return Err(HippoError::Other(format!(
             "corrupt embedding blob: {} bytes is not a multiple of 4",
             bytes.len()
         )));
     }
     Ok(bytes
-        .chunks_exact(4)
+        .as_chunks::<4>().0.iter()
         .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect())
 }
