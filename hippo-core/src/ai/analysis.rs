@@ -373,7 +373,7 @@ fn extract_dominant_colors(path: &Path) -> Result<Vec<Color>> {
 
     // Get top 5 most common colors
     let mut color_vec: Vec<_> = color_counts.into_iter().collect();
-    color_vec.sort_by(|a, b| b.1.cmp(&a.1));
+    color_vec.sort_by_key(|a| std::cmp::Reverse(a.1));
 
     let total_samples = color_vec.iter().map(|(_, count)| count).sum::<u32>() as f32;
 
