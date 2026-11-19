@@ -919,30 +919,24 @@ impl Indexer {
 
             println!("[Indexer] Processed {} memories from batch", memories.len());
 
-            // Store memories and track progress
-            for memory in &memories {
-                state
-                    .update_progress(|p| {
-                        p.current_file = Some(
-                            memory
-                                .path
-                                .file_name()
-                                .map(|n| n.to_string_lossy().to_string())
-                                .unwrap_or_default(),
-                        );
-                        p.stage = IndexingStage::Embedding;
-                    })
-                    .await;
+            // Store the whole batch in a SINGLE transaction (one commit instead
+            // of one per row — the main indexing throughput win). Atomic: a
+            // failure rolls the batch back rather than leaving a partial index.
+            state
+                .update_progress(|p| {
+                    p.current_file = Some(format!("Storing {} files...", memories.len()));
+                    p.stage = IndexingStage::Embedding;
+                })
+                .await;
 
-                if let Err(e) = storage.upsert_memory(memory).await {
-                    println!("[Indexer] Failed to store memory: {}", e);
-                    warn!("Failed to store memory: {}", e);
-                }
+            if let Err(e) = storage.upsert_memories_batch(&memories).await {
+                println!("[Indexer] Failed to store memory batch: {}", e);
+                warn!("Failed to store memory batch: {}", e);
+            }
 
-                // Check for pause
-                while state.is_paused.load(Ordering::SeqCst) {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                }
+            // Check for pause after the batch
+            while state.is_paused.load(Ordering::SeqCst) {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
 
             // Generate and store embeddings in batch (much faster)

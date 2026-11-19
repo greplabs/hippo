@@ -238,3 +238,43 @@ async fn like_wildcards_in_query_are_escaped() {
     assert_eq!(results.len(), 1, "'%' must be matched literally");
     assert!(results[0].path.to_string_lossy().contains("50%off"));
 }
+
+/// P1 perf fix: `upsert_memories_batch` persists every memory in a single
+/// transaction and creates the derived tag rows, matching individual
+/// `upsert_memory` behaviour.
+#[tokio::test]
+async fn batch_upsert_persists_all_memories_and_tags() {
+    let (storage, _tmp) = make_storage().await;
+
+    let batch = vec![
+        memory_with("/tmp/a.txt", &["alpha", "shared"]),
+        memory_with("/tmp/b.txt", &["beta", "shared"]),
+        memory_with("/tmp/c.txt", &["gamma"]),
+    ];
+    storage
+        .upsert_memories_batch(&batch)
+        .await
+        .expect("batch upsert");
+
+    let all = storage.get_all_memories().await.expect("get_all_memories");
+    assert_eq!(all.len(), 3, "all three memories persisted");
+
+    // Derived tag counts reflect truth: "shared" on two memories, others on one.
+    assert_eq!(tag_count(&storage, "shared").await, Some(2));
+    assert_eq!(tag_count(&storage, "alpha").await, Some(1));
+    assert_eq!(tag_count(&storage, "gamma").await, Some(1));
+}
+
+/// An empty batch is a no-op: no transaction opened, no error.
+#[tokio::test]
+async fn batch_upsert_empty_is_noop() {
+    let (storage, _tmp) = make_storage().await;
+    storage
+        .upsert_memories_batch(&[])
+        .await
+        .expect("empty batch ok");
+    assert_eq!(
+        storage.get_all_memories().await.expect("get_all").len(),
+        0
+    );
+}

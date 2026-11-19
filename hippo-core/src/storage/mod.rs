@@ -424,7 +424,34 @@ impl Storage {
 
     pub async fn upsert_memory(&self, memory: &Memory) -> Result<()> {
         let db = self.get_db()?;
+        Self::upsert_memory_in(&db, memory)
+    }
 
+    /// Insert-or-replace a batch of memories inside a SINGLE transaction.
+    ///
+    /// `upsert_memory` runs each write as its own implicit WAL transaction, so
+    /// indexing a batch of N files cost N commits (+ per-row fsync/checkpoint
+    /// pressure). Wrapping the whole batch in one `BEGIN … COMMIT` turns that
+    /// into a single commit — a large indexing throughput win — and makes the
+    /// batch atomic (a failure rolls the whole batch back rather than leaving a
+    /// partially-written index).
+    pub async fn upsert_memories_batch(&self, memories: &[Memory]) -> Result<()> {
+        if memories.is_empty() {
+            return Ok(());
+        }
+        let mut db = self.get_db()?;
+        let tx = db.transaction()?;
+        for memory in memories {
+            Self::upsert_memory_in(&tx, memory)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Shared insert-or-replace body, parameterised over the connection so it
+    /// can run standalone (`upsert_memory`) or inside a transaction
+    /// (`upsert_memories_batch`). `Transaction` derefs to `Connection`.
+    fn upsert_memory_in(db: &Connection, memory: &Memory) -> Result<()> {
         // Extract searchable fields
         let title = memory.metadata.title.clone().unwrap_or_default();
         let filename = memory
