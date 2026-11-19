@@ -30,22 +30,22 @@ struct AppState {
 
 #[tauri::command]
 async fn initialize(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Initializing...");
+    tracing::info!("Initializing...");
 
     // Ensure Qdrant is running
-    println!("[Hippo] Starting Qdrant...");
+    tracing::info!("Starting Qdrant...");
     match state.qdrant_manager.ensure_running().await {
         Ok(_) => {
             let status = state.qdrant_manager.status().await;
             if status.managed {
-                println!("[Hippo] Qdrant started successfully (managed)");
+                tracing::info!("Qdrant started successfully (managed)");
             } else {
-                println!("[Hippo] Qdrant is running externally");
+                tracing::info!("Qdrant is running externally");
             }
         }
         Err(e) => {
-            println!(
-                "[Hippo] Warning: Qdrant not available ({}). Vector search will be limited.",
+            tracing::warn!(
+                "Warning: Qdrant not available ({}). Vector search will be limited.",
                 e
             );
         }
@@ -55,12 +55,12 @@ async fn initialize(state: State<'_, AppState>) -> Result<String, String> {
 
     match Hippo::new().await {
         Ok(hippo) => {
-            println!("[Hippo] Initialized successfully!");
+            tracing::info!("Initialized successfully!");
             *hippo_lock = Some(hippo);
             Ok("Hippo initialized successfully".to_string())
         }
         Err(e) => {
-            println!("[Hippo] Init failed: {}", e);
+            tracing::error!("Init failed: {}", e);
             Err(format!("Failed to initialize Hippo: {}", e))
         }
     }
@@ -88,7 +88,7 @@ async fn search(
     tags: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Search: query='{}', tags={:?}", query, tags);
+    tracing::info!("Search: query='{}', tags={:?}", query, tags);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -106,11 +106,11 @@ async fn search(
 
     match hippo.search_advanced(search_query).await {
         Ok(results) => {
-            println!("[Hippo] Search returned {} results", results.memories.len());
+            tracing::info!("Search returned {} results", results.memories.len());
             serde_json::to_value(results).map_err(|e| e.to_string())
         }
         Err(e) => {
-            println!("[Hippo] Search failed: {}", e);
+            tracing::error!("Search failed: {}", e);
             Err(format!("Search failed: {}", e))
         }
     }
@@ -122,7 +122,7 @@ async fn add_source(
     path: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!("[Hippo] Adding source: type={}, path={}", source_type, path);
+    tracing::info!("Adding source: type={}, path={}", source_type, path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -135,11 +135,11 @@ async fn add_source(
 
     match hippo.add_source(source).await {
         Ok(_) => {
-            println!("[Hippo] Source added successfully, indexing started");
+            tracing::info!("Source added successfully, indexing started");
             Ok("Source added successfully".to_string())
         }
         Err(e) => {
-            println!("[Hippo] Failed to add source: {}", e);
+            tracing::error!("Failed to add source: {}", e);
             Err(e.to_string())
         }
     }
@@ -147,17 +147,17 @@ async fn add_source(
 
 #[tauri::command]
 async fn get_sources(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting sources...");
+    tracing::info!("Getting sources...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     match hippo.list_sources().await {
         Ok(sources) => {
-            println!("[Hippo] Found {} sources", sources.len());
+            tracing::info!("Found {} sources", sources.len());
             serde_json::to_value(sources).map_err(|e| e.to_string())
         }
         Err(e) => {
-            println!("[Hippo] Failed to get sources: {}", e);
+            tracing::error!("Failed to get sources: {}", e);
             Err(format!("Failed to get sources: {}", e))
         }
     }
@@ -169,7 +169,7 @@ async fn add_tag(
     tag: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!("[Hippo] Adding tag '{}' to memory {}", tag, memory_id);
+    tracing::info!("Adding tag '{}' to memory {}", tag, memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -187,11 +187,7 @@ async fn bulk_add_tag(
     tag: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!(
-        "[Hippo] Bulk adding tag '{}' to {} memories",
-        tag,
-        memory_ids.len()
-    );
+    tracing::info!("Bulk adding tag '{}' to {} memories", tag, memory_ids.len());
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -212,7 +208,7 @@ async fn bulk_delete(
     memory_ids: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!("[Hippo] Bulk deleting {} memories", memory_ids.len());
+    tracing::info!("Bulk deleting {} memories", memory_ids.len());
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -230,7 +226,7 @@ async fn bulk_delete(
 
 #[tauri::command]
 async fn toggle_favorite(memory_id: String, state: State<'_, AppState>) -> Result<bool, String> {
-    println!("[Hippo] Toggling favorite for memory {}", memory_id);
+    tracing::info!("Toggling favorite for memory {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -240,13 +236,13 @@ async fn toggle_favorite(memory_id: String, state: State<'_, AppState>) -> Resul
 
 #[tauri::command]
 async fn get_tags(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting tags with colors...");
+    tracing::info!("Getting tags with colors...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     match hippo.list_tags_with_colors().await {
         Ok(tags) => {
-            println!("[Hippo] Found {} tags", tags.len());
+            tracing::info!("Found {} tags", tags.len());
             let tag_objects: Vec<serde_json::Value> = tags
                 .iter()
                 .map(|(name, count, color)| {
@@ -260,7 +256,7 @@ async fn get_tags(state: State<'_, AppState>) -> Result<serde_json::Value, Strin
             Ok(serde_json::json!(tag_objects))
         }
         Err(e) => {
-            println!("[Hippo] Failed to get tags: {}", e);
+            tracing::error!("Failed to get tags: {}", e);
             Err(format!("Failed to get tags: {}", e))
         }
     }
@@ -272,10 +268,7 @@ async fn set_tag_color(
     color: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!(
-        "[Hippo] Setting color for tag '{}' to {:?}",
-        tag_name, color
-    );
+    tracing::info!("Setting color for tag '{}' to {:?}", tag_name, color);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -293,7 +286,7 @@ async fn get_mind_map(
     depth: usize,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting mind map for {} depth {}", memory_id, depth);
+    tracing::info!("Getting mind map for {} depth {}", memory_id, depth);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -307,17 +300,17 @@ async fn get_mind_map(
 
 #[tauri::command]
 async fn get_stats(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting stats...");
+    tracing::info!("Getting stats...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     match hippo.stats().await {
         Ok(stats) => {
-            println!("[Hippo] Stats: {} memories", stats.total_memories);
+            tracing::info!("Stats: {} memories", stats.total_memories);
             serde_json::to_value(stats).map_err(|e| e.to_string())
         }
         Err(e) => {
-            println!("[Hippo] Failed to get stats: {}", e);
+            tracing::error!("Failed to get stats: {}", e);
             Err(format!("Failed to get stats: {}", e))
         }
     }
@@ -325,10 +318,11 @@ async fn get_stats(state: State<'_, AppState>) -> Result<serde_json::Value, Stri
 
 #[tauri::command]
 async fn reset_index(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Resetting index...");
+    tracing::info!("Resetting index...");
     let mut hippo_lock = state.hippo.write().await;
 
-    // Drop the current instance
+    // Drop the current instance FIRST so SQLite closes its connection and
+    // checkpoints/removes the WAL before we delete the on-disk files.
     *hippo_lock = None;
 
     // Delete the database file
@@ -336,12 +330,16 @@ async fn reset_index(state: State<'_, AppState>) -> Result<String, String> {
         .map(|d| d.data_dir().to_path_buf())
         .unwrap_or_else(|| std::path::PathBuf::from(".hippo"));
 
-    let db_path = data_dir.join("hippo.db");
-    if db_path.exists() {
-        if let Err(e) = std::fs::remove_file(&db_path) {
-            println!("[Hippo] Failed to delete db: {}", e);
-        } else {
-            println!("[Hippo] Deleted database: {:?}", db_path);
+    // Delete hippo.db together with its WAL/SHM sidecars; leaving the stale
+    // `-wal`/`-shm` files behind can resurrect data after a "reset".
+    for suffix in ["", "-wal", "-shm"] {
+        let path = data_dir.join(format!("hippo.db{}", suffix));
+        if path.exists() {
+            if let Err(e) = std::fs::remove_file(&path) {
+                tracing::warn!("Failed to delete {:?}: {}", path, e);
+            } else {
+                tracing::info!("Deleted database file: {:?}", path);
+            }
         }
     }
 
@@ -349,11 +347,11 @@ async fn reset_index(state: State<'_, AppState>) -> Result<String, String> {
     match Hippo::new().await {
         Ok(hippo) => {
             *hippo_lock = Some(hippo);
-            println!("[Hippo] Index reset complete");
+            tracing::info!("Index reset complete");
             Ok("Index reset successfully".to_string())
         }
         Err(e) => {
-            println!("[Hippo] Failed to reinitialize: {}", e);
+            tracing::error!("Failed to reinitialize: {}", e);
             Err(format!("Failed to reinitialize: {}", e))
         }
     }
@@ -365,10 +363,7 @@ async fn remove_source(
     delete_files: bool,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!(
-        "[Hippo] Removing source: {} (delete_files={})",
-        path, delete_files
-    );
+    tracing::info!("Removing source: {} (delete_files={})", path, delete_files);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -378,11 +373,11 @@ async fn remove_source(
 
     match hippo.remove_source(&source, delete_files).await {
         Ok(_) => {
-            println!("[Hippo] Source removed successfully");
+            tracing::info!("Source removed successfully");
             Ok("Source removed".to_string())
         }
         Err(e) => {
-            println!("[Hippo] Failed to remove source: {}", e);
+            tracing::error!("Failed to remove source: {}", e);
             Err(e.to_string())
         }
     }
@@ -390,7 +385,7 @@ async fn remove_source(
 
 #[tauri::command]
 async fn reindex_source(path: String, state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Re-indexing source: {}", path);
+    tracing::info!("Re-indexing source: {}", path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -401,11 +396,11 @@ async fn reindex_source(path: String, state: State<'_, AppState>) -> Result<Stri
     // Queue for indexing (will update existing entries)
     match hippo.indexer.queue_source(source).await {
         Ok(_) => {
-            println!("[Hippo] Re-index queued");
+            tracing::info!("Re-index queued");
             Ok("Re-index started".to_string())
         }
         Err(e) => {
-            println!("[Hippo] Failed to queue re-index: {}", e);
+            tracing::error!("Failed to queue re-index: {}", e);
             Err(e.to_string())
         }
     }
@@ -413,7 +408,7 @@ async fn reindex_source(path: String, state: State<'_, AppState>) -> Result<Stri
 
 #[tauri::command]
 async fn open_in_finder(path: String) -> Result<(), String> {
-    println!("[Hippo] Opening in finder: {}", path);
+    tracing::info!("Opening in finder: {}", path);
 
     #[cfg(target_os = "macos")]
     {
@@ -450,7 +445,7 @@ async fn open_in_finder(path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn open_file(path: String) -> Result<(), String> {
-    println!("[Hippo] Opening file: {}", path);
+    tracing::info!("Opening file: {}", path);
 
     #[cfg(target_os = "macos")]
     {
@@ -482,23 +477,25 @@ async fn open_file(path: String) -> Result<(), String> {
 #[tauri::command]
 async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
-    println!("[Hippo] Opening folder picker...");
+    tracing::info!("Opening folder picker...");
 
-    let (sender, receiver) = std::sync::mpsc::channel();
+    // Use a tokio oneshot channel and `.await` the result so this async command
+    // yields the worker thread while the native dialog is open, instead of
+    // blocking a tokio worker on a synchronous `std::sync::mpsc::recv()`.
+    let (sender, receiver) = tokio::sync::oneshot::channel();
 
     app.dialog().file().pick_folder(move |folder_path| {
         let result = folder_path.map(|p| p.to_string());
         let _ = sender.send(result);
     });
 
-    // Wait for the dialog result
-    match receiver.recv() {
+    match receiver.await {
         Ok(Some(path)) => {
-            println!("[Hippo] Folder selected: {}", path);
+            tracing::info!("Folder selected: {}", path);
             Ok(Some(path))
         }
         Ok(None) => {
-            println!("[Hippo] Folder picker cancelled");
+            tracing::info!("Folder picker cancelled");
             Ok(None)
         }
         Err(_) => Err("Failed to receive folder path".to_string()),
@@ -567,7 +564,7 @@ async fn analyze_file(
     api_key: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] AI analyzing file: {}", memory_id);
+    tracing::info!("AI analyzing file: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -592,10 +589,7 @@ async fn analyze_file(
         }
     }
 
-    println!(
-        "[Hippo] AI analysis complete, found {} tags",
-        analysis.tags.len()
-    );
+    tracing::info!("AI analysis complete, found {} tags", analysis.tags.len());
     serde_json::to_value(analysis).map_err(|e| e.to_string())
 }
 
@@ -605,7 +599,7 @@ async fn summarize_document(
     api_key: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Summarizing document: {}", memory_id);
+    tracing::info!("Summarizing document: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -632,7 +626,7 @@ async fn summarize_document(
         .await
         .map_err(|e| format!("Summarization failed: {}", e))?;
 
-    println!("[Hippo] Document summarized");
+    tracing::info!("Document summarized");
     serde_json::to_value(summary).map_err(|e| e.to_string())
 }
 
@@ -641,7 +635,7 @@ async fn get_organization_suggestions(
     api_key: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting organization suggestions...");
+    tracing::info!("Getting organization suggestions...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -657,7 +651,7 @@ async fn get_organization_suggestions(
         .await
         .map_err(|e| format!("Organization suggestion failed: {}", e))?;
 
-    println!("[Hippo] Got {} organization suggestions", suggestions.len());
+    tracing::info!("Got {} organization suggestions", suggestions.len());
     serde_json::to_value(suggestions).map_err(|e| e.to_string())
 }
 
@@ -667,47 +661,32 @@ async fn semantic_search(
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Semantic search: {}", query);
+    tracing::info!("Semantic search: {}", query);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     let limit = limit.unwrap_or(20);
 
-    // Get query embedding
-    let query_embedding = hippo
-        .indexer
-        .embedder()
-        .embed_query(&query)
+    // Route through the core semantic search, which uses Qdrant ANN over the
+    // stored embeddings. We must NOT re-embed every stored memory at query time
+    // (that was O(N) embedding calls per query and bypassed the vector index).
+    let results = hippo
+        .semantic_search(&query, limit)
         .await
-        .map_err(|e| format!("Embedding failed: {}", e))?;
+        .map_err(|e| format!("Semantic search failed: {}", e))?;
 
-    // Get all memories and their embeddings
-    let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
-
-    // Generate embeddings for memories and find similar ones
-    let mut scored: Vec<(hippo_core::Memory, f32)> = Vec::new();
-    for memory in memories {
-        if let Ok(emb) = hippo.indexer.embedder().embed_memory(&memory).await {
-            let similarity = hippo_core::embeddings::Embedder::similarity(&query_embedding, &emb);
-            scored.push((memory, similarity));
-        }
-    }
-
-    // Sort by similarity and take top results
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    scored.truncate(limit);
-
-    let results: Vec<serde_json::Value> = scored
+    let results: Vec<serde_json::Value> = results
+        .memories
         .iter()
-        .map(|(mem, score)| {
+        .map(|r| {
             serde_json::json!({
-                "memory": mem,
-                "similarity": score
+                "memory": r.memory,
+                "similarity": r.score
             })
         })
         .collect();
 
-    println!("[Hippo] Semantic search returned {} results", results.len());
+    tracing::info!("Semantic search returned {} results", results.len());
     Ok(serde_json::Value::Array(results))
 }
 
@@ -716,7 +695,7 @@ async fn search_symbols(
     query: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Symbol search: {}", query);
+    tracing::info!("Symbol search: {}", query);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -781,13 +760,13 @@ async fn search_symbols(
 
     results.truncate(100); // Limit results
 
-    println!("[Hippo] Symbol search found {} results", results.len());
+    tracing::info!("Symbol search found {} results", results.len());
     Ok(serde_json::Value::Array(results))
 }
 
 #[tauri::command]
 async fn add_source_path(path: String, state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Adding source path: {}", path);
+    tracing::info!("Adding source path: {}", path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -797,11 +776,11 @@ async fn add_source_path(path: String, state: State<'_, AppState>) -> Result<Str
 
     match hippo.add_source(source).await {
         Ok(_) => {
-            println!("[Hippo] Source added successfully, indexing started");
+            tracing::info!("Source added successfully, indexing started");
             Ok("Source added successfully".to_string())
         }
         Err(e) => {
-            println!("[Hippo] Failed to add source: {}", e);
+            tracing::error!("Failed to add source: {}", e);
             Err(e.to_string())
         }
     }
@@ -811,7 +790,7 @@ async fn add_source_path(path: String, state: State<'_, AppState>) -> Result<Str
 
 #[tauri::command]
 async fn ollama_status() -> Result<serde_json::Value, String> {
-    println!("[Hippo] Checking Ollama status...");
+    tracing::info!("Checking Ollama status...");
     let client = OllamaClient::new();
 
     let available = client.is_available().await;
@@ -830,7 +809,7 @@ async fn ollama_status() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn ollama_list_models() -> Result<serde_json::Value, String> {
-    println!("[Hippo] Listing Ollama models...");
+    tracing::info!("Listing Ollama models...");
     let client = OllamaClient::new();
 
     if !client.is_available().await {
@@ -855,13 +834,13 @@ async fn ollama_list_models() -> Result<serde_json::Value, String> {
         })
         .collect();
 
-    println!("[Hippo] Found {} models", model_info.len());
+    tracing::info!("Found {} models", model_info.len());
     Ok(serde_json::Value::Array(model_info))
 }
 
 #[tauri::command]
 async fn ollama_pull_model(name: String) -> Result<String, String> {
-    println!("[Hippo] Pulling Ollama model: {}", name);
+    tracing::info!("Pulling Ollama model: {}", name);
     let client = OllamaClient::new();
 
     if !client.is_available().await {
@@ -894,7 +873,7 @@ async fn ollama_analyze(
 
     // Handle single memory ID
     if let Some(mid) = memory_id {
-        println!("[Hippo] Ollama analyzing memory: {}", mid);
+        tracing::info!("Ollama analyzing memory: {}", mid);
         let id: MemoryId = mid.parse().map_err(|_| "Invalid memory ID")?;
         let memory = hippo
             .get_memory(id)
@@ -915,8 +894,8 @@ async fn ollama_analyze(
             }
         }
 
-        println!(
-            "[Hippo] Ollama analysis complete, found {} tags",
+        tracing::info!(
+            "Ollama analysis complete, found {} tags",
             analysis.tags.len()
         );
         return serde_json::to_value(analysis).map_err(|e| e.to_string());
@@ -924,7 +903,7 @@ async fn ollama_analyze(
 
     // Handle multiple file paths
     if let Some(paths) = file_paths {
-        println!("[Hippo] Ollama analyzing {} files", paths.len());
+        tracing::info!("Ollama analyzing {} files", paths.len());
         let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
 
         let mut results = Vec::new();
@@ -973,7 +952,7 @@ async fn ollama_summarize(
 
     // Handle single memory ID
     if let Some(mid) = memory_id {
-        println!("[Hippo] Ollama summarizing memory: {}", mid);
+        tracing::info!("Ollama summarizing memory: {}", mid);
         let id: MemoryId = mid.parse().map_err(|_| "Invalid memory ID")?;
         let memory = hippo
             .get_memory(id)
@@ -995,13 +974,13 @@ async fn ollama_summarize(
             .await
             .map_err(|e| format!("Summarization failed: {}", e))?;
 
-        println!("[Hippo] Ollama summarization complete");
+        tracing::info!("Ollama summarization complete");
         return serde_json::to_value(summary).map_err(|e| e.to_string());
     }
 
     // Handle multiple file paths
     if let Some(paths) = file_paths {
-        println!("[Hippo] Ollama summarizing {} files", paths.len());
+        tracing::info!("Ollama summarizing {} files", paths.len());
         let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
 
         let mut summaries = Vec::new();
@@ -1043,7 +1022,7 @@ async fn ollama_summarize(
 
 #[tauri::command]
 async fn ollama_chat(messages: Vec<(String, String)>) -> Result<String, String> {
-    println!("[Hippo] Ollama chat with {} messages", messages.len());
+    tracing::info!("Ollama chat with {} messages", messages.len());
 
     let ai_client = UnifiedAiClient::with_ollama(None);
 
@@ -1064,7 +1043,7 @@ async fn ollama_rag_query(
     query: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] RAG query: {}", query);
+    tracing::info!("RAG query: {}", query);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1083,8 +1062,8 @@ async fn ollama_rag_query(
     let mut semantic_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     if let Ok(results) = &semantic_results {
-        println!(
-            "[Hippo] Found {} semantically relevant files",
+        tracing::info!(
+            "Found {} semantically relevant files",
             results.memories.len()
         );
         for result in results.memories.iter().take(10) {
@@ -1153,6 +1132,13 @@ async fn ollama_rag_query(
 
     // Also get all memories for statistics
     let memories = hippo.get_all_memories().await.map_err(|e| e.to_string())?;
+
+    // All data from the index has now been read. Drop the read guard before the
+    // long, network-bound Ollama generation below so pending writers
+    // (initialize/reset_index) aren't blocked by this request. tokio's RwLock is
+    // write-preferring, so a held read lock here stalls the whole UI.
+    drop(hippo_lock);
+
     let query_lower = query.to_lowercase();
 
     // Collect file statistics
@@ -1253,10 +1239,7 @@ async fn ollama_rag_query(
         context, query
     );
 
-    println!(
-        "[Hippo] Sending to Ollama ({} chars context)",
-        context.len()
-    );
+    tracing::info!("Sending to Ollama ({} chars context)", context.len());
 
     // Use generate API with improved system prompt
     let system = r#"You are Hippo, an intelligent file assistant that helps users understand and organize their files.
@@ -1302,7 +1285,7 @@ async fn ai_suggest_tags(
     file_path: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] AI suggest tags for: {}", file_path);
+    tracing::info!("AI suggest tags for: {}", file_path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1394,7 +1377,7 @@ async fn ai_find_similar(
     file_path: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] AI find similar to: {}", file_path);
+    tracing::info!("AI find similar to: {}", file_path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1547,7 +1530,7 @@ async fn ai_smart_rename(
     file_path: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] AI smart rename for: {}", file_path);
+    tracing::info!("AI smart rename for: {}", file_path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1649,13 +1632,13 @@ async fn get_recommended_models() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn list_collections(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Listing collections...");
+    tracing::info!("Listing collections...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     let collections = hippo.list_collections().await.map_err(|e| e.to_string())?;
 
-    println!("[Hippo] Found {} collections", collections.len());
+    tracing::info!("Found {} collections", collections.len());
     serde_json::to_value(collections).map_err(|e| e.to_string())
 }
 
@@ -1664,7 +1647,7 @@ async fn get_virtual_paths(
     memory_id: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting virtual paths for: {}", memory_id);
+    tracing::info!("Getting virtual paths for: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1682,7 +1665,7 @@ async fn get_collections_for_memory(
     memory_id: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting collections for memory: {}", memory_id);
+    tracing::info!("Getting collections for memory: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1702,7 +1685,7 @@ async fn create_collection(
     memory_ids: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Creating collection: {}", name);
+    tracing::info!("Creating collection: {}", name);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1713,7 +1696,7 @@ async fn create_collection(
         .await
         .map_err(|e| e.to_string())?;
 
-    println!("[Hippo] Collection created: {}", collection.id);
+    tracing::info!("Collection created: {}", collection.id);
     serde_json::to_value(collection).map_err(|e| e.to_string())
 }
 
@@ -1723,7 +1706,7 @@ async fn add_to_collection(
     memory_ids: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!("[Hippo] Adding to collection: {}", collection_id);
+    tracing::info!("Adding to collection: {}", collection_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1743,7 +1726,7 @@ async fn remove_collection(
     collection_id: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    println!("[Hippo] Removing collection: {}", collection_id);
+    tracing::info!("Removing collection: {}", collection_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1758,7 +1741,7 @@ async fn remove_collection(
 
 #[tauri::command]
 async fn discover_collections(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Discovering collections...");
+    tracing::info!("Discovering collections...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1767,7 +1750,7 @@ async fn discover_collections(state: State<'_, AppState>) -> Result<serde_json::
         .await
         .map_err(|e| e.to_string())?;
 
-    println!("[Hippo] Discovered {} collections", collections.len());
+    tracing::info!("Discovered {} collections", collections.len());
     serde_json::to_value(collections).map_err(|e| e.to_string())
 }
 
@@ -1775,7 +1758,7 @@ async fn discover_collections(state: State<'_, AppState>) -> Result<serde_json::
 async fn get_organization_stats_internal(
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting organization stats...");
+    tracing::info!("Getting organization stats...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1792,7 +1775,7 @@ async fn suggest_groupings(
     memory_id: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Suggesting groupings for: {}", memory_id);
+    tracing::info!("Suggesting groupings for: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1813,7 +1796,7 @@ async fn find_similar_memories(
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Finding similar to: {}", memory_id);
+    tracing::info!("Finding similar to: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1825,7 +1808,10 @@ async fn find_similar_memories(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Fetch full memories for the results
+    // Fetch full memories for the results.
+    // TODO(perf): this is an N+1 query (one `get_memory` per hit). hippo-core
+    // does not currently expose a batch `get_memories(&[MemoryId])`; add one in
+    // core and use it here to collapse this into a single query.
     let mut results = Vec::new();
     for (sim_id, score) in similar {
         if let Ok(Some(memory)) = hippo.get_memory(sim_id).await {
@@ -1836,7 +1822,7 @@ async fn find_similar_memories(
         }
     }
 
-    println!("[Hippo] Found {} similar memories", results.len());
+    tracing::info!("Found {} similar memories", results.len());
     Ok(serde_json::Value::Array(results))
 }
 
@@ -1846,7 +1832,7 @@ async fn hybrid_search(
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Hybrid search: {}", query);
+    tracing::info!("Hybrid search: {}", query);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1856,16 +1842,13 @@ async fn hybrid_search(
         .await
         .map_err(|e| e.to_string())?;
 
-    println!(
-        "[Hippo] Hybrid search returned {} results",
-        results.memories.len()
-    );
+    tracing::info!("Hybrid search returned {} results", results.memories.len());
     serde_json::to_value(results).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn get_qdrant_stats(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting Qdrant stats...");
+    tracing::info!("Getting Qdrant stats...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1876,14 +1859,14 @@ async fn get_qdrant_stats(state: State<'_, AppState>) -> Result<serde_json::Valu
 
 #[tauri::command]
 async fn get_qdrant_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting Qdrant status...");
+    tracing::info!("Getting Qdrant status...");
     let status = state.qdrant_manager.status().await;
     serde_json::to_value(status).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn install_qdrant(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Installing Qdrant...");
+    tracing::info!("Installing Qdrant...");
     state
         .qdrant_manager
         .install()
@@ -1894,7 +1877,7 @@ async fn install_qdrant(state: State<'_, AppState>) -> Result<String, String> {
 
 #[tauri::command]
 async fn start_qdrant(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Starting Qdrant...");
+    tracing::info!("Starting Qdrant...");
     state
         .qdrant_manager
         .start()
@@ -1910,7 +1893,7 @@ async fn parse_natural_query(
     query: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Parsing natural query: {}", query);
+    tracing::info!("Parsing natural query: {}", query);
     let hippo_lock = state.hippo.read().await;
     let _hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -1998,7 +1981,7 @@ async fn parse_natural_query(
         }
     });
 
-    println!("[Hippo] Parsed query: {:?}", parsed);
+    tracing::info!("Parsed query: {:?}", parsed);
     Ok(parsed)
 }
 
@@ -2007,7 +1990,7 @@ async fn natural_language_search(
     query: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Natural language search: {}", query);
+    tracing::info!("Natural language search: {}", query);
 
     // First parse the query
     let parsed = parse_natural_query(query.clone(), state.clone()).await?;
@@ -2089,7 +2072,7 @@ async fn natural_language_search(
 
 #[tauri::command]
 async fn caption_image(path: String) -> Result<String, String> {
-    println!("[Hippo] Captioning image: {}", path);
+    tracing::info!("Captioning image: {}", path);
 
     let client = OllamaClient::new();
 
@@ -2107,7 +2090,7 @@ async fn caption_image(path: String) -> Result<String, String> {
         .await
         .map_err(|e| format!("Failed to caption image: {}", e))?;
 
-    println!("[Hippo] Image caption generated");
+    tracing::info!("Image caption generated");
     Ok(caption)
 }
 
@@ -2115,7 +2098,7 @@ async fn caption_image(path: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn get_indexing_progress(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting indexing progress...");
+    tracing::info!("Getting indexing progress...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2125,7 +2108,7 @@ async fn get_indexing_progress(state: State<'_, AppState>) -> Result<serde_json:
 
 #[tauri::command]
 async fn pause_indexing(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Pausing indexing...");
+    tracing::info!("Pausing indexing...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2136,7 +2119,7 @@ async fn pause_indexing(state: State<'_, AppState>) -> Result<String, String> {
 
 #[tauri::command]
 async fn resume_indexing(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Resuming indexing...");
+    tracing::info!("Resuming indexing...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2147,7 +2130,7 @@ async fn resume_indexing(state: State<'_, AppState>) -> Result<String, String> {
 
 #[tauri::command]
 async fn set_indexing_priority(path: String, state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Setting indexing priority for: {}", path);
+    tracing::info!("Setting indexing priority for: {}", path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2172,7 +2155,7 @@ async fn get_tag_suggestions(
     memory_id: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting tag suggestions for: {}", memory_id);
+    tracing::info!("Getting tag suggestions for: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2196,14 +2179,14 @@ async fn get_tag_suggestions(
 
     match ai_client.suggest_tags_for_memory(&memory).await {
         Ok(suggestions) => {
-            println!("[Hippo] Found {} tag suggestions", suggestions.len());
+            tracing::info!("Found {} tag suggestions", suggestions.len());
             Ok(serde_json::json!({
                 "tags": suggestions,
                 "available": true
             }))
         }
         Err(e) => {
-            println!("[Hippo] Tag suggestion failed: {}", e);
+            tracing::error!("Tag suggestion failed: {}", e);
             Ok(serde_json::json!({
                 "tags": [],
                 "available": true,
@@ -2219,7 +2202,7 @@ async fn get_similar_files(
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting similar files for: {}", memory_id);
+    tracing::info!("Getting similar files for: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2236,7 +2219,7 @@ async fn get_similar_files(
     let ai_client = UnifiedAiClient::with_ollama(None);
     let similar = ai_client.suggest_similar_files(&memory, &all_memories, limit);
 
-    println!("[Hippo] Found {} similar files", similar.len());
+    tracing::info!("Found {} similar files", similar.len());
     serde_json::to_value(similar).map_err(|e| e.to_string())
 }
 
@@ -2245,7 +2228,7 @@ async fn get_duplicate_suggestions(
     memory_id: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting duplicate suggestions for: {}", memory_id);
+    tracing::info!("Getting duplicate suggestions for: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2261,7 +2244,7 @@ async fn get_duplicate_suggestions(
     let ai_client = UnifiedAiClient::with_ollama(None);
     let duplicates = ai_client.suggest_duplicates(&memory, &all_memories);
 
-    println!("[Hippo] Found {} potential duplicates", duplicates.len());
+    tracing::info!("Found {} potential duplicates", duplicates.len());
     serde_json::to_value(duplicates).map_err(|e| e.to_string())
 }
 
@@ -2270,10 +2253,7 @@ async fn get_organization_suggestions_for_memory(
     memory_id: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!(
-        "[Hippo] Getting organization suggestions for: {}",
-        memory_id
-    );
+    tracing::info!("Getting organization suggestions for: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2290,17 +2270,14 @@ async fn get_organization_suggestions_for_memory(
 
     match ai_client.suggest_groupings(&all_memories).await {
         Ok(suggestions) => {
-            println!(
-                "[Hippo] Found {} organization suggestions",
-                suggestions.len()
-            );
+            tracing::info!("Found {} organization suggestions", suggestions.len());
             Ok(serde_json::json!({
                 "suggestions": suggestions,
                 "available": true
             }))
         }
         Err(e) => {
-            println!("[Hippo] Organization suggestion failed: {}", e);
+            tracing::error!("Organization suggestion failed: {}", e);
             Ok(serde_json::json!({
                 "suggestions": [],
                 "available": true,
@@ -2317,7 +2294,7 @@ async fn deep_analyze_file(
     memory_id: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Deep analyzing file: {}", memory_id);
+    tracing::info!("Deep analyzing file: {}", memory_id);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2338,13 +2315,13 @@ async fn deep_analyze_file(
         .await
         .map_err(|e| format!("Analysis failed: {}", e))?;
 
-    println!("[Hippo] Deep analysis complete: {}", analysis.summary());
+    tracing::info!("Deep analysis complete: {}", analysis.summary());
     serde_json::to_value(analysis).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn analyze_image_deep(path: String) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Deep analyzing image: {}", path);
+    tracing::info!("Deep analyzing image: {}", path);
 
     let image_path = std::path::Path::new(&path);
     if !image_path.exists() {
@@ -2367,7 +2344,7 @@ async fn analyze_image_deep(path: String) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn analyze_document_deep(path: String) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Deep analyzing document: {}", path);
+    tracing::info!("Deep analyzing document: {}", path);
 
     let doc_path = std::path::Path::new(&path);
     if !doc_path.exists() {
@@ -2388,7 +2365,7 @@ async fn analyze_document_deep(path: String) -> Result<serde_json::Value, String
 
 #[tauri::command]
 async fn analyze_code_deep(path: String) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Deep analyzing code: {}", path);
+    tracing::info!("Deep analyzing code: {}", path);
 
     let code_path = std::path::Path::new(&path);
     if !code_path.exists() {
@@ -2409,10 +2386,7 @@ async fn analyze_code_deep(path: String) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn read_file_content(path: String, max_lines: usize) -> Result<serde_json::Value, String> {
-    println!(
-        "[Hippo] Reading file content: {} (max {} lines)",
-        path, max_lines
-    );
+    tracing::info!("Reading file content: {} (max {} lines)", path, max_lines);
 
     let file_path = std::path::Path::new(&path);
     if !file_path.exists() {
@@ -2474,7 +2448,7 @@ async fn read_file_content(path: String, max_lines: usize) -> Result<serde_json:
 
 #[tauri::command]
 async fn export_index(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Exporting index...");
+    tracing::info!("Exporting index...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2486,8 +2460,8 @@ async fn export_index(state: State<'_, AppState>) -> Result<String, String> {
     let json = serde_json::to_string_pretty(&export)
         .map_err(|e| format!("JSON serialization failed: {}", e))?;
 
-    println!(
-        "[Hippo] Export complete: {} memories, {} sources, {} tags, {} clusters",
+    tracing::info!(
+        "Export complete: {} memories, {} sources, {} tags, {} clusters",
         export.memories.len(),
         export.sources.len(),
         export.tags.len(),
@@ -2502,10 +2476,7 @@ async fn import_index(
     json: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!(
-        "[Hippo] Importing index from JSON ({} bytes)...",
-        json.len()
-    );
+    tracing::info!("Importing index from JSON ({} bytes)...", json.len());
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2517,8 +2488,8 @@ async fn import_index(
         .await
         .map_err(|e| format!("Import failed: {}", e))?;
 
-    println!(
-        "[Hippo] Import complete: {} memories, {} sources, {} tags, {} clusters imported ({} duplicates skipped)",
+    tracing::info!(
+        "Import complete: {} memories, {} sources, {} tags, {} clusters imported ({} duplicates skipped)",
         stats.memories_imported,
         stats.sources_imported,
         stats.tags_imported,
@@ -2531,7 +2502,7 @@ async fn import_index(
 
 #[tauri::command]
 async fn export_to_file(path: String, state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Exporting index to file: {}", path);
+    tracing::info!("Exporting index to file: {}", path);
 
     // Get the export JSON
     let json = export_index(state).await?;
@@ -2539,7 +2510,7 @@ async fn export_to_file(path: String, state: State<'_, AppState>) -> Result<Stri
     // Write to file
     std::fs::write(&path, json).map_err(|e| format!("Failed to write file: {}", e))?;
 
-    println!("[Hippo] Export written to: {}", path);
+    tracing::info!("Export written to: {}", path);
     Ok(format!("Export written to {}", path))
 }
 
@@ -2548,7 +2519,7 @@ async fn import_from_file(
     path: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Importing index from file: {}", path);
+    tracing::info!("Importing index from file: {}", path);
 
     // Read the file
     let json = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))?;
@@ -2561,31 +2532,31 @@ async fn import_from_file(
 
 #[tauri::command]
 async fn start_watching(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Starting file watcher for all sources...");
+    tracing::info!("Starting file watcher for all sources...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     hippo.watch_all().await.map_err(|e| e.to_string())?;
 
-    println!("[Hippo] File watcher started");
+    tracing::info!("File watcher started");
     Ok("File watcher started successfully".to_string())
 }
 
 #[tauri::command]
 async fn stop_watching(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Stopping file watcher...");
+    tracing::info!("Stopping file watcher...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     hippo.unwatch_all().await.map_err(|e| e.to_string())?;
 
-    println!("[Hippo] File watcher stopped");
+    tracing::info!("File watcher stopped");
     Ok("File watcher stopped successfully".to_string())
 }
 
 #[tauri::command]
 async fn pause_watching(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Pausing file watcher...");
+    tracing::info!("Pausing file watcher...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2596,7 +2567,7 @@ async fn pause_watching(state: State<'_, AppState>) -> Result<String, String> {
             .pause()
             .await
             .map_err(|e| e.to_string())?;
-        println!("[Hippo] File watcher paused");
+        tracing::info!("File watcher paused");
         Ok("File watcher paused successfully".to_string())
     } else {
         Err("File watcher not available".to_string())
@@ -2605,7 +2576,7 @@ async fn pause_watching(state: State<'_, AppState>) -> Result<String, String> {
 
 #[tauri::command]
 async fn resume_watching(state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Resuming file watcher...");
+    tracing::info!("Resuming file watcher...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2616,7 +2587,7 @@ async fn resume_watching(state: State<'_, AppState>) -> Result<String, String> {
             .resume()
             .await
             .map_err(|e| e.to_string())?;
-        println!("[Hippo] File watcher resumed");
+        tracing::info!("File watcher resumed");
         Ok("File watcher resumed successfully".to_string())
     } else {
         Err("File watcher not available".to_string())
@@ -2625,7 +2596,7 @@ async fn resume_watching(state: State<'_, AppState>) -> Result<String, String> {
 
 #[tauri::command]
 async fn get_watcher_stats(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Getting watcher stats...");
+    tracing::info!("Getting watcher stats...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2647,7 +2618,7 @@ async fn get_watcher_stats(state: State<'_, AppState>) -> Result<serde_json::Val
 
 #[tauri::command]
 async fn watch_source_path(path: String, state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Watching source path: {}", path);
+    tracing::info!("Watching source path: {}", path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2660,13 +2631,13 @@ async fn watch_source_path(path: String, state: State<'_, AppState>) -> Result<S
         .await
         .map_err(|e| e.to_string())?;
 
-    println!("[Hippo] Watching source path started");
+    tracing::info!("Watching source path started");
     Ok("Source path watching started".to_string())
 }
 
 #[tauri::command]
 async fn unwatch_source_path(path: String, state: State<'_, AppState>) -> Result<String, String> {
-    println!("[Hippo] Unwatching source path: {}", path);
+    tracing::info!("Unwatching source path: {}", path);
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
@@ -2679,27 +2650,27 @@ async fn unwatch_source_path(path: String, state: State<'_, AppState>) -> Result
         .await
         .map_err(|e| e.to_string())?;
 
-    println!("[Hippo] Unwatching source path completed");
+    tracing::info!("Unwatching source path completed");
     Ok("Source path unwatched".to_string())
 }
 
 #[tauri::command]
 async fn optimize_storage(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Optimizing storage...");
+    tracing::info!("Optimizing storage...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     match hippo.optimize_storage().await {
         Ok(stats) => {
-            println!(
-                "[Hippo] Storage optimized: {} bytes reclaimed ({:.1}%)",
+            tracing::info!(
+                "Storage optimized: {} bytes reclaimed ({:.1}%)",
                 stats.bytes_reclaimed,
                 stats.reclaim_percentage()
             );
             serde_json::to_value(&stats).map_err(|e| e.to_string())
         }
         Err(e) => {
-            println!("[Hippo] Storage optimization failed: {}", e);
+            tracing::error!("Storage optimization failed: {}", e);
             Err(format!("Storage optimization failed: {}", e))
         }
     }
@@ -2707,40 +2678,30 @@ async fn optimize_storage(state: State<'_, AppState>) -> Result<serde_json::Valu
 
 #[tauri::command]
 async fn vacuum_database(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("[Hippo] Vacuuming database...");
+    tracing::info!("Vacuuming database...");
     let hippo_lock = state.hippo.read().await;
     let hippo = hippo_lock.as_ref().ok_or("Hippo not initialized")?;
 
     match hippo.vacuum().await {
         Ok(stats) => {
-            println!(
-                "[Hippo] Database vacuumed: {} bytes reclaimed ({:.1}%)",
+            tracing::info!(
+                "Database vacuumed: {} bytes reclaimed ({:.1}%)",
                 stats.bytes_reclaimed,
                 stats.reclaim_percentage()
             );
             serde_json::to_value(&stats).map_err(|e| e.to_string())
         }
         Err(e) => {
-            println!("[Hippo] Vacuum failed: {}", e);
+            tracing::error!("Vacuum failed: {}", e);
             Err(format!("Vacuum failed: {}", e))
         }
     }
 }
 
-// Helper function for cosine similarity (kept for future semantic search)
-#[allow(dead_code)]
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm_a == 0.0 || norm_b == 0.0 {
-        return 0.0;
-    }
-    dot / (norm_a * norm_b)
-}
+// NOTE: a local `cosine_similarity` helper used to live here, duplicating
+// `hippo_core::embeddings::Embedder::similarity`. It was dead code (the Tauri
+// `semantic_search` command now routes through core's Qdrant-backed search), so
+// it has been removed. Use the core implementation if similarity is needed here.
 
 // Helper function for formatting bytes
 fn format_bytes(bytes: u64) -> String {
@@ -2964,7 +2925,7 @@ async fn start_scheduler(state: State<'_, AppState>) -> Result<String, String> {
     let mut scheduler = Scheduler::new(storage, indexer, config);
     scheduler.start().map_err(|e| e.to_string())?;
     *sched_lock = Some(scheduler);
-    println!("[Hippo] Scheduler started");
+    tracing::info!("Scheduler started");
     Ok("Scheduler started".to_string())
 }
 
@@ -2973,7 +2934,7 @@ async fn stop_scheduler(state: State<'_, AppState>) -> Result<String, String> {
     let mut sched_lock = state.scheduler.write().await;
     if let Some(mut scheduler) = sched_lock.take() {
         scheduler.stop();
-        println!("[Hippo] Scheduler stopped");
+        tracing::info!("Scheduler stopped");
         Ok("Scheduler stopped".to_string())
     } else {
         Ok("Scheduler not running".to_string())
@@ -3096,12 +3057,12 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
         })
         .build(app)?;
 
-    println!("[Hippo] System tray initialized");
+    tracing::info!("System tray initialized");
     Ok(())
 }
 
 fn main() {
-    println!("[Hippo] Starting application...");
+    tracing::info!("Starting application...");
     tracing_subscriber::fmt::init();
 
     // Get data directory for Qdrant
@@ -3123,7 +3084,7 @@ fn main() {
             scheduler: Arc::new(RwLock::new(None)),
         })
         .setup(|app| {
-            println!("[Hippo] Application started. Qdrant will be auto-managed.");
+            tracing::info!("Application started. Qdrant will be auto-managed.");
 
             // Set up system tray
             setup_system_tray(app)?;
@@ -3147,9 +3108,9 @@ fn main() {
             )?;
 
             if let Err(e) = app.global_shortcut().register(show_shortcut) {
-                println!("[Hippo] Warning: Failed to register global shortcut: {}", e);
+                tracing::error!("Warning: Failed to register global shortcut: {}", e);
             } else {
-                println!("[Hippo] Global shortcut registered: Cmd+Shift+H");
+                tracing::info!("Global shortcut registered: Cmd+Shift+H");
             }
 
             Ok(())

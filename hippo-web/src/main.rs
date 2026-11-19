@@ -80,7 +80,23 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState { hippo };
 
     // Build router with CORS and tracing middleware
-    let app = Router::new()
+    let app = build_router(state);
+
+    // Bind and serve
+    let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
+    info!("Starting Hippo Web API server on http://{}", addr);
+
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    axum::serve(listener, app).await?;
+
+    Ok(())
+}
+
+/// Build the application router. Extracted from `main` so tests can drive the
+/// real route table and handlers in-process via `tower::ServiceExt::oneshot`,
+/// without binding a TCP listener or starting a live server.
+fn build_router(state: AppState) -> Router {
+    Router::new()
         // Health check
         .route("/api/health", get(health_check))
         // Stats
@@ -106,16 +122,7 @@ async fn main() -> anyhow::Result<()> {
                 .allow_headers(Any),
         )
         .layer(TraceLayer::new_for_http())
-        .with_state(state);
-
-    // Bind and serve
-    let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
-    info!("Starting Hippo Web API server on http://{}", addr);
-
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app).await?;
-
-    Ok(())
+        .with_state(state)
 }
 
 // ============================================================================
@@ -604,4 +611,181 @@ impl IntoResponse for ApiError {
 
         (status, body).into_response()
     }
+}
+
+// ============================================================================
+// Hermetic in-process tests
+// ============================================================================
+//
+// These drive the real `build_router()` route table and handlers via
+// `tower::ServiceExt::oneshot` against an in-memory `Hippo` backed by a fresh
+// temp data directory. They require NO running server, network, Ollama, or
+// Qdrant (embeddings disabled, storage uses the SQLite fallback), so they run
+// in CI as ordinary `cargo test -p hippo-web` unit tests.
+//
+// NOTE: these live in the binary crate (not `tests/api_tests.rs`) because
+// hippo-web has no `[lib]` target, so an external integration-test crate cannot
+// reach the private `build_router`/handlers. The live-server smoke tests in
+// `tests/api_tests.rs` remain `#[ignore]`d for manual end-to-end runs.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Method, Request, StatusCode};
+    use tower::ServiceExt; // for `oneshot`
+
+    /// Build a router over a fresh, isolated Hippo instance in a temp dir.
+    /// The returned `TempDir` must be kept alive for the duration of the test.
+    async fn test_app() -> (Router, tempfile::TempDir) {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let config = HippoConfig {
+            data_dir: dir.path().to_path_buf(),
+            // Keep tests hermetic: no Ollama embedding calls at init/query time.
+            local_embeddings: false,
+            auto_tag_enabled: false,
+            ..Default::default()
+        };
+        let hippo = Arc::new(
+            Hippo::with_config(config)
+                .await
+                .expect("initialize Hippo for test"),
+        );
+        (build_router(AppState { hippo }), dir)
+    }
+
+    async fn body_json(resp: Response) -> serde_json::Value {
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("read response body");
+        serde_json::from_slice(&bytes).expect("parse JSON body")
+    }
+
+    fn get(path: &str) -> Request<Body> {
+        Request::builder()
+            .uri(path)
+            .body(Body::empty())
+            .expect("build request")
+    }
+
+    #[tokio::test]
+    async fn health_returns_ok() {
+        let (app, _dir) = test_app().await;
+        let resp = app.oneshot(get("/api/health")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        assert_eq!(body["status"], "ok");
+        assert!(body["version"].is_string());
+    }
+
+    #[tokio::test]
+    async fn stats_returns_empty_index_shape() {
+        let (app, _dir) = test_app().await;
+        let resp = app.oneshot(get("/api/stats")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        assert_eq!(body["total_memories"], 0);
+        assert!(body["by_kind"].is_object());
+        assert!(body["by_source"].is_object());
+    }
+
+    #[tokio::test]
+    async fn search_empty_returns_results_shape() {
+        let (app, _dir) = test_app().await;
+        let resp = app.oneshot(get("/api/search?q=anything")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        assert!(body["memories"].is_array());
+        assert_eq!(body["memories"].as_array().unwrap().len(), 0);
+        assert!(body["total_count"].is_number());
+    }
+
+    #[tokio::test]
+    async fn search_respects_limit_param() {
+        let (app, _dir) = test_app().await;
+        let resp = app
+            .oneshot(get("/api/search?q=test&limit=5"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        assert!(body["memories"].as_array().unwrap().len() <= 5);
+    }
+
+    #[tokio::test]
+    async fn search_invalid_sort_is_bad_request() {
+        let (app, _dir) = test_app().await;
+        let resp = app
+            .oneshot(get("/api/search?sort=NotARealSort"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body = body_json(resp).await;
+        assert!(body["error"].is_string());
+    }
+
+    #[tokio::test]
+    async fn tags_empty_returns_array() {
+        let (app, _dir) = test_app().await;
+        let resp = app.oneshot(get("/api/tags")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        assert!(body.is_array());
+    }
+
+    #[tokio::test]
+    async fn sources_empty_returns_array() {
+        let (app, _dir) = test_app().await;
+        let resp = app.oneshot(get("/api/sources")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        assert!(body.is_array());
+    }
+
+    #[tokio::test]
+    async fn memory_invalid_uuid_is_bad_request() {
+        let (app, _dir) = test_app().await;
+        let resp = app.oneshot(get("/api/memories/not-a-uuid")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn memory_nonexistent_is_not_found() {
+        let (app, _dir) = test_app().await;
+        let resp = app
+            .oneshot(get("/api/memories/00000000-0000-0000-0000-000000000000"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn add_tag_invalid_uuid_is_bad_request() {
+        let (app, _dir) = test_app().await;
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/api/memories/not-a-uuid/tags")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(r#"{"tag":"vacation"}"#))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn remove_tag_invalid_uuid_is_bad_request() {
+        let (app, _dir) = test_app().await;
+        let req = Request::builder()
+            .method(Method::DELETE)
+            .uri("/api/memories/not-a-uuid/tags/vacation")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // TODO: a happy-path add-then-remove-tag test needs a seeded memory. Seed one
+    // hermetically via `hippo.import_index(IndexExport { memories: vec![..], .. })`
+    // (no indexer/network needed) and assert the tag appears in `/api/tags`, then
+    // is gone after DELETE. Deferred: constructing a full `Memory` fixture is
+    // verbose and `models`/`storage` are owned by other agents this session.
 }
