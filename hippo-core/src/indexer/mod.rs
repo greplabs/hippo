@@ -895,24 +895,27 @@ impl Indexer {
                 batch.len()
             );
 
-            let memories: Vec<Memory> = batch
-                .par_iter()
-                .filter_map(|file_path| {
-                    // Update current file (note: may be overwritten by parallel processing)
-                    let _file_name = file_path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default();
-
-                    match Self::process_file(file_path, source) {
-                        Ok(memory) => Some(memory),
-                        Err(e) => {
-                            debug!("Failed to process file {:?}: {}", file_path, e);
-                            None
-                        }
-                    }
-                })
-                .collect();
+            // Run the CPU/IO-heavy rayon batch (full-file hashing, image probing,
+            // ffprobe subprocesses, read_to_string) inside spawn_blocking so we do
+            // not block a tokio runtime worker. Clone owned inputs into the closure.
+            let batch_paths: Vec<PathBuf> = batch.to_vec();
+            let source_owned = source.clone();
+            let memories: Vec<Memory> = tokio::task::spawn_blocking(move || {
+                batch_paths
+                    .par_iter()
+                    .filter_map(
+                        |file_path| match Self::process_file(file_path, &source_owned) {
+                            Ok(memory) => Some(memory),
+                            Err(e) => {
+                                debug!("Failed to process file {:?}: {}", file_path, e);
+                                None
+                            }
+                        },
+                    )
+                    .collect()
+            })
+            .await
+            .map_err(|e| HippoError::Indexing(format!("Batch processing task failed: {}", e)))?;
 
             println!("[Indexer] Processed {} memories from batch", memories.len());
 
@@ -952,6 +955,11 @@ impl Indexer {
                     })
                     .await;
 
+                // Index memories by id once so the per-embedding loop below is
+                // O(1) lookup instead of O(N^2) linear scans.
+                let memory_index: std::collections::HashMap<MemoryId, &Memory> =
+                    memories.iter().map(|m| (m.id, m)).collect();
+
                 // Use batch embedding for efficiency
                 match embedder.embed_memories_batch(&memories).await {
                     Ok(embeddings) => {
@@ -961,8 +969,8 @@ impl Indexer {
                                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                             }
 
-                            // Find the memory to get its kind
-                            if let Some(memory) = memories.iter().find(|m| m.id == memory_id) {
+                            // Find the memory to get its kind (O(1) hashmap lookup)
+                            if let Some(memory) = memory_index.get(&memory_id).copied() {
                                 if let Err(e) = storage
                                     .store_embedding_with_qdrant(
                                         memory_id,
