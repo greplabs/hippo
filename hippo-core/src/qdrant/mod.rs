@@ -431,6 +431,153 @@ impl QdrantStorage {
         }
     }
 
+    /// Upsert a single document chunk as its own point in `hippo_text`.
+    ///
+    /// The point id is the chunk id; the payload carries `parent_memory_id`,
+    /// `ordinal`, and an `is_chunk` marker so retrieval can roll chunk hits up to
+    /// their parent memory. Chunks always live in the text collection (768-dim),
+    /// regardless of the parent memory's kind.
+    pub async fn upsert_chunk(&self, chunk: &Chunk, embedding: Vec<f32>) -> Result<()> {
+        let client = match &self.client {
+            Some(c) => c,
+            None => {
+                debug!("Qdrant not available, skipping chunk upsert");
+                return Ok(());
+            }
+        };
+
+        if embedding.len() != TEXT_EMBEDDING_DIM {
+            return Err(HippoError::Other(format!(
+                "Chunk embedding dimension mismatch for {}: got {}, collection '{}' expects {}",
+                chunk.chunk_id,
+                embedding.len(),
+                COLLECTION_TEXT,
+                TEXT_EMBEDDING_DIM
+            )));
+        }
+
+        let point = PointStruct::new(
+            chunk.chunk_id.clone(),
+            embedding,
+            HashMap::from([
+                (
+                    "parent_memory_id".to_string(),
+                    QdrantValue::from(chunk.parent_memory_id.to_string()),
+                ),
+                ("ordinal".to_string(), QdrantValue::from(chunk.ordinal as i64)),
+                ("is_chunk".to_string(), QdrantValue::from(true)),
+            ]),
+        );
+
+        client
+            .upsert_points(UpsertPointsBuilder::new(COLLECTION_TEXT, vec![point]).wait(true))
+            .await
+            .map_err(|e| HippoError::Other(format!("Failed to upsert chunk vector: {}", e)))?;
+
+        debug!(
+            "Upserted chunk {} (parent {}) to {}",
+            chunk.chunk_id, chunk.parent_memory_id, COLLECTION_TEXT
+        );
+        Ok(())
+    }
+
+    /// Search `hippo_text` and return hits annotated with their parent memory id.
+    ///
+    /// Each hit is `(parent_memory_id, chunk_id, score)`. A chunk point carries
+    /// `parent_memory_id` in its payload and its own id as the chunk id; a legacy
+    /// whole-document point (no parent payload) is reported with its point id as
+    /// the parent and `None` for the chunk id. This lets callers roll chunked and
+    /// non-chunked memories up uniformly.
+    pub async fn search_text_with_parents(
+        &self,
+        query: Vec<f32>,
+        limit: usize,
+    ) -> Result<Vec<(MemoryId, Option<String>, f32)>> {
+        use qdrant_client::qdrant::value::Kind;
+
+        let client = match &self.client {
+            Some(c) => c,
+            None => {
+                debug!("Qdrant not available for chunk search");
+                return Ok(vec![]);
+            }
+        };
+
+        if query.len() != TEXT_EMBEDDING_DIM {
+            return Err(HippoError::Other(format!(
+                "Query embedding dimension {} does not match collection '{}' dim {}",
+                query.len(),
+                COLLECTION_TEXT,
+                TEXT_EMBEDDING_DIM
+            )));
+        }
+
+        let search_request = SearchPointsBuilder::new(COLLECTION_TEXT, query, limit as u64)
+            .with_payload(true)
+            .score_threshold(QDRANT_SCORE_THRESHOLD);
+
+        let results = client
+            .search_points(search_request)
+            .await
+            .map_err(|e| HippoError::Other(format!("Qdrant chunk search failed: {}", e)))?;
+
+        let mut hits: Vec<(MemoryId, Option<String>, f32)> = Vec::new();
+        for point in results.result {
+            let point_id = match point.id.as_ref().and_then(|id| id.point_id_options.as_ref()) {
+                Some(qdrant_client::qdrant::point_id::PointIdOptions::Uuid(u)) => u.clone(),
+                Some(qdrant_client::qdrant::point_id::PointIdOptions::Num(n)) => n.to_string(),
+                None => continue,
+            };
+
+            let parent_str = point.payload.get("parent_memory_id").and_then(|v| match &v.kind {
+                Some(Kind::StringValue(s)) => Some(s.clone()),
+                _ => None,
+            });
+
+            match parent_str {
+                Some(parent) => {
+                    if let Ok(pid) = Uuid::parse_str(&parent) {
+                        hits.push((pid, Some(point_id), point.score));
+                    }
+                }
+                None => {
+                    // Legacy whole-document point: its id IS the memory id.
+                    if let Ok(mid) = Uuid::parse_str(&point_id) {
+                        hits.push((mid, None, point.score));
+                    }
+                }
+            }
+        }
+
+        debug!("Qdrant chunk search returned {} hits", hits.len());
+        Ok(hits)
+    }
+
+    /// Delete the given point ids from the `hippo_text` collection (used to tear
+    /// down a memory's chunk vectors on delete / re-index).
+    pub async fn delete_text_points(&self, ids: &[String]) -> Result<()> {
+        let client = match &self.client {
+            Some(c) => c,
+            None => return Ok(()),
+        };
+        if ids.is_empty() {
+            return Ok(());
+        }
+
+        let selector: Vec<PointId> = ids.iter().map(|s| PointId::from(s.clone())).collect();
+        client
+            .delete_points(
+                DeletePointsBuilder::new(COLLECTION_TEXT)
+                    .points(selector)
+                    .wait(true),
+            )
+            .await
+            .map_err(|e| HippoError::Other(format!("Failed to delete chunk vectors: {}", e)))?;
+
+        debug!("Deleted {} chunk vectors from {}", ids.len(), COLLECTION_TEXT);
+        Ok(())
+    }
+
     /// Delete a vector from Qdrant
     pub async fn delete(&self, memory_id: MemoryId, kind: &MemoryKind) -> Result<()> {
         let client = match &self.client {

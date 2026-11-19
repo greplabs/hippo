@@ -115,7 +115,8 @@ pub use thumbnails::{
 
 // Re-export embeddings types
 pub use embeddings::{
-    Embedder, VectorIndex, CODE_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, TEXT_EMBEDDING_DIM,
+    Embedder, TextChunk, VectorIndex, CODE_EMBEDDING_DIM, DEFAULT_CHUNK_OVERLAP_TOKENS,
+    DEFAULT_CHUNK_TOKENS, IMAGE_EMBEDDING_DIM, TEXT_EMBEDDING_DIM,
 };
 
 // Re-export Ollama types
@@ -174,6 +175,15 @@ pub struct HippoConfig {
 
     /// Whether to enable auto-tagging during indexing using Ollama
     pub auto_tag_enabled: bool,
+
+    /// Whether to split text-bearing documents into chunks and index/retrieve at
+    /// chunk granularity (with parent roll-up). When false, behaves exactly as
+    /// the pre-chunking whole-document pipeline. Default: true.
+    pub chunking_enabled: bool,
+
+    /// How chunk-level scores roll up to a parent memory's semantic score.
+    /// Default: [`ChunkRollup::Max`] (score by best-matching chunk).
+    pub chunk_rollup: ChunkRollup,
 }
 
 impl Default for HippoConfig {
@@ -193,6 +203,8 @@ impl Default for HippoConfig {
             qdrant_url: "http://localhost:6334".into(),
             indexing_parallelism: parallelism,
             auto_tag_enabled: true,
+            chunking_enabled: true,
+            chunk_rollup: ChunkRollup::Max,
         }
     }
 }
