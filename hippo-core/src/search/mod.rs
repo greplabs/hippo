@@ -24,9 +24,73 @@ use regex::Regex;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 use tracing::warn;
+
+/// Reciprocal Rank Fusion constant. Larger k flattens the contribution of top
+/// ranks; k≈60 is the value from the original RRF paper (Cormack et al.).
+const RRF_K: f32 = 60.0;
+
+/// File-type detection patterns for natural language queries, compiled once.
+/// Each entry is `(regex, kind_name)`.
+static NL_TYPE_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
+    [
+        (
+            r"\b(image|images|photo|photos|picture|pictures|pic|pics)\b",
+            "image",
+        ),
+        (r"\b(video|videos|movie|movies|clip|clips)\b", "video"),
+        (r"\b(audio|music|song|songs|sound|sounds)\b", "audio"),
+        (
+            r"\b(document|documents|doc|docs|pdf|pdfs|text|texts)\b",
+            "document",
+        ),
+        (r"\b(code|source|script|scripts|program|programs)\b", "code"),
+    ]
+    .into_iter()
+    .map(|(p, k)| (Regex::new(p).expect("valid NL type regex"), k))
+    .collect()
+});
+
+/// Date-range detection patterns for natural language queries, compiled once.
+/// Each entry is `(regex, days_back, description)`.
+static NL_DATE_PATTERNS: LazyLock<Vec<(Regex, i64, &'static str)>> = LazyLock::new(|| {
+    [
+        (r"\b(today|tonight)\b", 0i64, "today"),
+        (r"\b(yesterday)\b", 1, "yesterday"),
+        (r"\blast week\b", 7, "last week"),
+        (r"\blast month\b", 30, "last month"),
+        (r"\blast year\b", 365, "last year"),
+        (r"\bthis week\b", 7, "this week"),
+        (r"\bthis month\b", 30, "this month"),
+        (r"\bthis year\b", 365, "this year"),
+    ]
+    .into_iter()
+    .map(|(p, d, desc)| (Regex::new(p).expect("valid NL date regex"), d, desc))
+    .collect()
+});
+
+/// Reciprocal Rank Fusion over several ranked result lists.
+///
+/// Each arm is `(weight, ranked_ids)` where `ranked_ids` is best-first. The
+/// fused score for a document is `Σ_arm weight / (k + rank0 + 1)`, where
+/// `rank0` is the 0-based position of the doc in that arm (absent ⇒ no term).
+/// A document appearing high in MULTIPLE arms therefore outranks one that is
+/// only in a single arm — the whole point of hybrid fusion.
+pub fn reciprocal_rank_fusion(
+    arms: &[(f32, Vec<MemoryId>)],
+    k: f32,
+) -> std::collections::HashMap<MemoryId, f32> {
+    let mut scores: std::collections::HashMap<MemoryId, f32> = std::collections::HashMap::new();
+    for (weight, ranked) in arms {
+        for (rank, id) in ranked.iter().enumerate() {
+            let contribution = weight / (k + rank as f32 + 1.0);
+            *scores.entry(*id).or_insert(0.0) += contribution;
+        }
+    }
+    scores
+}
 
 /// Search cache TTL in seconds (60 seconds balances freshness with performance)
 const SEARCH_CACHE_TTL_SECS: u64 = 60;
@@ -659,6 +723,10 @@ impl Searcher {
                 .await;
         }
 
+        // True match count = number of vectors that matched (above threshold),
+        // not the page length after fetch filtering.
+        let total = scored.len();
+
         // Fetch full memories for top results
         let mut results = Vec::new();
         for (id, similarity) in scored {
@@ -674,7 +742,6 @@ impl Searcher {
             }
         }
 
-        let total = results.len();
         Ok(SearchResults {
             memories: results,
             total_count: total,
@@ -683,68 +750,77 @@ impl Searcher {
         })
     }
 
-    /// Hybrid search combining semantic and keyword scoring with configurable weights
-    /// Runs both searches in parallel for 40-50% faster results
+    /// Hybrid search fusing semantic + keyword results with Reciprocal Rank Fusion.
+    ///
+    /// The previous implementation multiplied heterogeneous, un-normalized scores
+    /// (semantic ~0–100 vs unbounded additive keyword) by 0.7/0.3 weights, which
+    /// is meaningless — the scales dominate the weights. RRF is rank-based and
+    /// scale-free: each arm contributes `weight / (k + rank + 1)`, so the arm
+    /// weights in `HybridSearchConfig` act as RRF arm weights. The keyword arm is
+    /// the real FTS5 BM25 ranking (`search_fts5`), not the ad-hoc SQL scorer.
     pub async fn hybrid_search(&self, query: &str, limit: usize) -> Result<SearchResults> {
-        // Use configured weights
         let semantic_weight = self.hybrid_config.semantic_weight;
         let keyword_weight = self.hybrid_config.keyword_weight;
 
-        // Run both searches in parallel for maximum performance
+        // Run both arms in parallel. Keyword arm uses FTS5 BM25 ranking.
         let query_owned = query.to_string();
-        let search_query = SearchQuery {
-            text: Some(query_owned.clone()),
-            limit: limit * 2,
-            ..Default::default()
-        };
-
         let (semantic_results, keyword_results) = tokio::join!(
             self.semantic_search(&query_owned, limit * 2),
-            self.search(search_query)
+            self.search_fts5(&query_owned, None, limit * 2)
         );
-
-        // Handle results (both must succeed)
         let semantic_results = semantic_results?;
         let keyword_results = keyword_results?;
 
-        // Combine and score
-        let mut combined: std::collections::HashMap<MemoryId, (Memory, f32, Vec<Highlight>)> =
+        // Keep a single owned copy of each memory + its highlights, keyed by id.
+        let mut lookup: std::collections::HashMap<MemoryId, (Memory, Vec<Highlight>)> =
             std::collections::HashMap::new();
 
-        // Add semantic results with weighted score
-        for result in semantic_results.memories {
-            combined.insert(
-                result.memory.id,
-                (
-                    result.memory,
-                    result.score * semantic_weight,
-                    result.highlights,
-                ),
-            );
-        }
-
-        // Add/update keyword results with weighted score
-        for result in keyword_results.memories {
-            combined
-                .entry(result.memory.id)
-                .and_modify(|(_, score, highlights)| {
-                    *score += result.score * keyword_weight;
-                    highlights.extend(result.highlights.clone());
-                })
-                .or_insert((
-                    result.memory,
-                    result.score * keyword_weight,
-                    result.highlights,
-                ));
-        }
-
-        // Convert back to results and sort
-        let mut results: Vec<MemorySearchResult> = combined
+        let semantic_ranked: Vec<MemoryId> = semantic_results
+            .memories
             .into_iter()
-            .map(|(_, (memory, score, highlights))| MemorySearchResult {
-                memory,
-                score,
-                highlights,
+            .map(|r| {
+                let id = r.memory.id;
+                lookup
+                    .entry(id)
+                    .and_modify(|(_, h)| h.extend(r.highlights.clone()))
+                    .or_insert((r.memory, r.highlights));
+                id
+            })
+            .collect();
+
+        let keyword_ranked: Vec<MemoryId> = keyword_results
+            .memories
+            .into_iter()
+            .map(|r| {
+                let id = r.memory.id;
+                lookup
+                    .entry(id)
+                    .and_modify(|(_, h)| h.extend(r.highlights.clone()))
+                    .or_insert((r.memory, r.highlights));
+                id
+            })
+            .collect();
+
+        // Fuse the two ranked lists.
+        let fused = reciprocal_rank_fusion(
+            &[
+                (semantic_weight, semantic_ranked),
+                (keyword_weight, keyword_ranked),
+            ],
+            RRF_K,
+        );
+
+        // True match count = size of the union across both arms (before paging).
+        let union_count = fused.len();
+
+        let mut results: Vec<MemorySearchResult> = fused
+            .into_iter()
+            .filter_map(|(id, score)| {
+                lookup.remove(&id).map(|(memory, highlights)| MemorySearchResult {
+                    memory,
+                    score,
+                    highlights,
+                })
             })
             .collect();
 
@@ -755,10 +831,9 @@ impl Searcher {
         });
         results.truncate(limit);
 
-        let total = results.len();
         Ok(SearchResults {
             memories: results,
-            total_count: total,
+            total_count: union_count,
             suggested_tags: vec![],
             clusters: vec![],
         })
@@ -1200,80 +1275,51 @@ impl Searcher {
         let mut date_range = None;
         let mut interpretations = Vec::new();
 
-        // Extract file types
-        let type_patterns = [
-            (
-                r"\b(image|images|photo|photos|picture|pictures|pic|pics)\b",
-                "image",
-            ),
-            (r"\b(video|videos|movie|movies|clip|clips)\b", "video"),
-            (r"\b(audio|music|song|songs|sound|sounds)\b", "audio"),
-            (
-                r"\b(document|documents|doc|docs|pdf|pdfs|text|texts)\b",
-                "document",
-            ),
-            (r"\b(code|source|script|scripts|program|programs)\b", "code"),
-        ];
-
-        for (pattern, kind_name) in type_patterns {
-            if let Ok(re) = Regex::new(pattern) {
-                if re.is_match(&query_lower) {
-                    let kind = match kind_name {
-                        "image" => MemoryKind::Image {
-                            width: 0,
-                            height: 0,
-                            format: String::new(),
-                        },
-                        "video" => MemoryKind::Video {
-                            duration_ms: 0,
-                            format: String::new(),
-                        },
-                        "audio" => MemoryKind::Audio {
-                            duration_ms: 0,
-                            format: String::new(),
-                        },
-                        "document" => MemoryKind::Document {
-                            format: DocumentFormat::Pdf,
-                            page_count: None,
-                        },
-                        "code" => MemoryKind::Code {
-                            language: String::new(),
-                            lines: 0,
-                        },
-                        _ => continue,
-                    };
-                    file_types.push(kind);
-                    keywords = re.replace_all(&keywords, "").to_string();
-                    interpretations.push(format!("file type: {}", kind_name));
-                }
+        // Extract file types (patterns compiled once, see NL_TYPE_PATTERNS)
+        for (re, kind_name) in NL_TYPE_PATTERNS.iter() {
+            if re.is_match(&query_lower) {
+                let kind = match *kind_name {
+                    "image" => MemoryKind::Image {
+                        width: 0,
+                        height: 0,
+                        format: String::new(),
+                    },
+                    "video" => MemoryKind::Video {
+                        duration_ms: 0,
+                        format: String::new(),
+                    },
+                    "audio" => MemoryKind::Audio {
+                        duration_ms: 0,
+                        format: String::new(),
+                    },
+                    "document" => MemoryKind::Document {
+                        format: DocumentFormat::Pdf,
+                        page_count: None,
+                    },
+                    "code" => MemoryKind::Code {
+                        language: String::new(),
+                        lines: 0,
+                    },
+                    _ => continue,
+                };
+                file_types.push(kind);
+                keywords = re.replace_all(&keywords, "").to_string();
+                interpretations.push(format!("file type: {}", kind_name));
             }
         }
 
-        // Extract date ranges
+        // Extract date ranges (patterns compiled once, see NL_DATE_PATTERNS)
         let now = Utc::now();
-        let date_patterns = [
-            (r"\b(today|tonight)\b", 0, "today"),
-            (r"\b(yesterday)\b", 1, "yesterday"),
-            (r"\blast week\b", 7, "last week"),
-            (r"\blast month\b", 30, "last month"),
-            (r"\blast year\b", 365, "last year"),
-            (r"\bthis week\b", 7, "this week"),
-            (r"\bthis month\b", 30, "this month"),
-            (r"\bthis year\b", 365, "this year"),
-        ];
-
-        for (pattern, days, desc) in date_patterns {
-            if let Ok(re) = Regex::new(pattern) {
-                if re.is_match(&query_lower) {
-                    let start = now - Duration::days(days);
-                    date_range = Some(DateRange {
-                        start: Some(start),
-                        end: Some(now),
-                    });
-                    keywords = re.replace_all(&keywords, "").to_string();
-                    interpretations.push(format!("date range: {}", desc));
-                    break;
-                }
+        for (re, days, desc) in NL_DATE_PATTERNS.iter() {
+            if re.is_match(&query_lower) {
+                let start = now - Duration::days(*days);
+                date_range = Some(DateRange {
+                    start: Some(start),
+                    end: Some(now),
+                });
+                keywords = re.replace_all(&keywords, "").to_string();
+                interpretations.push(format!("date range: {}", desc));
+                break;
             }
         }
 
