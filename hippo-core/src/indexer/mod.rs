@@ -20,12 +20,12 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc,
 };
-use tokio::task::JoinHandle;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use tokio::sync::{mpsc, watch, RwLock};
+use tokio::task::JoinHandle;
 use tracing::{debug, info, instrument, warn};
 use walkdir::WalkDir;
 
@@ -220,7 +220,7 @@ impl Default for IndexerConfig {
                 "__pycache__",
                 ".cache",
                 ".npm",
-                "target",  // Rust build directory
+                "target", // Rust build directory
                 "build",
                 "dist",
                 ".DS_Store",
@@ -624,9 +624,7 @@ impl Indexer {
         let ext = path.extension()?.to_string_lossy().to_lowercase();
 
         match ext.as_str() {
-            "txt" | "md" | "markdown" | "rst" => {
-                std::fs::read_to_string(path).ok()
-            }
+            "txt" | "md" | "markdown" | "rst" => std::fs::read_to_string(path).ok(),
             "pdf" => {
                 // Try pdf-extract crate
                 pdf_extract::extract_text(path).ok()
@@ -897,51 +895,48 @@ impl Indexer {
                 batch.len()
             );
 
-            let memories: Vec<Memory> = batch
-                .par_iter()
-                .filter_map(|file_path| {
-                    // Update current file (note: may be overwritten by parallel processing)
-                    let _file_name = file_path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default();
-
-                    match Self::process_file(file_path, source) {
-                        Ok(memory) => Some(memory),
-                        Err(e) => {
-                            debug!("Failed to process file {:?}: {}", file_path, e);
-                            None
-                        }
-                    }
-                })
-                .collect();
+            // Run the CPU/IO-heavy rayon batch (full-file hashing, image probing,
+            // ffprobe subprocesses, read_to_string) inside spawn_blocking so we do
+            // not block a tokio runtime worker. Clone owned inputs into the closure.
+            let batch_paths: Vec<PathBuf> = batch.to_vec();
+            let source_owned = source.clone();
+            let memories: Vec<Memory> = tokio::task::spawn_blocking(move || {
+                batch_paths
+                    .par_iter()
+                    .filter_map(
+                        |file_path| match Self::process_file(file_path, &source_owned) {
+                            Ok(memory) => Some(memory),
+                            Err(e) => {
+                                debug!("Failed to process file {:?}: {}", file_path, e);
+                                None
+                            }
+                        },
+                    )
+                    .collect()
+            })
+            .await
+            .map_err(|e| HippoError::Indexing(format!("Batch processing task failed: {}", e)))?;
 
             println!("[Indexer] Processed {} memories from batch", memories.len());
 
-            // Store memories and track progress
-            for memory in &memories {
-                state
-                    .update_progress(|p| {
-                        p.current_file = Some(
-                            memory
-                                .path
-                                .file_name()
-                                .map(|n| n.to_string_lossy().to_string())
-                                .unwrap_or_default(),
-                        );
-                        p.stage = IndexingStage::Embedding;
-                    })
-                    .await;
+            // Store the whole batch in a SINGLE transaction (one commit instead
+            // of one per row — the main indexing throughput win). Atomic: a
+            // failure rolls the batch back rather than leaving a partial index.
+            state
+                .update_progress(|p| {
+                    p.current_file = Some(format!("Storing {} files...", memories.len()));
+                    p.stage = IndexingStage::Embedding;
+                })
+                .await;
 
-                if let Err(e) = storage.upsert_memory(memory).await {
-                    println!("[Indexer] Failed to store memory: {}", e);
-                    warn!("Failed to store memory: {}", e);
-                }
+            if let Err(e) = storage.upsert_memories_batch(&memories).await {
+                println!("[Indexer] Failed to store memory batch: {}", e);
+                warn!("Failed to store memory batch: {}", e);
+            }
 
-                // Check for pause
-                while state.is_paused.load(Ordering::SeqCst) {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                }
+            // Check for pause after the batch
+            while state.is_paused.load(Ordering::SeqCst) {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
 
             // Generate and store embeddings in batch (much faster)
@@ -954,85 +949,93 @@ impl Indexer {
                     })
                     .await;
 
-            // Use batch embedding for efficiency
-            match embedder.embed_memories_batch(&memories).await {
-                Ok(embeddings) => {
-                    for (memory_id, embedding, model_name) in embeddings {
-                        // Check for pause
-                        while state.is_paused.load(Ordering::SeqCst) {
-                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                        }
+                // Index memories by id once so the per-embedding loop below is
+                // O(1) lookup instead of O(N^2) linear scans.
+                let memory_index: std::collections::HashMap<MemoryId, &Memory> =
+                    memories.iter().map(|m| (m.id, m)).collect();
 
-                        // Find the memory to get its kind
-                        if let Some(memory) = memories.iter().find(|m| m.id == memory_id) {
-                            if let Err(e) = storage
-                                .store_embedding_with_qdrant(
-                                    memory_id,
-                                    &embedding,
-                                    model_name,
-                                    &memory.kind,
-                                )
-                                .await
-                            {
-                                debug!("Failed to store embedding for {}: {}", memory_id, e);
+                // Use batch embedding for efficiency
+                match embedder.embed_memories_batch(&memories).await {
+                    Ok(embeddings) => {
+                        for (memory_id, embedding, model_name) in embeddings {
+                            // Check for pause
+                            while state.is_paused.load(Ordering::SeqCst) {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                             }
 
-                            // Update progress counter
-                            state.files_processed_count.fetch_add(1, Ordering::SeqCst);
-                            state
-                                .update_progress(|p| {
-                                    p.processed += 1;
-                                    p.current_file = Some(
-                                        memory
-                                            .path
-                                            .file_name()
-                                            .map(|n| n.to_string_lossy().to_string())
-                                            .unwrap_or_default(),
-                                    );
-                                })
-                                .await;
-                            let _ = progress_tx.send(state.progress.read().await.clone());
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!("Batch embedding failed: {}, falling back to individual", e);
-                    // Fallback to individual embedding if batch fails
-                    for memory in &memories {
-                        match embedder.embed_memory(memory).await {
-                            Ok(embedding) => {
-                                let model_name = match &memory.kind {
-                                    MemoryKind::Image { .. } => "image_embedding",
-                                    MemoryKind::Code { .. } => "code_embedding",
-                                    _ => "text_embedding",
-                                };
+                            // Find the memory to get its kind (O(1) hashmap lookup)
+                            if let Some(memory) = memory_index.get(&memory_id).copied() {
                                 if let Err(e) = storage
                                     .store_embedding_with_qdrant(
-                                        memory.id,
+                                        memory_id,
                                         &embedding,
                                         model_name,
                                         &memory.kind,
                                     )
                                     .await
                                 {
-                                    debug!("Failed to store embedding for {}: {}", memory.id, e);
+                                    debug!("Failed to store embedding for {}: {}", memory_id, e);
                                 }
-                            }
-                            Err(e) => {
-                                debug!("Failed to embed memory {}: {}", memory.id, e);
+
+                                // Update progress counter
+                                state.files_processed_count.fetch_add(1, Ordering::SeqCst);
+                                state
+                                    .update_progress(|p| {
+                                        p.processed += 1;
+                                        p.current_file = Some(
+                                            memory
+                                                .path
+                                                .file_name()
+                                                .map(|n| n.to_string_lossy().to_string())
+                                                .unwrap_or_default(),
+                                        );
+                                    })
+                                    .await;
+                                let _ = progress_tx.send(state.progress.read().await.clone());
                             }
                         }
+                    }
+                    Err(e) => {
+                        warn!("Batch embedding failed: {}, falling back to individual", e);
+                        // Fallback to individual embedding if batch fails
+                        for memory in &memories {
+                            match embedder.embed_memory(memory).await {
+                                Ok(embedding) => {
+                                    let model_name = match &memory.kind {
+                                        MemoryKind::Image { .. } => "image_embedding",
+                                        MemoryKind::Code { .. } => "code_embedding",
+                                        _ => "text_embedding",
+                                    };
+                                    if let Err(e) = storage
+                                        .store_embedding_with_qdrant(
+                                            memory.id,
+                                            &embedding,
+                                            model_name,
+                                            &memory.kind,
+                                        )
+                                        .await
+                                    {
+                                        debug!(
+                                            "Failed to store embedding for {}: {}",
+                                            memory.id, e
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    debug!("Failed to embed memory {}: {}", memory.id, e);
+                                }
+                            }
 
-                        state.files_processed_count.fetch_add(1, Ordering::SeqCst);
-                        state
-                            .update_progress(|p| {
-                                p.processed += 1;
-                            })
-                            .await;
-                        let _ = progress_tx.send(state.progress.read().await.clone());
+                            state.files_processed_count.fetch_add(1, Ordering::SeqCst);
+                            state
+                                .update_progress(|p| {
+                                    p.processed += 1;
+                                })
+                                .await;
+                            let _ = progress_tx.send(state.progress.read().await.clone());
+                        }
                     }
                 }
-            }
             } else {
                 // Fast mode: skip AI embeddings, just update progress
                 for memory in &memories {
@@ -1653,8 +1656,14 @@ mod tests {
     #[test]
     fn test_indexer_config_default() {
         let config = IndexerConfig::default();
-        assert!(config.smart_reindex, "Smart reindex should be enabled by default");
-        assert!(!config.auto_tag_enabled, "Auto-tagging should be disabled by default");
+        assert!(
+            config.smart_reindex,
+            "Smart reindex should be enabled by default"
+        );
+        assert!(
+            !config.auto_tag_enabled,
+            "Auto-tagging should be disabled by default"
+        );
         assert!(config.parallelism >= 1, "Parallelism should be at least 1");
         assert!(config.batch_size > 0, "Batch size should be positive");
         assert!(

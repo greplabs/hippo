@@ -27,6 +27,11 @@ pub const COLLECTION_IMAGES: &str = "hippo_images";
 pub const COLLECTION_TEXT: &str = "hippo_text";
 pub const COLLECTION_CODE: &str = "hippo_code";
 
+/// Minimum cosine score for a Qdrant hit to be returned. Below this, matches are
+/// effectively noise (unrelated files) and must not be shown as "N% similar".
+/// ~0.3 is a reasonable floor for nomic-embed-text.
+pub const QDRANT_SCORE_THRESHOLD: f32 = 0.3;
+
 /// Qdrant storage wrapper for vector operations
 pub struct QdrantStorage {
     client: Option<Qdrant>,
@@ -84,38 +89,98 @@ impl QdrantStorage {
         *self.available.read().await
     }
 
-    /// Ensure all required collections exist
+    /// Ensure all required collections exist with the DEFAULT constant dims.
+    ///
+    /// The text collection dim must match the active embedder's runtime output
+    /// dim. `TEXT_EMBEDDING_DIM` is kept in sync with the default local model
+    /// (nomic → 768). When the active provider differs (e.g. OpenAI → 1536),
+    /// callers should instead use [`ensure_collections_for_embedder`] so the
+    /// collection is created at the real runtime dim. (storage/mod.rs currently
+    /// calls this variant; see cross-cutting note in the PR.)
     pub async fn ensure_collections(&self) -> Result<()> {
+        self.ensure_collections_with_dims(TEXT_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, CODE_EMBEDDING_DIM)
+            .await
+    }
+
+    /// Ensure collections exist, deriving the TEXT dim from the embedder's
+    /// actual runtime output dim rather than a hardcoded constant.
+    pub async fn ensure_collections_for_embedder(
+        &self,
+        embedder: &crate::embeddings::Embedder,
+    ) -> Result<()> {
+        self.ensure_collections_with_dims(
+            embedder.text_output_dim(),
+            IMAGE_EMBEDDING_DIM,
+            CODE_EMBEDDING_DIM,
+        )
+        .await
+    }
+
+    /// Ensure collections exist at the given dims, self-healing on mismatch.
+    ///
+    /// If a collection already exists but was created at a DIFFERENT dim (e.g.
+    /// a stale 1536-dim `hippo_text` left over from the old OpenAI default), it
+    /// is dropped and recreated at the correct dim. This prevents the silent
+    /// "dimension mismatch → vectors never stored" failure.
+    pub async fn ensure_collections_with_dims(
+        &self,
+        text_dim: usize,
+        image_dim: usize,
+        code_dim: usize,
+    ) -> Result<()> {
         let client = match &self.client {
             Some(c) => c,
             None => return Ok(()), // Silently skip if not available
         };
 
-        // Create collections if they don't exist
         let collections = [
-            (COLLECTION_IMAGES, IMAGE_EMBEDDING_DIM),
-            (COLLECTION_TEXT, TEXT_EMBEDDING_DIM),
-            (COLLECTION_CODE, CODE_EMBEDDING_DIM),
+            (COLLECTION_IMAGES, image_dim),
+            (COLLECTION_TEXT, text_dim),
+            (COLLECTION_CODE, code_dim),
         ];
 
         for (name, dim) in collections {
-            if !self.collection_exists(name).await? {
-                info!("Creating Qdrant collection: {} (dim={})", name, dim);
-
-                let create_collection =
-                    CreateCollectionBuilder::new(name).vectors_config(VectorsConfig {
-                        config: Some(Config::Params(
-                            VectorParamsBuilder::new(dim as u64, Distance::Cosine).build(),
-                        )),
-                    });
-
-                client
-                    .create_collection(create_collection)
-                    .await
-                    .map_err(|e| {
-                        HippoError::Other(format!("Failed to create collection {}: {}", name, e))
-                    })?;
+            if self.collection_exists(name).await? {
+                // Validate the existing collection's dim matches what we expect.
+                match self.collection_dim(name).await {
+                    Some(existing) if existing as usize == dim => {
+                        // Already correct — nothing to do.
+                        continue;
+                    }
+                    Some(existing) => {
+                        warn!(
+                            "Qdrant collection {} has dim {} but embedder needs {}; recreating",
+                            name, existing, dim
+                        );
+                        client.delete_collection(name).await.map_err(|e| {
+                            HippoError::Other(format!(
+                                "Failed to drop mismatched collection {}: {}",
+                                name, e
+                            ))
+                        })?;
+                    }
+                    None => {
+                        // Could not read dim; leave as-is to avoid data loss.
+                        warn!("Could not read dim for collection {}; leaving as-is", name);
+                        continue;
+                    }
+                }
             }
+
+            info!("Creating Qdrant collection: {} (dim={})", name, dim);
+            let create_collection =
+                CreateCollectionBuilder::new(name).vectors_config(VectorsConfig {
+                    config: Some(Config::Params(
+                        VectorParamsBuilder::new(dim as u64, Distance::Cosine).build(),
+                    )),
+                });
+
+            client
+                .create_collection(create_collection)
+                .await
+                .map_err(|e| {
+                    HippoError::Other(format!("Failed to create collection {}: {}", name, e))
+                })?;
         }
 
         Ok(())
@@ -131,6 +196,18 @@ impl QdrantStorage {
         match client.collection_exists(name).await {
             Ok(exists) => Ok(exists),
             Err(_) => Ok(false),
+        }
+    }
+
+    /// Read the configured vector dimension of an existing collection, if any.
+    async fn collection_dim(&self, name: &str) -> Option<u64> {
+        let client = self.client.as_ref()?;
+        let info = client.collection_info(name).await.ok()?;
+        let params = info.result?.config?.params?;
+        match params.vectors_config?.config? {
+            Config::Params(vp) => Some(vp.size),
+            // Named/sparse vector configs are not used by this app.
+            _ => None,
         }
     }
 
@@ -176,15 +253,20 @@ impl QdrantStorage {
             _ => TEXT_EMBEDDING_DIM,
         };
 
+        // A dimension mismatch here previously returned Ok(()) silently, which
+        // meant the vector was NEVER stored (not in Qdrant, not in SQLite) and
+        // semantic search returned nothing. That is a hard error now: the
+        // collection must be (re)created at the embedder's runtime dim via
+        // `ensure_collections_for_embedder` at startup.
         if embedding.len() != expected_dim {
-            // Dimension mismatch - skip Qdrant and use SQLite fallback
-            // This happens when using Ollama (768-dim) with collections created for OpenAI (1536-dim)
-            debug!(
-                "Embedding dimension mismatch: got {}, expected {} - using SQLite fallback",
+            return Err(HippoError::Other(format!(
+                "Embedding dimension mismatch for {}: got {}, collection '{}' expects {}. \
+                 Recreate the collection at the embedder's runtime dim (startup validation).",
+                memory_id,
                 embedding.len(),
+                collection,
                 expected_dim
-            );
-            return Ok(());
+            )));
         }
 
         self.upsert_raw(memory_id, embedding, collection).await
@@ -244,13 +326,22 @@ impl QdrantStorage {
             _ => TEXT_EMBEDDING_DIM,
         };
 
-        let mut query_vec = query;
-        if query_vec.len() != expected_dim {
-            query_vec.resize(expected_dim, 0.0);
+        // A dim mismatch must error, not silently zero-pad: padding produces a
+        // garbage query vector that returns meaningless near-zero-cosine hits.
+        if query.len() != expected_dim {
+            return Err(HippoError::Other(format!(
+                "Query embedding dimension {} does not match collection '{}' dim {}",
+                query.len(),
+                collection,
+                expected_dim
+            )));
         }
 
-        let search_request =
-            SearchPointsBuilder::new(collection, query_vec, limit as u64).with_payload(true);
+        // Cut off near-zero-cosine junk so unrelated files are not surfaced as
+        // low-percentage "matches". Tuned for nomic-embed-text cosine scores.
+        let search_request = SearchPointsBuilder::new(collection, query, limit as u64)
+            .with_payload(true)
+            .score_threshold(QDRANT_SCORE_THRESHOLD);
 
         let results = client
             .search_points(search_request)

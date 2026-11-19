@@ -18,10 +18,19 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
-/// Embedding dimension for different model types
-pub const TEXT_EMBEDDING_DIM: usize = 1536; // OpenAI ada-002 compatible
+/// Embedding dimension for different model types.
+///
+/// IMPORTANT: `TEXT_EMBEDDING_DIM` MUST match the runtime output dim of the
+/// default local embedding model (Ollama `nomic-embed-text` → 768, see
+/// `crate::ollama::NOMIC_EMBED_DIM`). The hash fallback also emits this dim so
+/// that fallback vectors live in the same space as Ollama vectors. A regression
+/// here silently breaks vector storage (dim mismatch on Qdrant upsert).
+pub const TEXT_EMBEDDING_DIM: usize = 768; // nomic-embed-text (default local model)
 pub const IMAGE_EMBEDDING_DIM: usize = 512; // CLIP compatible
-pub const CODE_EMBEDDING_DIM: usize = 768; // CodeBERT compatible
+pub const CODE_EMBEDDING_DIM: usize = 768; // CodeBERT compatible / nomic
+/// OpenAI text-embedding-3-small / ada-002 dimension (only used when the OpenAI
+/// backend is the active provider).
+pub const OPENAI_EMBEDDING_DIM: usize = 1536;
 
 /// Cache configuration
 const EMBEDDING_CACHE_SIZE: usize = 5000;
@@ -104,7 +113,8 @@ impl EmbeddingCache {
         let new_size = embedding.len() * std::mem::size_of::<f32>();
 
         // Evict if at entry capacity or memory limit - O(1) with VecDeque::pop_front
-        while (self.entries.len() >= self.max_entries || self.current_bytes + new_size > self.max_bytes)
+        while (self.entries.len() >= self.max_entries
+            || self.current_bytes + new_size > self.max_bytes)
             && !self.access_order.is_empty()
         {
             if let Some(oldest) = self.access_order.pop_front() {
@@ -247,6 +257,45 @@ impl Embedder {
         &self.config.api_provider
     }
 
+    /// Runtime output dimension of the active TEXT embedding backend.
+    ///
+    /// Qdrant collections should be created/validated against THIS value rather
+    /// than a hardcoded constant, so that the stored collection dim always
+    /// matches what the embedder actually emits.
+    pub fn text_output_dim(&self) -> usize {
+        match self.config.api_provider {
+            EmbeddingProvider::OpenAI => OPENAI_EMBEDDING_DIM,
+            // Ollama `nomic-embed-text` and the hash fallback both emit TEXT_EMBEDDING_DIM.
+            EmbeddingProvider::Ollama | EmbeddingProvider::Local => TEXT_EMBEDDING_DIM,
+        }
+    }
+
+    /// Stable identifier of the active embedding model (provider + model + dim).
+    ///
+    /// Used in cache keys so that switching models/providers never returns a
+    /// stale vector from a previous model.
+    pub fn model_id(&self) -> String {
+        match self.config.api_provider {
+            EmbeddingProvider::Ollama => self
+                .ollama
+                .as_ref()
+                .map(|o| o.embedding_model().to_string())
+                .unwrap_or_else(|| "ollama".to_string()),
+            EmbeddingProvider::OpenAI => "openai:text-embedding-3-small".to_string(),
+            EmbeddingProvider::Local => "hash".to_string(),
+        }
+    }
+
+    /// L2-normalize a freshly generated embedding exactly once.
+    ///
+    /// Call this at the single point where a vector is produced by a backend
+    /// (Ollama / OpenAI). After normalization, dot product == cosine similarity,
+    /// which is what `Embedder::similarity` and Qdrant's cosine distance assume.
+    fn normalized(mut embedding: Vec<f32>) -> Vec<f32> {
+        Self::normalize(&mut embedding);
+        embedding
+    }
+
     /// Generate embedding for a memory
     pub async fn embed_memory(&self, memory: &Memory) -> Result<Vec<f32>> {
         match &memory.kind {
@@ -258,9 +307,17 @@ impl Embedder {
     }
 
     /// Embed an image file
+    ///
+    /// TODO(image-embeddings): This is a degenerate placeholder, NOT a real
+    /// image embedding. It writes raw downsampled RGB pixel values into the
+    /// vector; the 16x16 downsample only fills ~170 of the 512 dims (the
+    /// `i * 3 + 2 < len` guard stops early) and the dimension-info block at
+    /// `dim_idx = 256 * 3 = 768` is dead code (768 > IMAGE_EMBEDDING_DIM=512).
+    /// These vectors are not semantically comparable across images. Replace with
+    /// real CLIP ViT-B/32 (512-dim) embeddings via ONNX Runtime. Left as-is
+    /// (behavior unchanged) because a proper fix needs model/ONNX infra that is
+    /// unavailable in this environment. See report "Deferred" section.
     async fn embed_image(&self, path: &Path) -> Result<Vec<f32>> {
-        // For now, use a simple perceptual hash-based embedding
-        // TODO: Integrate CLIP model via ONNX
         debug!("Generating image embedding for: {:?}", path);
 
         match image::open(path) {
@@ -309,19 +366,13 @@ impl Embedder {
         debug!("Generating code embedding for: {:?}", path);
 
         let code = std::fs::read_to_string(path).unwrap_or_default();
+        let truncated: String = code.chars().take(4000).collect();
+        // Prepend language context so the single text model sees the language.
+        let content = format!("{} source code\n{}", language, truncated);
 
-        // Use text embedding for code, but add language-specific features
-        let mut embedding = self.hash_embed(&code, CODE_EMBEDDING_DIM);
-
-        // Add language features
-        let lang_idx = CODE_EMBEDDING_DIM - 20;
-        let lang_hash = Self::simple_hash(language) as usize % 20;
-        if lang_idx + lang_hash < embedding.len() {
-            embedding[lang_idx + lang_hash] = 1.0;
-        }
-
-        Self::normalize(&mut embedding);
-        Ok(embedding)
+        // Share the SAME backend/space as the batch path (Ollama/OpenAI, hash
+        // only as last resort) so code and text vectors are comparable.
+        self.embed_text_content(&content).await
     }
 
     /// Embed a document file
@@ -330,7 +381,7 @@ impl Embedder {
 
         // Try to read text content
         let text = match std::fs::read_to_string(path) {
-            Ok(t) => t,
+            Ok(t) => t.chars().take(4000).collect::<String>(),
             Err(_) => {
                 // For binary documents, use filename and metadata
                 path.file_name()
@@ -339,14 +390,7 @@ impl Embedder {
             }
         };
 
-        // Use API if available, otherwise use local hash-based embedding
-        if let Some(api_key) = &self.config.api_key {
-            if matches!(self.config.api_provider, EmbeddingProvider::OpenAI) {
-                return self.embed_with_openai(&text, api_key).await;
-            }
-        }
-
-        Ok(self.hash_embed(&text, TEXT_EMBEDDING_DIM))
+        self.embed_text_content(&text).await
     }
 
     /// Embed generic content
@@ -360,13 +404,61 @@ impl Embedder {
             memory.kind
         );
 
-        Ok(self.hash_embed(&text, TEXT_EMBEDDING_DIM))
+        self.embed_text_content(&text).await
+    }
+
+    /// Embed arbitrary text content for storage (document path).
+    ///
+    /// Prefers the configured semantic backend (Ollama / OpenAI) and only falls
+    /// back to the deterministic hash embedding as a genuine last resort. This
+    /// is the SAME backend the batch path uses, so single-item and batch
+    /// embeddings always land in one comparable vector space. The result is
+    /// L2-normalized exactly once.
+    async fn embed_text_content(&self, text: &str) -> Result<Vec<f32>> {
+        // Prefer Ollama (document task prefix applied inside embed_documents).
+        if let Some(ollama) = &self.ollama {
+            if matches!(self.config.api_provider, EmbeddingProvider::Ollama) {
+                match ollama.embed_documents(std::slice::from_ref(&text.to_string())).await {
+                    Ok(mut embs) if !embs.is_empty() => {
+                        return Ok(Self::normalized(embs.remove(0)));
+                    }
+                    Ok(_) => warn!("Ollama returned no document embedding, falling back to hash"),
+                    Err(e) => warn!("Ollama document embedding failed, falling back to hash: {}", e),
+                }
+            }
+        }
+
+        // OpenAI API if configured.
+        if let Some(api_key) = &self.config.api_key {
+            if matches!(self.config.api_provider, EmbeddingProvider::OpenAI) {
+                return Ok(Self::normalized(self.embed_with_openai(text, api_key).await?));
+            }
+        }
+
+        // Last resort: deterministic hash embedding (already normalized).
+        Ok(self.hash_embed(text, self.text_output_dim()))
+    }
+
+    /// Scaffold: split a long document into ~512-token chunks with overlap.
+    ///
+    /// TODO(chunking): A real document chunking pipeline should produce chunks
+    /// that are embedded independently and indexed as child vectors pointing
+    /// back to a `parent_memory_id`, so that retrieval can match a passage
+    /// rather than a whole-document average. This signature is a placeholder;
+    /// the multi-vector index wiring (child points + parent linkage in storage)
+    /// is intentionally NOT implemented here (needs a storage schema change,
+    /// owned by another module). See report "Deferred" section.
+    #[allow(dead_code)]
+    pub fn chunk_document(text: &str, _chunk_tokens: usize, _overlap_tokens: usize) -> Vec<String> {
+        // Placeholder: return the whole document as a single chunk.
+        vec![text.to_string()]
     }
 
     /// Embed a search query (with caching for repeated queries)
     pub async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
-        // Check cache first
-        let cache_key = format!("query:{}", query);
+        // Check cache first. Key includes model id + dim so that switching
+        // models/providers never returns a stale vector from a prior model.
+        let cache_key = format!("query:{}:{}:{}", self.model_id(), self.text_output_dim(), query);
         {
             let mut cache = self.cache.write();
             if let Some(cached) = cache.get(&cache_key) {
@@ -389,11 +481,11 @@ impl Embedder {
 
     /// Embed a search query without caching (internal use)
     async fn embed_query_uncached(&self, query: &str) -> Result<Vec<f32>> {
-        // Use Ollama if available
+        // Use Ollama if available (query task prefix applied inside embed_query).
         if let Some(ollama) = &self.ollama {
             if matches!(self.config.api_provider, EmbeddingProvider::Ollama) {
-                match ollama.embed_single(query).await {
-                    Ok(embedding) => return Ok(embedding),
+                match ollama.embed_query(query).await {
+                    Ok(embedding) => return Ok(Self::normalized(embedding)),
                     Err(e) => {
                         warn!("Ollama embedding failed, falling back to hash: {}", e);
                     }
@@ -404,12 +496,12 @@ impl Embedder {
         // Use OpenAI API if available
         if let Some(api_key) = &self.config.api_key {
             if matches!(self.config.api_provider, EmbeddingProvider::OpenAI) {
-                return self.embed_with_openai(query, api_key).await;
+                return Ok(Self::normalized(self.embed_with_openai(query, api_key).await?));
             }
         }
 
-        // Fallback to hash-based embedding
-        Ok(self.hash_embed(query, TEXT_EMBEDDING_DIM))
+        // Fallback to hash-based embedding (already normalized).
+        Ok(self.hash_embed(query, self.text_output_dim()))
     }
 
     /// Get embedding cache statistics (hits, misses, size)
@@ -423,15 +515,21 @@ impl Embedder {
         debug!("Embedding cache cleared");
     }
 
-    /// Embed multiple texts using Ollama
+    /// Embed multiple texts (document path) using the configured backend.
+    /// Every returned vector is L2-normalized exactly once.
     pub async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         if let Some(ollama) = &self.ollama {
-            return ollama.embed(texts).await;
+            if matches!(self.config.api_provider, EmbeddingProvider::Ollama) {
+                match ollama.embed_documents(texts).await {
+                    Ok(embs) => return Ok(embs.into_iter().map(Self::normalized).collect()),
+                    Err(e) => warn!("Ollama batch embedding failed, falling back to hash: {}", e),
+                }
+            }
         }
-        // Fallback to individual hash embeddings
+        // Fallback to individual hash embeddings (already normalized).
         Ok(texts
             .iter()
-            .map(|t| self.hash_embed(t, TEXT_EMBEDDING_DIM))
+            .map(|t| self.hash_embed(t, self.text_output_dim()))
             .collect())
     }
 
@@ -483,13 +581,13 @@ impl Embedder {
                 .collect();
 
             if let Some(ollama) = &self.ollama {
-                // Batch embed code with Ollama
-                match ollama.embed(&code_texts).await {
+                // Batch embed code with Ollama (document task prefix applied).
+                match ollama.embed_documents(&code_texts).await {
                     Ok(embeddings) => {
                         for (embedding, (_, memory)) in
                             embeddings.into_iter().zip(code_memories.iter())
                         {
-                            results.push((memory.id, embedding, "code_embedding"));
+                            results.push((memory.id, Self::normalized(embedding), "code_embedding"));
                         }
                     }
                     Err(e) => {
@@ -532,13 +630,13 @@ impl Embedder {
                 .collect();
 
             if let Some(ollama) = &self.ollama {
-                // Batch embed with Ollama
-                match ollama.embed(&texts).await {
+                // Batch embed with Ollama (document task prefix applied).
+                match ollama.embed_documents(&texts).await {
                     Ok(embeddings) => {
                         for (embedding, (_, memory)) in
                             embeddings.into_iter().zip(text_memories.iter())
                         {
-                            results.push((memory.id, embedding, "text_embedding"));
+                            results.push((memory.id, Self::normalized(embedding), "text_embedding"));
                         }
                     }
                     Err(e) => {
@@ -597,7 +695,9 @@ impl Embedder {
         let truncated: String = text.chars().take(8000).collect();
 
         let request = EmbedRequest {
-            model: "text-embedding-ada-002".to_string(),
+            // text-embedding-ada-002 is deprecated; text-embedding-3-small is
+            // the current small model (also 1536-dim, cheaper, higher quality).
+            model: "text-embedding-3-small".to_string(),
             input: truncated,
         };
 
@@ -617,7 +717,9 @@ impl Embedder {
                 "OpenAI embedding failed with status {}, falling back to local",
                 status
             );
-            return Ok(self.hash_embed(text, TEXT_EMBEDDING_DIM));
+            // Keep the fallback in the OpenAI space dimension so it matches the
+            // collection created for the OpenAI provider.
+            return Ok(self.hash_embed(text, OPENAI_EMBEDDING_DIM));
         }
 
         let embed_response: EmbedResponse = response
@@ -694,7 +796,16 @@ impl Embedder {
         }
     }
 
-    /// Calculate cosine similarity between two embeddings
+    /// Canonical cosine similarity between two embeddings.
+    ///
+    /// All embeddings produced by this module are L2-normalized exactly once at
+    /// generation time, so for such vectors the dot product IS the cosine
+    /// similarity. Returns 0.0 on dimension mismatch.
+    ///
+    /// NOTE: `search::semantic_score`, `storage::cosine_similarity` and
+    /// `duplicates::cosine_similarity` are near-duplicates of this. Collapsing
+    /// them into this one is a cross-module follow-up (those files are owned by
+    /// other agents / depend on true-magnitude cosine in existing tests).
     pub fn similarity(a: &[f32], b: &[f32]) -> f32 {
         if a.len() != b.len() {
             return 0.0;

@@ -14,9 +14,9 @@ const TEST_PROMPTS: &[&str] = &[
 ];
 
 const MODELS: &[&str] = &[
-    "qwen2:0.5b",    // Ultra-fast (352MB)
-    "llama3.2:1b",   // Fast (1.3GB)
-    "gemma2:2b",     // Balanced (1.6GB)
+    "qwen2:0.5b",  // Ultra-fast (352MB)
+    "llama3.2:1b", // Fast (1.3GB)
+    "gemma2:2b",   // Balanced (1.6GB)
 ];
 
 #[tokio::main]
@@ -41,20 +41,32 @@ async fn main() {
     let available_models = get_available_models(&client).await;
     println!("Available models: {:?}\n", available_models);
 
-    println!("Running benchmarks with {} test prompts...\n", TEST_PROMPTS.len());
-    println!("{:<15} {:>12} {:>12} {:>12} {:>12}", "Model", "Avg (ms)", "Min (ms)", "Max (ms)", "Status");
+    println!(
+        "Running benchmarks with {} test prompts...\n",
+        TEST_PROMPTS.len()
+    );
+    println!(
+        "{:<15} {:>12} {:>12} {:>12} {:>12}",
+        "Model", "Avg (ms)", "Min (ms)", "Max (ms)", "Status"
+    );
     println!("{}", "-".repeat(65));
 
     for model in MODELS {
         if !available_models.contains(&model.to_string()) {
-            println!("{:<15} {:>12} {:>12} {:>12} {:>12}", model, "-", "-", "-", "Not installed");
+            println!(
+                "{:<15} {:>12} {:>12} {:>12} {:>12}",
+                model, "-", "-", "-", "Not installed"
+            );
             continue;
         }
 
         let results = benchmark_model(&client, model).await;
 
         if results.is_empty() {
-            println!("{:<15} {:>12} {:>12} {:>12} {:>12}", model, "-", "-", "-", "Failed");
+            println!(
+                "{:<15} {:>12} {:>12} {:>12} {:>12}",
+                model, "-", "-", "-", "Failed"
+            );
             continue;
         }
 
@@ -62,8 +74,10 @@ async fn main() {
         let min = *results.iter().min().unwrap();
         let max = *results.iter().max().unwrap();
 
-        println!("{:<15} {:>12} {:>12} {:>12} {:>12}",
-            model, avg, min, max, "✓");
+        println!(
+            "{:<15} {:>12} {:>12} {:>12} {:>12}",
+            model, avg, min, max, "✓"
+        );
     }
 
     println!("\n{}", "=".repeat(65));

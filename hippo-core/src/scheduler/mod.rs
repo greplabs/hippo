@@ -4,6 +4,7 @@
 //! when the configured interval has elapsed since the last sync.
 
 use crate::error::Result;
+use crate::indexer::Indexer;
 use crate::models::Source;
 use crate::storage::Storage;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -40,10 +41,27 @@ impl Default for SchedulerConfig {
     }
 }
 
+/// Pure decision for whether a source should be re-synced at `now`.
+///
+/// Returns `true` when the source has never synced (`last_sync` is `None`), or
+/// when at least `interval_secs` have elapsed since `last_sync`. A `last_sync`
+/// in the future (clock skew) yields `false` rather than overflowing.
+pub fn should_sync(
+    last_sync: Option<chrono::DateTime<chrono::Utc>>,
+    now: chrono::DateTime<chrono::Utc>,
+    interval_secs: u64,
+) -> bool {
+    match last_sync {
+        Some(last) => (now - last).num_seconds() >= interval_secs as i64,
+        None => true, // Never synced
+    }
+}
+
 /// Background scheduler that auto-indexes sources on configured intervals
 pub struct Scheduler {
     config: SchedulerConfig,
     storage: Arc<Storage>,
+    indexer: Arc<Indexer>,
     running: Arc<AtomicBool>,
     stats: Arc<RwLock<SchedulerInternalStats>>,
     task_handle: Option<tokio::task::JoinHandle<()>>,
@@ -56,10 +74,11 @@ struct SchedulerInternalStats {
 }
 
 impl Scheduler {
-    pub fn new(storage: Arc<Storage>, config: SchedulerConfig) -> Self {
+    pub fn new(storage: Arc<Storage>, indexer: Arc<Indexer>, config: SchedulerConfig) -> Self {
         Self {
             config,
             storage,
+            indexer,
             running: Arc::new(AtomicBool::new(false)),
             stats: Arc::new(RwLock::new(SchedulerInternalStats {
                 total_checks: 0,
@@ -85,6 +104,7 @@ impl Scheduler {
 
         let running = self.running.clone();
         let storage = self.storage.clone();
+        let indexer = self.indexer.clone();
         let stats = self.stats.clone();
         let check_interval = self.config.check_interval_secs;
         let default_sync_interval = self.config.default_sync_interval_secs;
@@ -117,32 +137,31 @@ impl Scheduler {
                                 default_sync_interval
                             };
 
-                            let needs_sync = match &source_config.last_sync {
-                                Some(last) => {
-                                    let elapsed = (now - *last).num_seconds() as u64;
-                                    elapsed >= sync_interval
-                                }
-                                None => true, // Never synced
-                            };
+                            let needs_sync =
+                                should_sync(source_config.last_sync, now, sync_interval);
 
                             if needs_sync {
-                                let path = match &source_config.source {
+                                let source = source_config.source.clone();
+                                let path = match &source {
                                     Source::Local { root_path } => {
                                         root_path.to_string_lossy().to_string()
                                     }
-                                    _ => continue, // Skip non-local sources
+                                    _ => continue,
                                 };
 
-                                info!(
-                                    "Scheduler: triggering re-index for {}",
-                                    path
-                                );
+                                info!("Scheduler: triggering re-index for {}", path);
+
+                                // Actually trigger re-indexing via the indexer
+                                if let Err(e) = indexer.queue_source(source.clone()).await {
+                                    warn!(
+                                        "Scheduler: failed to queue re-index for {}: {}",
+                                        path, e
+                                    );
+                                    continue;
+                                }
 
                                 // Update last_sync timestamp
-                                if let Err(e) = storage
-                                    .update_source_last_sync(&source_config.source)
-                                    .await
-                                {
+                                if let Err(e) = storage.update_source_last_sync(&source).await {
                                     warn!("Scheduler: failed to update last_sync: {}", e);
                                 }
 
@@ -194,8 +213,7 @@ impl Scheduler {
     pub async fn stats(&self) -> SchedulerStats {
         let s = self.stats.read().await;
         let next_check = s.last_check.map(|last| {
-            (last + chrono::Duration::seconds(self.config.check_interval_secs as i64))
-                .to_rfc3339()
+            (last + chrono::Duration::seconds(self.config.check_interval_secs as i64)).to_rfc3339()
         });
 
         SchedulerStats {

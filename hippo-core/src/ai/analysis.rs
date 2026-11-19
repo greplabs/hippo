@@ -479,11 +479,10 @@ fn extract_imports(code: &str, language: &str) -> Vec<String> {
                     imports.push(line.to_string());
                 }
             }
-            "Go" => {
-                if line.starts_with("import ") {
+            "Go"
+                if line.starts_with("import ") => {
                     imports.push(line.to_string());
                 }
-            }
             _ => {}
         }
     }

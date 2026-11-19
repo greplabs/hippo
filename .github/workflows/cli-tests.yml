@@ -62,11 +62,9 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --package hippo-cli -- --check
-        continue-on-error: true
 
       - name: Run clippy
         run: cargo clippy --package hippo-cli -- -D warnings
-        continue-on-error: true
 
       - name: Build CLI
         run: cargo build --package hippo-cli --verbose

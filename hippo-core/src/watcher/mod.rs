@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// File system event types
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -84,9 +84,16 @@ const EVENT_MAX_TTL_SECS: u64 = 300;
 /// Maximum pending events before forced cleanup
 const EVENT_MAX_PENDING: usize = 10000;
 
-/// Debounced event tracker to prevent rapid-fire updates
-/// Includes TTL cleanup to prevent memory accumulation
-struct DebouncedEvents {
+/// Debounced event tracker to prevent rapid-fire updates.
+///
+/// Includes TTL cleanup to prevent memory accumulation. All time-dependent
+/// methods have an `*_at` variant that takes an injected `Instant`, which the
+/// live path feeds `Instant::now()` and tests feed deterministic timestamps
+/// (so unit tests need no real `sleep`).
+///
+/// Events are keyed by path, so repeated events for the same path within the
+/// debounce window coalesce into a single pending entry.
+pub struct DebouncedEvents {
     /// Pending events with their last update time
     pending: HashMap<PathBuf, (WatchEvent, Instant)>,
     /// Debounce duration
@@ -98,7 +105,8 @@ struct DebouncedEvents {
 }
 
 impl DebouncedEvents {
-    fn new(debounce_duration: Duration) -> Self {
+    /// Create a tracker with the given debounce window.
+    pub fn new(debounce_duration: Duration) -> Self {
         Self {
             pending: HashMap::new(),
             debounce_duration,
@@ -107,12 +115,21 @@ impl DebouncedEvents {
         }
     }
 
-    /// Add an event to the debounced queue
-    #[allow(dead_code)]
-    fn add(&mut self, event: WatchEvent) {
+    /// Add an event to the debounced queue using the current time.
+    pub fn add(&mut self, event: WatchEvent) {
+        self.add_at(event, Instant::now());
+    }
+
+    /// Add an event at an explicit timestamp (test seam).
+    ///
+    /// Repeated events for the same path overwrite the pending entry and reset
+    /// its timestamp, which is what makes rapid-fire events coalesce.
+    pub fn add_at(&mut self, event: WatchEvent, now: Instant) {
         // Periodic cleanup every 60 seconds or when queue is too large
-        if self.last_cleanup.elapsed() > Duration::from_secs(60) || self.pending.len() > EVENT_MAX_PENDING {
-            self.cleanup_stale();
+        if now.duration_since(self.last_cleanup) > Duration::from_secs(60)
+            || self.pending.len() > EVENT_MAX_PENDING
+        {
+            self.cleanup_stale_at(now);
         }
 
         let path = match &event {
@@ -123,12 +140,16 @@ impl DebouncedEvents {
             _ => return,
         };
 
-        self.pending.insert(path, (event, Instant::now()));
+        self.pending.insert(path, (event, now));
     }
 
-    /// Get events that are ready to be processed (past debounce window)
-    fn get_ready_events(&mut self) -> Vec<WatchEvent> {
-        let now = Instant::now();
+    /// Get events that are ready to be processed (past debounce window).
+    pub fn get_ready_events(&mut self) -> Vec<WatchEvent> {
+        self.get_ready_events_at(Instant::now())
+    }
+
+    /// Get ready events relative to an explicit timestamp (test seam).
+    pub fn get_ready_events_at(&mut self, now: Instant) -> Vec<WatchEvent> {
         let mut ready = Vec::new();
         let mut to_remove = Vec::new();
 
@@ -146,27 +167,27 @@ impl DebouncedEvents {
         ready
     }
 
-    /// Remove events older than max_ttl to prevent memory accumulation
-    fn cleanup_stale(&mut self) {
-        let now = Instant::now();
+    /// Remove events older than max_ttl to prevent memory accumulation.
+    fn cleanup_stale_at(&mut self, now: Instant) {
         let max_ttl = self.max_ttl;
 
-        self.pending.retain(|_, (_, timestamp)| {
-            now.duration_since(*timestamp) < max_ttl
-        });
+        self.pending
+            .retain(|_, (_, timestamp)| now.duration_since(*timestamp) < max_ttl);
 
         self.last_cleanup = now;
-        debug!("Cleaned up stale events, {} pending remain", self.pending.len());
+        debug!(
+            "Cleaned up stale events, {} pending remain",
+            self.pending.len()
+        );
     }
 
     /// Check if there are pending events
-    fn has_pending(&self) -> bool {
+    pub fn has_pending(&self) -> bool {
         !self.pending.is_empty()
     }
 
     /// Get the number of pending events
-    #[allow(dead_code)]
-    fn pending_count(&self) -> usize {
+    pub fn pending_count(&self) -> usize {
         self.pending.len()
     }
 }
@@ -184,8 +205,10 @@ const SKIP_PATTERNS: &[&str] = &[
     "dist",
 ];
 
-/// Check if a path should be skipped (contains excluded directories)
-fn should_skip_path(path: &Path) -> bool {
+/// Check if a path should be skipped (contains excluded directories).
+///
+/// Public so the live watcher path and unit tests share one definition.
+pub fn should_skip_path(path: &Path) -> bool {
     for component in path.components() {
         if let std::path::Component::Normal(name) = component {
             if let Some(name_str) = name.to_str() {
@@ -226,7 +249,8 @@ impl WatcherState {
 
     /// Signal shutdown to all background tasks
     fn signal_shutdown(&self) {
-        self.shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.shutdown
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Check if shutdown was signaled
@@ -357,7 +381,13 @@ impl FileWatcher {
         Ok(())
     }
 
-    /// Background task to process events from notify
+    /// Background task to process events from notify.
+    ///
+    /// Raw notify events are enqueued into the per-watcher [`DebouncedEvents`]
+    /// queue (keyed by path, so rapid-fire events for the same file coalesce).
+    /// The queue is drained each loop iteration, and only events whose debounce
+    /// window has elapsed are acted on (delete + re-index). The 100ms recv
+    /// timeout doubles as the flush cadence, so no separate flush task is needed.
     async fn process_notify_events(
         rx: std::sync::mpsc::Receiver<Event>,
         state: Arc<WatcherState>,
@@ -384,12 +414,8 @@ impl FileWatcher {
                         continue;
                     }
 
-                    // Process the event
-                    if let Err(e) =
-                        Self::handle_notify_event(event, &state, &storage, &indexer).await
-                    {
-                        warn!("Failed to handle notify event: {}", e);
-                    }
+                    // Enqueue into the debounce queue instead of acting immediately.
+                    Self::enqueue_notify_event(event, &state).await;
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     // Normal timeout, continue (also allows checking shutdown flag)
@@ -399,81 +425,96 @@ impl FileWatcher {
                     break;
                 }
             }
+
+            // Drain any events whose debounce window has elapsed.
+            if !*state.is_paused.read().await {
+                Self::flush_ready_notify_events(&state, &storage, &indexer).await;
+            }
         }
         debug!("Watcher event processing task exited");
     }
 
-    /// Handle a single notify event
-    async fn handle_notify_event(
-        event: Event,
+    /// Classify a raw notify event and enqueue the resulting watch event(s)
+    /// into the debounce queue. Coalescing happens inside [`DebouncedEvents`].
+    async fn enqueue_notify_event(event: Event, state: &Arc<WatcherState>) {
+        // Resolve sources up front (cheap clone) so we don't hold the lock long.
+        let watched_paths = state.watched_paths.read().await.clone();
+
+        let watch_events: Vec<WatchEvent> = match event.kind {
+            EventKind::Create(_) => event
+                .paths
+                .into_iter()
+                .filter(|p| p.is_file() && !should_skip_path(p))
+                .filter_map(|path| {
+                    Self::find_source_for_path_static(&path, &watched_paths)
+                        .map(|source| WatchEvent::Created { path, source })
+                })
+                .collect(),
+            EventKind::Modify(ModifyKind::Data(_)) | EventKind::Modify(ModifyKind::Any) => event
+                .paths
+                .into_iter()
+                .filter(|p| p.is_file() && !should_skip_path(p))
+                .filter_map(|path| {
+                    Self::find_source_for_path_static(&path, &watched_paths)
+                        .map(|source| WatchEvent::Modified { path, source })
+                })
+                .collect(),
+            EventKind::Remove(_) => event
+                .paths
+                .into_iter()
+                .filter(|p| !should_skip_path(p))
+                .map(|path| WatchEvent::Deleted { path })
+                .collect(),
+            _ => {
+                debug!("Ignoring event kind: {:?}", event.kind);
+                Vec::new()
+            }
+        };
+
+        if watch_events.is_empty() {
+            return;
+        }
+
+        let mut queue = state.debounced_events.write().await;
+        for ev in watch_events {
+            queue.add(ev);
+        }
+    }
+
+    /// Drain and act on events whose debounce window has elapsed.
+    async fn flush_ready_notify_events(
         state: &Arc<WatcherState>,
         storage: &Arc<Storage>,
         indexer: &Option<Arc<Indexer>>,
-    ) -> Result<()> {
-        let watched_paths = state.watched_paths.read().await;
+    ) {
+        let ready = state.debounced_events.write().await.get_ready_events();
 
-        match event.kind {
-            EventKind::Create(_) => {
-                for path in event.paths {
-                    if !path.is_file() || should_skip_path(&path) {
-                        continue;
-                    }
+        for event in ready {
+            match event {
+                WatchEvent::Created { path, source } | WatchEvent::Modified { path, source } => {
+                    info!("File change settled: {:?}", path);
+                    state.increment_stat("modified").await;
 
-                    // Find which source this file belongs to
-                    if let Some(source) = Self::find_source_for_path_static(&path, &watched_paths) {
-                        info!("File created: {:?}", path);
-                        state.increment_stat("created").await;
+                    // Delete old entry (no-op for brand-new files) and re-index.
+                    let _ = storage.remove_memory_by_path(&path).await;
 
-                        // Re-index the file
-                        if let Some(idx) = indexer {
-                            if let Err(e) = idx.index_single_file(&path, &source).await {
-                                warn!("Failed to index created file {:?}: {}", path, e);
-                            }
+                    if let Some(idx) = indexer {
+                        if let Err(e) = idx.index_single_file(&path, &source).await {
+                            warn!("Failed to (re)index file {:?}: {}", path, e);
                         }
                     }
                 }
-            }
-            EventKind::Modify(ModifyKind::Data(_)) | EventKind::Modify(ModifyKind::Any) => {
-                for path in event.paths {
-                    if !path.is_file() || should_skip_path(&path) {
-                        continue;
-                    }
-
-                    if let Some(source) = Self::find_source_for_path_static(&path, &watched_paths) {
-                        info!("File modified: {:?}", path);
-                        state.increment_stat("modified").await;
-
-                        // Delete old entry and re-index
-                        let _ = storage.remove_memory_by_path(&path).await;
-
-                        if let Some(idx) = indexer {
-                            if let Err(e) = idx.index_single_file(&path, &source).await {
-                                warn!("Failed to re-index modified file {:?}: {}", path, e);
-                            }
-                        }
-                    }
-                }
-            }
-            EventKind::Remove(_) => {
-                for path in event.paths {
-                    if should_skip_path(&path) {
-                        continue;
-                    }
+                WatchEvent::Deleted { path } => {
                     info!("File deleted: {:?}", path);
                     state.increment_stat("deleted").await;
 
-                    // Remove from index
                     if let Err(e) = storage.remove_memory_by_path(&path).await {
                         debug!("Failed to delete memory for {:?}: {}", path, e);
                     }
                 }
-            }
-            _ => {
-                debug!("Ignoring event kind: {:?}", event.kind);
+                _ => {}
             }
         }
-
-        Ok(())
     }
 
     /// Static version of find_source_for_path for use in async contexts
@@ -573,145 +614,6 @@ impl FileWatcher {
             .collect()
     }
 
-    /// Process a file system event
-    #[allow(dead_code)]
-    async fn process_event(&self, event: Event) -> Result<()> {
-        // Skip if paused
-        if self.is_paused().await {
-            return Ok(());
-        }
-
-        let watched_paths = self.state.watched_paths.read().await;
-
-        match event.kind {
-            EventKind::Create(_) => {
-                for path in event.paths {
-                    if !path.is_file() {
-                        continue;
-                    }
-
-                    // Find which source this file belongs to
-                    if let Some(source) = self.find_source_for_path(&path, &watched_paths) {
-                        let watch_event = WatchEvent::Created {
-                            path: path.clone(),
-                            source: source.clone(),
-                        };
-
-                        // Add to debounced queue
-                        self.state.debounced_events.write().await.add(watch_event);
-                    }
-                }
-            }
-            EventKind::Modify(_) => {
-                for path in event.paths {
-                    if !path.is_file() {
-                        continue;
-                    }
-
-                    if let Some(source) = self.find_source_for_path(&path, &watched_paths) {
-                        let watch_event = WatchEvent::Modified {
-                            path: path.clone(),
-                            source: source.clone(),
-                        };
-
-                        self.state.debounced_events.write().await.add(watch_event);
-                    }
-                }
-            }
-            EventKind::Remove(_) => {
-                for path in event.paths {
-                    let watch_event = WatchEvent::Deleted { path: path.clone() };
-                    self.state.debounced_events.write().await.add(watch_event);
-                }
-            }
-            _ => {
-                debug!("Ignoring event: {:?}", event.kind);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Find which source a path belongs to
-    #[allow(dead_code)]
-    fn find_source_for_path(
-        &self,
-        path: &Path,
-        watched_paths: &HashMap<PathBuf, Source>,
-    ) -> Option<Source> {
-        for (watched_path, source) in watched_paths {
-            if path.starts_with(watched_path) {
-                return Some(source.clone());
-            }
-        }
-        None
-    }
-
-    /// Process debounced events and emit them
-    pub async fn flush_events(&self) -> Result<()> {
-        let ready_events = self.state.debounced_events.write().await.get_ready_events();
-
-        for event in ready_events {
-            // Update stats
-            match &event {
-                WatchEvent::Created { .. } => self.state.increment_stat("created").await,
-                WatchEvent::Modified { .. } => self.state.increment_stat("modified").await,
-                WatchEvent::Deleted { .. } => self.state.increment_stat("deleted").await,
-                WatchEvent::Renamed { .. } => self.state.increment_stat("renamed").await,
-                _ => {}
-            }
-
-            // Emit event
-            if let Err(e) = self.event_tx.send(event.clone()) {
-                error!("Failed to send watch event: {}", e);
-            }
-
-            // Handle the event (update index)
-            if let Err(e) = self.handle_event(&event).await {
-                warn!("Failed to handle watch event: {}", e);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Handle a watch event by updating the index
-    async fn handle_event(&self, event: &WatchEvent) -> Result<()> {
-        match event {
-            WatchEvent::Created { path, source: _ } | WatchEvent::Modified { path, source: _ } => {
-                // Delete existing entry if it exists (for modified files)
-                if let Err(e) = self.storage.remove_memory_by_path(path).await {
-                    debug!("Failed to delete old memory for {:?}: {}", path, e);
-                }
-
-                info!("Detected file change: {:?}", path);
-            }
-            WatchEvent::Deleted { path } => {
-                // Remove from index
-                if let Err(e) = self.storage.remove_memory_by_path(path).await {
-                    warn!("Failed to delete memory for {:?}: {}", path, e);
-                } else {
-                    info!("Removed deleted file from index: {:?}", path);
-                }
-            }
-            WatchEvent::Renamed {
-                from,
-                to,
-                source: _,
-            } => {
-                // Delete old path
-                if let Err(e) = self.storage.remove_memory_by_path(from).await {
-                    debug!("Failed to delete old memory for {:?}: {}", from, e);
-                }
-
-                info!("Detected file rename: {:?} -> {:?}", from, to);
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
-
     /// Check if there are pending debounced events
     pub async fn has_pending_events(&self) -> bool {
         self.state.debounced_events.read().await.has_pending()
@@ -765,29 +667,4 @@ impl Drop for FileWatcher {
 
         debug!("FileWatcher dropped, resources cleaned up");
     }
-}
-
-/// Start a background task to flush debounced events periodically
-/// Returns a handle to the spawned task
-pub async fn start_flush_task(watcher: Arc<RwLock<FileWatcher>>) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_millis(100));
-
-        loop {
-            interval.tick().await;
-
-            let watcher_lock = watcher.read().await;
-
-            // Check for shutdown signal
-            if watcher_lock.state.is_shutdown() {
-                info!("Flush task shutting down");
-                break;
-            }
-
-            if let Err(e) = watcher_lock.flush_events().await {
-                error!("Failed to flush watch events: {}", e);
-            }
-        }
-        debug!("Flush task exited");
-    })
 }

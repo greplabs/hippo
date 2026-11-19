@@ -6,7 +6,9 @@
 pub mod widgets;
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -418,8 +420,8 @@ fn ui(f: &mut Frame, app: &App) {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Search bar
-            Constraint::Length(3),  // Tabs
+            Constraint::Length(3), // Search bar
+            Constraint::Length(3), // Tabs
             Constraint::Min(10),   // Content
             Constraint::Length(1), // Status bar
         ])
@@ -697,10 +699,7 @@ fn render_help_overlay(f: &mut Frame, area: Rect) {
 
 fn help_line<'a>(key: &'a str, desc: &'a str) -> Line<'a> {
     Line::from(vec![
-        Span::styled(
-            format!("  {:<12}", key),
-            Style::default().fg(Color::Cyan),
-        ),
+        Span::styled(format!("  {:<12}", key), Style::default().fg(Color::Cyan)),
         Span::raw(desc),
     ])
 }

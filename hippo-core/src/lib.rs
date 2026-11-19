@@ -73,11 +73,11 @@ pub mod models;
 pub mod ollama;
 pub mod organization;
 pub mod qdrant;
+pub mod scheduler;
 pub mod search;
 pub mod sources;
 pub mod storage;
 pub mod thumbnails;
-pub mod scheduler;
 pub mod watcher;
 
 pub use error::{HippoError, Result};
@@ -486,18 +486,16 @@ impl Hippo {
     }
 
     /// Subscribe to file watch events
-    pub fn subscribe_watch_events(
+    ///
+    /// Awaits the watcher lock directly instead of using `block_in_place` +
+    /// `Handle::block_on`, which panics on a current-thread runtime.
+    pub async fn subscribe_watch_events(
         &self,
     ) -> Option<tokio::sync::broadcast::Receiver<watcher::WatchEvent>> {
-        self.watcher.as_ref().map(|w| {
-            // This is a bit tricky - we need to get the receiver without blocking
-            // For now, return None - we'll handle events differently in Tauri
-            // The proper way would be to use a channel that can be subscribed to multiple times
-            // We'll emit events via Tauri's event system instead
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async { w.read().await.subscribe() })
-            })
-        })
+        match self.watcher.as_ref() {
+            Some(w) => Some(w.read().await.subscribe()),
+            None => None,
+        }
     }
 
     // === Duplicate Detection ===
@@ -744,6 +742,10 @@ impl Hippo {
         self.storage.clear_search_history().await
     }
 
+    pub async fn delete_search_history_entry(&self, id: i64) -> Result<()> {
+        self.storage.delete_search_history_entry(id).await
+    }
+
     // === Recent Files ===
 
     pub async fn get_recent_files(&self, limit: usize, days: usize) -> Result<Vec<Memory>> {
@@ -803,12 +805,20 @@ impl Hippo {
 
                 let new_path = old_path.parent().map(|p| p.join(&new_name));
                 if let Some(new_path) = new_path {
+                    // Skip if source file doesn't exist on disk
+                    if !old_path.exists() {
+                        tracing::warn!("Skipping rename: source file not found {:?}", old_path);
+                        continue;
+                    }
+                    // Check for collision — don't overwrite existing files
+                    if new_path.exists() && new_path != old_path {
+                        tracing::warn!("Skipping rename: target already exists {:?}", new_path);
+                        continue;
+                    }
                     // Rename on disk
-                    if old_path.exists() {
-                        if let Err(e) = std::fs::rename(&old_path, &new_path) {
-                            tracing::warn!("Failed to rename {:?}: {}", old_path, e);
-                            continue;
-                        }
+                    if let Err(e) = std::fs::rename(&old_path, &new_path) {
+                        tracing::warn!("Failed to rename {:?}: {}", old_path, e);
+                        continue;
                     }
                     // Update in database
                     self.storage
