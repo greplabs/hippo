@@ -114,6 +114,11 @@ impl RecommendedModels {
 /// Embedding dimension for nomic-embed-text
 pub const NOMIC_EMBED_DIM: usize = 768;
 
+/// nomic-embed-text query task prefix (required for good retrieval quality).
+pub const NOMIC_QUERY_PREFIX: &str = "search_query: ";
+/// nomic-embed-text document task prefix (required for good retrieval quality).
+pub const NOMIC_DOCUMENT_PREFIX: &str = "search_document: ";
+
 /// Cached model list with timestamp
 struct ModelCache {
     models: Vec<OllamaModel>,
@@ -455,10 +460,17 @@ impl OllamaClient {
         Ok(models.models)
     }
 
-    /// Check if a specific model is available
+    /// Check if a specific model is available.
+    ///
+    /// Matches either an exact name or a tagged variant (`name:tag`), so that
+    /// `has_model("llama3")` does NOT spuriously match `llama3-groq-tool-use`
+    /// while still matching `llama3:8b`.
     pub async fn has_model(&self, name: &str) -> bool {
+        let tagged = format!("{}:", name);
         match self.list_models().await {
-            Ok(models) => models.iter().any(|m| m.name.starts_with(name)),
+            Ok(models) => models
+                .iter()
+                .any(|m| m.name == name || m.name.starts_with(&tagged)),
             Err(_) => false,
         }
     }
@@ -533,10 +545,49 @@ impl OllamaClient {
         Ok(embed_resp.embeddings)
     }
 
+    /// Embed a search QUERY, applying the nomic-embed-text `search_query:` task
+    /// prefix when the active model is a nomic variant.
+    ///
+    /// nomic-embed-text was trained with asymmetric task prefixes; omitting them
+    /// severely degrades retrieval quality (queries and documents must use the
+    /// matching `search_query:` / `search_document:` prefixes respectively).
+    pub async fn embed_query(&self, text: &str) -> Result<Vec<f32>> {
+        let input = self.apply_embed_prefix(NOMIC_QUERY_PREFIX, text);
+        self.embed_single(&input).await
+    }
+
+    /// Embed DOCUMENTS, applying the nomic-embed-text `search_document:` task
+    /// prefix when the active model is a nomic variant.
+    pub async fn embed_documents(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        if self.needs_nomic_prefix() {
+            let prefixed: Vec<String> = texts
+                .iter()
+                .map(|t| format!("{}{}", NOMIC_DOCUMENT_PREFIX, t))
+                .collect();
+            self.embed(&prefixed).await
+        } else {
+            self.embed(texts).await
+        }
+    }
+
+    /// Whether the active embedding model needs nomic task prefixes.
+    fn needs_nomic_prefix(&self) -> bool {
+        self.embedding_model.contains("nomic-embed")
+    }
+
+    /// Prepend a nomic task prefix to `text` only when the active model is nomic.
+    fn apply_embed_prefix(&self, prefix: &str, text: &str) -> String {
+        if self.needs_nomic_prefix() {
+            format!("{}{}", prefix, text)
+        } else {
+            text.to_string()
+        }
+    }
+
     /// Generate embedding for a single text (with caching)
     pub async fn embed_single(&self, text: &str) -> Result<Vec<f32>> {
         // Create cache key from text hash
-        let cache_key = format!("{}:{:x}", &self.embedding_model, Self::hash_text(text));
+        let cache_key = format!("{}:{:x}", self.embedding_model, Self::hash_text(text));
 
         // Check cache first
         {
