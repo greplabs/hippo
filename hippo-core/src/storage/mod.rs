@@ -1,6 +1,6 @@
 //! Storage layer combining SQLite (metadata) and Qdrant (vectors)
 
-use crate::error::Result;
+use crate::error::{HippoError, Result};
 use crate::models::*;
 use crate::qdrant::QdrantStorage;
 use crate::HippoConfig;
@@ -43,6 +43,31 @@ fn parse_datetime(s: &str) -> std::result::Result<chrono::DateTime<chrono::Utc>,
         })
 }
 
+/// Decode a little-endian `f32` blob (as stored in the `embeddings` table) back
+/// into a vector. Returns an error if the byte length is not a multiple of 4,
+/// rather than silently zeroing a partial chunk (which would corrupt the vector).
+fn bytes_to_f32_vec(bytes: &[u8]) -> Result<Vec<f32>> {
+    if bytes.len() % 4 != 0 {
+        return Err(HippoError::Other(format!(
+            "corrupt embedding blob: {} bytes is not a multiple of 4",
+            bytes.len()
+        )));
+    }
+    Ok(bytes
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect())
+}
+
+/// Escape SQL `LIKE` wildcards (`%` and `_`, plus the escape char itself) so
+/// that user-supplied text is matched literally. Must be paired with an
+/// `ESCAPE '\'` clause in the SQL statement.
+fn escape_like(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
 #[allow(dead_code)]
 pub struct Storage {
     db: Mutex<Connection>,
@@ -50,17 +75,33 @@ pub struct Storage {
     qdrant_url: String,
 }
 
+// TODO(perf, follow-up): this layer serializes ALL database I/O through a
+// single `Mutex<Connection>`, and the synchronous rusqlite calls run directly
+// on tokio worker threads (blocking-in-async). Under concurrency this both
+// serializes unrelated queries and can starve the async runtime. The correct
+// fix is a connection pool (e.g. r2d2/deadpool) with blocking calls moved onto
+// `spawn_blocking`. That is a large, cross-cutting refactor that would change
+// method internals (not signatures), so it is intentionally deferred to keep
+// the public API stable for parallel work. Do NOT attempt it piecemeal here.
 impl Storage {
     /// Safely acquire the database lock, recovering from poisoning if necessary.
-    /// Mutex poisoning happens when a thread panics while holding the lock.
-    /// This helper recovers the inner data since SQLite connections remain valid.
+    ///
+    /// Mutex poisoning happens when a thread panics while holding the lock. Now
+    /// that every `query_map`/`query_row` closure uses the `?`-returning parse
+    /// helpers (`parse_json`/`parse_uuid`/`parse_datetime`) instead of
+    /// `.unwrap()`, a corrupt row returns an error instead of panicking — so a
+    /// genuine poison here signals a real bug, not merely bad data. We still
+    /// recover (the underlying SQLite connection remains valid), but log loudly
+    /// at ERROR level so the condition is never silent.
     fn get_db(&self) -> Result<std::sync::MutexGuard<'_, Connection>> {
         match self.db.lock() {
             Ok(guard) => Ok(guard),
             Err(poisoned) => {
-                // Log the poisoning but recover - SQLite connections are still usable
-                warn!("Database mutex was poisoned (a thread panicked), recovering...");
-                // Get the inner value despite the poison - this is safe for SQLite
+                tracing::error!(
+                    "Database mutex was poisoned (a thread panicked while holding the lock); \
+                     recovering the connection. This indicates a bug — please report it."
+                );
+                // The SQLite connection itself is still usable, so recover it.
                 Ok(poisoned.into_inner())
             }
         }
@@ -433,10 +474,17 @@ impl Storage {
             ],
         )?;
 
-        // Update tag counts
+        // Ensure a `tags` row exists for each tag so that colors can be stored
+        // against it (see `set_tag_color`). We deliberately do NOT maintain a
+        // `count` counter here: the previous `count = count + 1` ran on every
+        // upsert (and every add_tag/remove_tag/reindex re-ran it, while
+        // delete/remove never decremented), so counts inflated without bound.
+        // Tag counts are now DERIVED from the actual memory→tag relationships at
+        // read time (see `list_tags` / `list_tags_with_colors` / `get_stats`),
+        // which cannot drift.
         for tag in &memory.tags {
             db.execute(
-                "INSERT INTO tags (name, count) VALUES (?1, 1) ON CONFLICT(name) DO UPDATE SET count = count + 1",
+                "INSERT OR IGNORE INTO tags (name) VALUES (?1)",
                 params![tag.name],
             )?;
         }
@@ -621,7 +669,16 @@ impl Storage {
     pub async fn list_tags(&self) -> Result<Vec<(String, u64)>> {
         let db = self.get_db()?;
 
-        let mut stmt = db.prepare("SELECT name, count FROM tags ORDER BY count DESC")?;
+        // Counts are derived from the real memory→tag relationships (the tag
+        // arrays stored in each memory's `tags_json`), so they always reflect
+        // reality and never inflate. `json_each` expands each tag array row.
+        let mut stmt = db.prepare(
+            "SELECT json_extract(j.value, '$.name') AS name, COUNT(*) AS cnt
+             FROM memories, json_each(memories.tags_json) AS j
+             WHERE name IS NOT NULL
+             GROUP BY name
+             ORDER BY cnt DESC",
+        )?;
         let tags = stmt
             .query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
@@ -632,11 +689,21 @@ impl Storage {
         Ok(tags)
     }
 
-    /// List all tags with their colors
+    /// List all tags with their colors.
+    ///
+    /// Counts are derived from the real memory→tag relationships (see
+    /// `list_tags`); the `tags` table is consulted only for the stored color.
     pub async fn list_tags_with_colors(&self) -> Result<Vec<(String, u64, Option<String>)>> {
         let db = self.get_db()?;
 
-        let mut stmt = db.prepare("SELECT name, count, color FROM tags ORDER BY count DESC")?;
+        let mut stmt = db.prepare(
+            "SELECT json_extract(j.value, '$.name') AS name, COUNT(*) AS cnt, MAX(t.color) AS color
+             FROM memories, json_each(memories.tags_json) AS j
+             LEFT JOIN tags t ON t.name = json_extract(j.value, '$.name')
+             WHERE name IS NOT NULL
+             GROUP BY name
+             ORDER BY cnt DESC",
+        )?;
         let tags = stmt
             .query_map([], |row| {
                 Ok((
@@ -784,7 +851,17 @@ impl Storage {
             db.query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))?;
         let source_count: i64 =
             db.query_row("SELECT COUNT(*) FROM sources", [], |row| row.get(0))?;
-        let tag_count: i64 = db.query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0))?;
+        // Derive the distinct tag count from the real memory→tag relationships
+        // rather than counting (possibly stale) rows in the `tags` table.
+        let tag_count: i64 = db.query_row(
+            "SELECT COUNT(*) FROM (
+                 SELECT DISTINCT json_extract(j.value, '$.name') AS name
+                 FROM memories, json_each(memories.tags_json) AS j
+                 WHERE name IS NOT NULL
+             )",
+            [],
+            |row| row.get(0),
+        )?;
         let cluster_count: i64 =
             db.query_row("SELECT COUNT(*) FROM clusters", [], |row| row.get(0))?;
 
@@ -802,7 +879,7 @@ impl Storage {
         let mut stmt = db.prepare("SELECT config_json FROM sources")?;
         let sources = stmt
             .query_map([], |row| {
-                Ok(serde_json::from_str::<SourceConfig>(&row.get::<_, String>(0)?).unwrap())
+                parse_json::<SourceConfig>(&row.get::<_, String>(0)?)
             })?
             .filter_map(|r| r.ok())
             .collect();
@@ -897,18 +974,17 @@ impl Storage {
         let clusters = stmt
             .query_map([], |row| {
                 Ok(Cluster {
-                    id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                    id: parse_uuid(&row.get::<_, String>(0)?)?,
                     name: row.get(1)?,
-                    kind: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                    memory_ids: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
+                    kind: parse_json(&row.get::<_, String>(2)?)?,
+                    memory_ids: parse_json(&row.get::<_, String>(3)?)?,
                     cover_memory_id: row
                         .get::<_, Option<String>>(4)?
-                        .map(|s| uuid::Uuid::parse_str(&s).unwrap()),
+                        .map(|s| parse_uuid(&s))
+                        .transpose()?,
                     auto_generated: row.get::<_, i32>(5)? != 0,
-                    created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(6)?)
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    metadata: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+                    created_at: parse_datetime(&row.get::<_, String>(6)?)?,
+                    metadata: parse_json(&row.get::<_, String>(7)?)?,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -956,7 +1032,7 @@ impl Storage {
 
         let mut stmt = db.prepare("SELECT memory_ids_json FROM clusters WHERE id = ?1")?;
         let current: Vec<MemoryId> = stmt.query_row(params![cluster_id.to_string()], |row| {
-            Ok(serde_json::from_str(&row.get::<_, String>(0)?).unwrap())
+            parse_json(&row.get::<_, String>(0)?)
         })?;
 
         let mut new_ids = current;
@@ -1092,13 +1168,21 @@ impl Storage {
         Ok(scored)
     }
 
-    /// Store embedding in Qdrant (primary) or SQLite (fallback)
+    /// Store an embedding durably, with a write-through to Qdrant.
     ///
-    /// Storage optimization: Only stores in ONE location to avoid duplication.
-    /// - If Qdrant is available: store ONLY in Qdrant (preferred for vector search)
-    /// - If Qdrant is unavailable: store in SQLite as fallback
+    /// Contract (fixed): **SQLite is the durable source of truth** — the
+    /// embedding is ALWAYS written to SQLite. When Qdrant is available we
+    /// additionally write it through to Qdrant for fast vector search.
     ///
-    /// This reduces storage by ~50% for embeddings (was storing in both).
+    /// The previous implementation stored the embedding in *exactly one* place
+    /// (Qdrant when up, SQLite when down). If Qdrant availability flapped
+    /// between writes, embeddings written while it was up became unreachable
+    /// once it went down (and vice-versa), silently losing them. Always writing
+    /// to SQLite guarantees durability regardless of Qdrant state; `find_similar`
+    /// still prefers Qdrant and falls back to SQLite.
+    ///
+    /// A Qdrant write-through failure is logged but does NOT fail the call,
+    /// because the durable copy already succeeded.
     pub async fn store_embedding_with_qdrant(
         &self,
         memory_id: MemoryId,
@@ -1106,14 +1190,21 @@ impl Storage {
         model: &str,
         kind: &MemoryKind,
     ) -> Result<()> {
-        // Store in Qdrant if available (primary storage for vectors)
+        // Durable write: always persist to SQLite first.
+        self.store_embedding(memory_id, embedding, model).await?;
+
+        // Write-through to Qdrant when available (accelerator, not source of truth).
         if self.qdrant.is_available().await {
-            self.qdrant
+            if let Err(e) = self
+                .qdrant
                 .upsert(memory_id, embedding.to_vec(), kind)
-                .await?;
-        } else {
-            // Fallback: Store in SQLite only when Qdrant is unavailable
-            self.store_embedding(memory_id, embedding, model).await?;
+                .await
+            {
+                warn!(
+                    "Failed to write embedding through to Qdrant for {} (kept durably in SQLite): {}",
+                    memory_id, e
+                );
+            }
         }
 
         Ok(())
@@ -1123,7 +1214,6 @@ impl Storage {
 
     /// Search memories using FTS5 full-text search (5-10x faster than LIKE)
     /// Falls back to LIKE search if FTS table doesn't exist
-    #[allow(clippy::await_holding_lock)]
     pub async fn search_fts(
         &self,
         query: &str,
@@ -1131,8 +1221,6 @@ impl Storage {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Memory>> {
-        let db = self.get_db()?;
-
         // Prepare query for FTS5 - escape special characters and add wildcards
         let fts_query = query
             .split_whitespace()
@@ -1158,71 +1246,36 @@ impl Storage {
                LIMIT ?2 OFFSET ?3"#
         };
 
-        let result: std::result::Result<Vec<Memory>, rusqlite::Error> = (|| {
-            let mut stmt = db.prepare(sql)?;
-            let memories: Vec<Memory> = if let Some(k) = kind {
-                stmt.query_map(params![fts_query, k, limit as i64, offset as i64], |row| {
-                    Ok(Memory {
-                        id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
-                        path: PathBuf::from(row.get::<_, String>(1)?),
-                        source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                        kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-                        metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
-                        tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
-                        embedding_id: row.get(6)?,
-                        connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
-                        is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-                        created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
-                        modified_at: chrono::DateTime::parse_from_rfc3339(
-                            &row.get::<_, String>(10)?,
-                        )
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                        indexed_at: chrono::DateTime::parse_from_rfc3339(
-                            &row.get::<_, String>(11)?,
-                        )
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    })
-                })?
-                .filter_map(|r| r.ok())
-                .collect()
-            } else {
-                stmt.query_map(params![fts_query, limit as i64, offset as i64], |row| {
-                    Ok(Memory {
-                        id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
-                        path: PathBuf::from(row.get::<_, String>(1)?),
-                        source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                        kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-                        metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
-                        tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
-                        embedding_id: row.get(6)?,
-                        connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
-                        is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-                        created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
-                        modified_at: chrono::DateTime::parse_from_rfc3339(
-                            &row.get::<_, String>(10)?,
-                        )
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                        indexed_at: chrono::DateTime::parse_from_rfc3339(
-                            &row.get::<_, String>(11)?,
-                        )
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    })
-                })?
-                .filter_map(|r| r.ok())
-                .collect()
-            };
-            Ok(memories)
-        })();
+        // IMPORTANT: scope the MutexGuard to this block so it is DROPPED before
+        // the `self.search_like(...).await` fallback below. `get_db()` locks a
+        // non-reentrant `std::sync::Mutex`; if the guard were still held when
+        // `search_like` called `get_db()` again on the same thread, it would
+        // deadlock permanently — which happened on every FTS query returning
+        // zero rows.
+        let result: std::result::Result<Vec<Memory>, rusqlite::Error> = {
+            let db = self.get_db()?;
+            (|| {
+                let mut stmt = db.prepare(sql)?;
+                let memories: Vec<Memory> = if let Some(k) = kind {
+                    stmt.query_map(
+                        params![fts_query, k, limit as i64, offset as i64],
+                        Self::row_to_memory,
+                    )?
+                    .filter_map(|r| r.ok())
+                    .collect()
+                } else {
+                    stmt.query_map(
+                        params![fts_query, limit as i64, offset as i64],
+                        Self::row_to_memory,
+                    )?
+                    .filter_map(|r| r.ok())
+                    .collect()
+                };
+                Ok(memories)
+            })()
+        };
 
-        // Fallback to LIKE search if FTS fails
+        // Fallback to LIKE search if FTS fails or matches nothing.
         match result {
             Ok(memories) if !memories.is_empty() => Ok(memories),
             _ => self.search_like(query, kind, limit, offset).await,
@@ -1274,32 +1327,7 @@ impl Storage {
             let results: Vec<Fts5SearchResult> = if let Some(k) = kind {
                 stmt.query_map(params![fts_query, k, limit as i64, offset as i64], |row| {
                     Ok(Fts5SearchResult {
-                        memory: Memory {
-                            id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
-                            path: PathBuf::from(row.get::<_, String>(1)?),
-                            source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                            kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-                            metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
-                            tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
-                            embedding_id: row.get(6)?,
-                            connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
-                            is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-                            created_at: chrono::DateTime::parse_from_rfc3339(
-                                &row.get::<_, String>(9)?,
-                            )
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
-                            modified_at: chrono::DateTime::parse_from_rfc3339(
-                                &row.get::<_, String>(10)?,
-                            )
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
-                            indexed_at: chrono::DateTime::parse_from_rfc3339(
-                                &row.get::<_, String>(11)?,
-                            )
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
-                        },
+                        memory: Self::row_to_memory(row)?,
                         fts5_rank: row.get(12)?,
                         title_snippet: row.get(13)?,
                         filename_snippet: row.get(14)?,
@@ -1312,32 +1340,7 @@ impl Storage {
             } else {
                 stmt.query_map(params![fts_query, limit as i64, offset as i64], |row| {
                     Ok(Fts5SearchResult {
-                        memory: Memory {
-                            id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
-                            path: PathBuf::from(row.get::<_, String>(1)?),
-                            source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                            kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-                            metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
-                            tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
-                            embedding_id: row.get(6)?,
-                            connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
-                            is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-                            created_at: chrono::DateTime::parse_from_rfc3339(
-                                &row.get::<_, String>(9)?,
-                            )
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
-                            modified_at: chrono::DateTime::parse_from_rfc3339(
-                                &row.get::<_, String>(10)?,
-                            )
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
-                            indexed_at: chrono::DateTime::parse_from_rfc3339(
-                                &row.get::<_, String>(11)?,
-                            )
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
-                        },
+                        memory: Self::row_to_memory(row)?,
                         fts5_rank: row.get(12)?,
                         title_snippet: row.get(13)?,
                         filename_snippet: row.get(14)?,
@@ -1351,9 +1354,14 @@ impl Storage {
             Ok(results)
         })();
 
+        // Distinguish "no results" from a genuine failure: propagate (and log)
+        // errors instead of masquerading them as an empty result set.
         match result {
-            Ok(results) if !results.is_empty() => Ok(results),
-            _ => Ok(Vec::new()),
+            Ok(results) => Ok(results),
+            Err(e) => {
+                warn!("FTS5 snippet search failed: {}", e);
+                Err(e.into())
+            }
         }
     }
 
@@ -1377,7 +1385,15 @@ impl Storage {
             )
         };
 
-        Ok(result.unwrap_or(0))
+        // Propagate real failures instead of reporting them as a zero count,
+        // which would silently misrepresent pagination totals.
+        match result {
+            Ok(n) => Ok(n),
+            Err(e) => {
+                warn!("FTS5 result count failed: {}", e);
+                Err(e.into())
+            }
+        }
     }
 
     /// Rebuild the FTS5 index from scratch
@@ -1414,17 +1430,19 @@ impl Storage {
     ) -> Result<Vec<Memory>> {
         let db = self.get_db()?;
 
-        let pattern = format!("%{}%", query.to_lowercase());
+        // Escape LIKE wildcards so a query such as "50%" or "foo_bar" matches
+        // literally instead of being treated as a pattern.
+        let pattern = format!("%{}%", escape_like(&query.to_lowercase()));
 
         let sql = if kind.is_some() {
             r#"SELECT id, path, source_json, kind_json, metadata_json, tags_json,
                       embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
                FROM memories
                WHERE kind_name = ?1 AND (
-                   LOWER(filename) LIKE ?2 OR
-                   LOWER(title) LIKE ?2 OR
-                   LOWER(path) LIKE ?2 OR
-                   LOWER(tags_text) LIKE ?2
+                   LOWER(filename) LIKE ?2 ESCAPE '\' OR
+                   LOWER(title) LIKE ?2 ESCAPE '\' OR
+                   LOWER(path) LIKE ?2 ESCAPE '\' OR
+                   LOWER(tags_text) LIKE ?2 ESCAPE '\'
                )
                ORDER BY modified_at DESC
                LIMIT ?3 OFFSET ?4"#
@@ -1432,10 +1450,10 @@ impl Storage {
             r#"SELECT id, path, source_json, kind_json, metadata_json, tags_json,
                       embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
                FROM memories
-               WHERE LOWER(filename) LIKE ?1 OR
-                     LOWER(title) LIKE ?1 OR
-                     LOWER(path) LIKE ?1 OR
-                     LOWER(tags_text) LIKE ?1
+               WHERE LOWER(filename) LIKE ?1 ESCAPE '\' OR
+                     LOWER(title) LIKE ?1 ESCAPE '\' OR
+                     LOWER(path) LIKE ?1 ESCAPE '\' OR
+                     LOWER(tags_text) LIKE ?1 ESCAPE '\'
                ORDER BY modified_at DESC
                LIMIT ?2 OFFSET ?3"#
         };
@@ -1458,27 +1476,27 @@ impl Storage {
         Ok(memories)
     }
 
-    /// Helper to convert a row to Memory
+    /// Helper to convert a row to `Memory`.
+    ///
+    /// Columns MUST be selected in this order: id, path, source_json,
+    /// kind_json, metadata_json, tags_json, embedding_id, connections_json,
+    /// is_favorite, created_at, modified_at, indexed_at. A corrupt row yields a
+    /// rusqlite error (via the parse helpers) instead of panicking and
+    /// poisoning the DB mutex.
     fn row_to_memory(row: &rusqlite::Row) -> rusqlite::Result<Memory> {
         Ok(Memory {
-            id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+            id: parse_uuid(&row.get::<_, String>(0)?)?,
             path: PathBuf::from(row.get::<_, String>(1)?),
-            source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-            kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-            metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
-            tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
+            source: parse_json(&row.get::<_, String>(2)?)?,
+            kind: parse_json(&row.get::<_, String>(3)?)?,
+            metadata: parse_json(&row.get::<_, String>(4)?)?,
+            tags: parse_json(&row.get::<_, String>(5)?)?,
             embedding_id: row.get(6)?,
-            connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
+            connections: parse_json(&row.get::<_, String>(7)?)?,
             is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-            created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                .unwrap()
-                .with_timezone(&chrono::Utc),
-            modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                .unwrap()
-                .with_timezone(&chrono::Utc),
-            indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
-                .unwrap()
-                .with_timezone(&chrono::Utc),
+            created_at: parse_datetime(&row.get::<_, String>(9)?)?,
+            modified_at: parse_datetime(&row.get::<_, String>(10)?)?,
+            indexed_at: parse_datetime(&row.get::<_, String>(11)?)?,
         })
     }
 
@@ -1497,11 +1515,11 @@ impl Storage {
         let mut conditions = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
-        // Text search condition
+        // Text search condition (LIKE wildcards in user input are escaped)
         if let Some(q) = query {
             if !q.trim().is_empty() {
-                let pattern = format!("%{}%", q.to_lowercase());
-                conditions.push("(LOWER(filename) LIKE ? OR LOWER(title) LIKE ? OR LOWER(path) LIKE ? OR LOWER(tags_text) LIKE ?)".to_string());
+                let pattern = format!("%{}%", escape_like(&q.to_lowercase()));
+                conditions.push("(LOWER(filename) LIKE ? ESCAPE '\\' OR LOWER(title) LIKE ? ESCAPE '\\' OR LOWER(path) LIKE ? ESCAPE '\\' OR LOWER(tags_text) LIKE ? ESCAPE '\\')".to_string());
                 params_vec.push(Box::new(pattern.clone()));
                 params_vec.push(Box::new(pattern.clone()));
                 params_vec.push(Box::new(pattern.clone()));
@@ -1511,8 +1529,8 @@ impl Storage {
 
         // Tag filters
         for tag in tags {
-            conditions.push("LOWER(tags_text) LIKE ?".to_string());
-            params_vec.push(Box::new(format!("%{}%", tag.to_lowercase())));
+            conditions.push("LOWER(tags_text) LIKE ? ESCAPE '\\'".to_string());
+            params_vec.push(Box::new(format!("%{}%", escape_like(&tag.to_lowercase()))));
         }
 
         // Kind filter
@@ -1545,28 +1563,7 @@ impl Storage {
 
         let mut stmt = db.prepare(&sql)?;
         let memories = stmt
-            .query_map(params_refs.as_slice(), |row| {
-                Ok(Memory {
-                    id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
-                    path: PathBuf::from(row.get::<_, String>(1)?),
-                    source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                    kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-                    metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
-                    tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
-                    embedding_id: row.get(6)?,
-                    connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
-                    is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-                    created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                })
-            })?
+            .query_map(params_refs.as_slice(), Self::row_to_memory)?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -1587,8 +1584,8 @@ impl Storage {
 
         if let Some(q) = query {
             if !q.trim().is_empty() {
-                let pattern = format!("%{}%", q.to_lowercase());
-                conditions.push("(LOWER(filename) LIKE ? OR LOWER(title) LIKE ? OR LOWER(path) LIKE ? OR LOWER(tags_text) LIKE ?)".to_string());
+                let pattern = format!("%{}%", escape_like(&q.to_lowercase()));
+                conditions.push("(LOWER(filename) LIKE ? ESCAPE '\\' OR LOWER(title) LIKE ? ESCAPE '\\' OR LOWER(path) LIKE ? ESCAPE '\\' OR LOWER(tags_text) LIKE ? ESCAPE '\\')".to_string());
                 params_vec.push(Box::new(pattern.clone()));
                 params_vec.push(Box::new(pattern.clone()));
                 params_vec.push(Box::new(pattern.clone()));
@@ -1597,8 +1594,8 @@ impl Storage {
         }
 
         for tag in tags {
-            conditions.push("LOWER(tags_text) LIKE ?".to_string());
-            params_vec.push(Box::new(format!("%{}%", tag.to_lowercase())));
+            conditions.push("LOWER(tags_text) LIKE ? ESCAPE '\\'".to_string());
+            params_vec.push(Box::new(format!("%{}%", escape_like(&tag.to_lowercase()))));
         }
 
         if let Some(k) = kind {
@@ -1659,17 +1656,9 @@ impl Storage {
         });
 
         match result {
-            Ok(bytes) => {
-                // Convert bytes back to f32 vector
-                let floats: Vec<f32> = bytes
-                    .chunks(4)
-                    .map(|chunk| {
-                        let arr: [u8; 4] = chunk.try_into().unwrap_or([0; 4]);
-                        f32::from_le_bytes(arr)
-                    })
-                    .collect();
-                Ok(Some(floats))
-            }
+            // Decode the blob, returning an error on a corrupt (non-multiple-of-4)
+            // length rather than silently zeroing a partial chunk.
+            Ok(bytes) => Ok(Some(bytes_to_f32_vec(&bytes)?)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
@@ -1680,63 +1669,81 @@ impl Storage {
         let db = self.get_db()?;
 
         let mut stmt = db.prepare("SELECT memory_id, embedding FROM embeddings")?;
-        let embeddings = stmt
+        let rows: Vec<(String, Vec<u8>)> = stmt
             .query_map([], |row| {
-                let id_str: String = row.get(0)?;
-                let bytes: Vec<u8> = row.get(1)?;
-                Ok((id_str, bytes))
+                Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
             })?
             .filter_map(|r| r.ok())
-            .map(|(id_str, bytes)| {
-                let id = uuid::Uuid::parse_str(&id_str).unwrap();
-                let floats: Vec<f32> = bytes
-                    .chunks(4)
-                    .map(|chunk| {
-                        let arr: [u8; 4] = chunk.try_into().unwrap_or([0; 4]);
-                        f32::from_le_bytes(arr)
-                    })
-                    .collect();
-                (id, floats)
-            })
             .collect();
+
+        // Decode each row, skipping (with a warning) any with an invalid UUID or
+        // corrupt blob rather than panicking or silently zeroing bytes.
+        let mut embeddings = Vec::with_capacity(rows.len());
+        for (id_str, bytes) in rows {
+            let id = match uuid::Uuid::parse_str(&id_str) {
+                Ok(id) => id,
+                Err(e) => {
+                    warn!(
+                        "Skipping embedding with invalid memory id {}: {}",
+                        id_str, e
+                    );
+                    continue;
+                }
+            };
+            match bytes_to_f32_vec(&bytes) {
+                Ok(floats) => embeddings.push((id, floats)),
+                Err(e) => warn!("Skipping corrupt embedding for {}: {}", id, e),
+            }
+        }
 
         Ok(embeddings)
     }
 
     // === Stats ===
 
+    /// Return EVERY memory in the index.
+    ///
+    /// This path previously capped at `LIMIT 5000`, which silently presented a
+    /// truncated view as complete — losing data for callers like `export_index`
+    /// and `find_duplicates` past 5000 files. The cap is removed so the
+    /// full-table iteration is actually complete. For bounded/UI access, use
+    /// `get_all_memories_paginated`.
     pub async fn get_all_memories(&self) -> Result<Vec<Memory>> {
         let db = self.get_db()?;
 
         let mut stmt = db.prepare(
             "SELECT id, path, source_json, kind_json, metadata_json, tags_json,
                     embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
-             FROM memories ORDER BY modified_at DESC LIMIT 5000",
+             FROM memories ORDER BY modified_at DESC",
         )?;
 
         let memories = stmt
-            .query_map([], |row| {
-                Ok(Memory {
-                    id: uuid::Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
-                    path: PathBuf::from(row.get::<_, String>(1)?),
-                    source: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                    kind: serde_json::from_str(&row.get::<_, String>(3)?).unwrap(),
-                    metadata: serde_json::from_str(&row.get::<_, String>(4)?).unwrap(),
-                    tags: serde_json::from_str(&row.get::<_, String>(5)?).unwrap(),
-                    embedding_id: row.get(6)?,
-                    connections: serde_json::from_str(&row.get::<_, String>(7)?).unwrap(),
-                    is_favorite: row.get::<_, i32>(8).unwrap_or(0) == 1,
-                    created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    modified_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    indexed_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(11)?)
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                })
-            })?
+            .query_map([], Self::row_to_memory)?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(memories)
+    }
+
+    /// Return a page of memories ordered by most-recently-modified.
+    ///
+    /// Use this instead of `get_all_memories` when a caller only needs a window
+    /// (e.g. UI lists); it avoids loading the entire table into memory.
+    pub async fn get_all_memories_paginated(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Memory>> {
+        let db = self.get_db()?;
+
+        let mut stmt = db.prepare(
+            "SELECT id, path, source_json, kind_json, metadata_json, tags_json,
+                    embedding_id, connections_json, is_favorite, created_at, modified_at, indexed_at
+             FROM memories ORDER BY modified_at DESC LIMIT ?1 OFFSET ?2",
+        )?;
+
+        let memories = stmt
+            .query_map(params![limit as i64, offset as i64], Self::row_to_memory)?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -2130,16 +2137,15 @@ impl Storage {
 
         if !query.is_empty() {
             conditions.push(
-                "(title LIKE ?1 OR filename LIKE ?1 OR tags_text LIKE ?1 OR path LIKE ?1)"
-                    .to_string(),
+                "(title LIKE ?1 ESCAPE '\\' OR filename LIKE ?1 ESCAPE '\\' OR tags_text LIKE ?1 ESCAPE '\\' OR path LIKE ?1 ESCAPE '\\')".to_string(),
             );
-            param_values.push(Box::new(format!("%{}%", query)));
+            param_values.push(Box::new(format!("%{}%", escape_like(query))));
         }
 
         for (i, tag) in tags.iter().enumerate() {
             let param_idx = param_values.len() + 1;
-            conditions.push(format!("tags_text LIKE ?{}", param_idx));
-            param_values.push(Box::new(format!("%{}%", tag)));
+            conditions.push(format!("tags_text LIKE ?{} ESCAPE '\\'", param_idx));
+            param_values.push(Box::new(format!("%{}%", escape_like(tag))));
             let _ = i; // silence unused warning
         }
 
@@ -2217,6 +2223,31 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_bytes_to_f32_vec_roundtrip() {
+        let original = vec![1.0f32, -2.5, 3.25, 0.0];
+        let bytes: Vec<u8> = original.iter().flat_map(|f| f.to_le_bytes()).collect();
+        let decoded = bytes_to_f32_vec(&bytes).expect("valid blob should decode");
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_bytes_to_f32_vec_corrupt_length_errors() {
+        // 3 bytes is not a multiple of 4 -> must be an error, not a zeroed chunk.
+        let bytes = vec![1u8, 2, 3];
+        assert!(bytes_to_f32_vec(&bytes).is_err());
+        // 5 bytes (one full f32 + a dangling byte) is also corrupt.
+        assert!(bytes_to_f32_vec(&[0u8, 0, 0, 0, 7]).is_err());
+    }
+
+    #[test]
+    fn test_escape_like() {
+        assert_eq!(escape_like("plain"), "plain");
+        assert_eq!(escape_like("50%"), "50\\%");
+        assert_eq!(escape_like("foo_bar"), "foo\\_bar");
+        assert_eq!(escape_like("a\\b"), "a\\\\b");
+    }
 
     #[test]
     fn test_cosine_similarity_identical() {
