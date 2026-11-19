@@ -41,6 +41,22 @@ impl Default for SchedulerConfig {
     }
 }
 
+/// Pure decision for whether a source should be re-synced at `now`.
+///
+/// Returns `true` when the source has never synced (`last_sync` is `None`), or
+/// when at least `interval_secs` have elapsed since `last_sync`. A `last_sync`
+/// in the future (clock skew) yields `false` rather than overflowing.
+pub fn should_sync(
+    last_sync: Option<chrono::DateTime<chrono::Utc>>,
+    now: chrono::DateTime<chrono::Utc>,
+    interval_secs: u64,
+) -> bool {
+    match last_sync {
+        Some(last) => (now - last).num_seconds() >= interval_secs as i64,
+        None => true, // Never synced
+    }
+}
+
 /// Background scheduler that auto-indexes sources on configured intervals
 pub struct Scheduler {
     config: SchedulerConfig,
@@ -121,13 +137,8 @@ impl Scheduler {
                                 default_sync_interval
                             };
 
-                            let needs_sync = match &source_config.last_sync {
-                                Some(last) => {
-                                    let elapsed = (now - *last).num_seconds() as u64;
-                                    elapsed >= sync_interval
-                                }
-                                None => true, // Never synced
-                            };
+                            let needs_sync =
+                                should_sync(source_config.last_sync, now, sync_interval);
 
                             if needs_sync {
                                 let source = source_config.source.clone();

@@ -486,18 +486,16 @@ impl Hippo {
     }
 
     /// Subscribe to file watch events
-    pub fn subscribe_watch_events(
+    ///
+    /// Awaits the watcher lock directly instead of using `block_in_place` +
+    /// `Handle::block_on`, which panics on a current-thread runtime.
+    pub async fn subscribe_watch_events(
         &self,
     ) -> Option<tokio::sync::broadcast::Receiver<watcher::WatchEvent>> {
-        self.watcher.as_ref().map(|w| {
-            // This is a bit tricky - we need to get the receiver without blocking
-            // For now, return None - we'll handle events differently in Tauri
-            // The proper way would be to use a channel that can be subscribed to multiple times
-            // We'll emit events via Tauri's event system instead
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async { w.read().await.subscribe() })
-            })
-        })
+        match self.watcher.as_ref() {
+            Some(w) => Some(w.read().await.subscribe()),
+            None => None,
+        }
     }
 
     // === Duplicate Detection ===
