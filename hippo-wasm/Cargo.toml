@@ -39,13 +39,11 @@ regex = "1"
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 
-[profile.release]
-# Optimize for small code size
-opt-level = "z"     # Optimize for size
-lto = true          # Enable Link Time Optimization
-codegen-units = 1   # Better optimization
-panic = "abort"     # Smaller binary
-strip = true        # Remove debug symbols
-
+# NOTE: Release size tuning (opt-level="z", lto, codegen-units=1, panic="abort",
+# strip) is NOT defined here on purpose. `[profile.*]` is only honored in the
+# root workspace manifest; a copy in a non-root member is silently ignored by
+# Cargo and emits a "profiles for non-root package will be ignored" warning on
+# every `cargo build --workspace`. The size-optimized wasm build is produced via
+# wasm-pack, whose own release profile is configured below.
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ["-Oz", "--enable-mutable-globals"]

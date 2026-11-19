@@ -1,0 +1,177 @@
+name: CI
+
+# Trimmed, workspace-wide CI. This replaces the previously-disabled
+# `ci.yml.disabled` (which fanned out release builds across 3 OSes and a docs
+# job with `-D` rustdoc warnings). The goal here is REAL coverage that actually
+# passes: workspace lint + test, a dedicated wasm target check, and a supply
+# chain audit. Release/artifact builds live in `release.yml`.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Workspace lint: formatting + clippy across every crate and target.
+  lint:
+    name: Lint (fmt + clippy, workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # Needed because `--workspace --all-targets` compiles hippo-tauri.
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-lint-
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (workspace, all targets, warnings are errors)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  # Workspace tests. These must stay hermetic: no network, Ollama, or Qdrant.
+  # hippo-web's hermetic tests live in its binary crate (`src/main.rs`), so
+  # `--workspace` picks them up here.
+  test:
+    name: Test (workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+
+      - name: Run workspace tests
+        run: cargo test --workspace --all-features
+
+  # Dedicated wasm32 target check + wasm-pack build/test for hippo-wasm.
+  wasm:
+    name: WASM (wasm32-unknown-unknown)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (with wasm target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: wasm-cargo-
+
+      - name: Check wasm compilation
+        run: cargo check --target wasm32-unknown-unknown -p hippo-wasm
+
+      - name: Build with wasm-pack
+        run: wasm-pack build hippo-wasm --target web --dev
+
+      - name: Run wasm tests (node)
+        run: wasm-pack test --node hippo-wasm
+
+  # Supply-chain audit. deny.toml drives cargo-deny's policy (advisories,
+  # licenses, bans, sources); cargo-audit is a second check against RUSTSEC.
+  security:
+    name: Security & Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny and cargo-audit
+        run: |
+          cargo install cargo-deny --locked
+          cargo install cargo-audit --locked
+
+      - name: cargo-deny (advisories, licenses, bans, sources)
+        run: cargo deny check
+
+      - name: cargo-audit
+        run: cargo audit
+
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [lint, test, wasm, security]
+    if: always()
+    steps:
+      - name: Verify all required jobs succeeded
+        run: |
+          for result in \
+            "lint=${{ needs.lint.result }}" \
+            "test=${{ needs.test.result }}" \
+            "wasm=${{ needs.wasm.result }}" \
+            "security=${{ needs.security.result }}"; do
+            name="${result%%=*}"
+            status="${result##*=}"
+            if [[ "$status" != "success" ]]; then
+              echo "Job '$name' did not succeed (result: $status)"
+              exit 1
+            fi
+          done
+          echo "All CI jobs passed!"

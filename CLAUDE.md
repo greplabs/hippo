@@ -291,7 +291,32 @@ async fn your_command(param: String, state: State<'_, AppState>) -> Result<T, St
 
 ## Current State
 
-### Latest: Session 15 (February 2026)
+### Latest: Session 16 (Hardening, CI & Testing)
+
+**Branch**: `feature/session16-visualization-testing`
+
+Session 16 pairs the planned visualization work with a reliability/performance/CI
+hardening pass (from an expert review). Landing via this session's PRs:
+
+- **Tauri** (`hippo-tauri/src/main.rs`): `semantic_search` now routes through core
+  `hippo.semantic_search()` (Qdrant ANN over stored embeddings) instead of
+  re-embedding the whole corpus per query; `pick_folder` uses a
+  `tokio::sync::oneshot` (no longer blocks a tokio worker); `reset_index` deletes
+  `hippo.db` plus its `-wal`/`-shm` sidecars (dropping the old instance first);
+  long/network-bound commands (e.g. `ollama_rag_query`) release the `state.hippo`
+  read guard before the Ollama call so writers aren't blocked; `println!` logs
+  replaced with `tracing`; removed a duplicate dead `cosine_similarity`.
+- **Web** (`hippo-web`): extracted `build_router()` and added hermetic in-process
+  API tests (`tower::ServiceExt::oneshot`, no live server/network).
+- **WASM** (`hippo-wasm`): removed the ignored non-root `[profile.release]`
+  (warning-clean `--workspace` builds); release tuning is wasm-pack-only.
+- **CI**: restored a trimmed workspace `ci.yml` (`clippy --workspace --all-targets
+  -D warnings`, `test --workspace`, a `wasm32-unknown-unknown` job, and
+  `cargo deny`/`cargo audit`); made `cli-tests.yml` fmt/clippy blocking.
+- **Sibling core fixes this session** (high level): semantic-search dimension
+  handling, a search deadlock fix, tag-count accuracy, watcher debounce.
+
+### Session 15 (February 2026)
 
 **Branch**: `feature/session15-desktop-experience` | **PR**: #84
 
@@ -303,7 +328,8 @@ async fn your_command(param: String, state: State<'_, AppState>) -> Result<T, St
 - Fixed CSP for Prism.js code preview
 - Fixed batch rename collision check
 - Fixed search history remove persistence + stuck indexing overlay
-- Scheduler: needs wiring to actual re-indexing (pending task #26)
+- Scheduler: fully wired to re-indexing (`scheduler/mod.rs` calls `queue_source` +
+  `update_source_last_sync` on each due source)
 
 ### Release History
 | Version | Date | Key Features |
@@ -317,7 +343,7 @@ async fn your_command(param: String, state: State<'_, AppState>) -> Result<T, St
 |---------|----------|--------|
 | 14 | Saved Searches, Search History, Recent Views, Batch Rename, Paginated Search | Done |
 | 15 | Drag & Drop, Global Hotkey, Scheduled Auto-indexing | Done |
-| 16 | Knowledge Graph Visualization, Location Map | Planned |
+| 16 | Knowledge Graph Visualization, Location Map; plus Hardening, CI & Testing | In progress |
 | 17 | Smart Collections, Natural Language Queries | Planned |
 
 ### Merged PRs

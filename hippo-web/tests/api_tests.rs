@@ -1,6 +1,18 @@
-//! Integration tests for Hippo Web API
+//! Integration (end-to-end) smoke tests for the Hippo Web API.
 //!
-//! These tests start a real server instance and test the API endpoints.
+//! These tests hit a REAL, separately-started server over HTTP and are kept
+//! `#[ignore]`d. Run them manually against a live instance with:
+//!
+//! ```sh
+//! HIPPO_TEST_HOST=127.0.0.1 HIPPO_TEST_PORT=3001 \
+//!   cargo test --package hippo-web -- --ignored
+//! ```
+//!
+//! The fast, CI-friendly coverage lives as hermetic in-process tests in
+//! `src/main.rs` (`mod tests`), which drive the real `build_router()` via
+//! `tower::ServiceExt::oneshot` with no network/server. Those tests cannot live
+//! here because hippo-web has no `[lib]` target, so this external test crate
+//! cannot reach the binary's private router and handlers.
 
 use reqwest::Method;
 use serde_json::json;
