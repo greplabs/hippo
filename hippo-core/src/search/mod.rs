@@ -1068,7 +1068,7 @@ impl Searcher {
         }
 
         // Deduplicate by ID
-        all_results.sort_by(|a, b| a.memory.id.cmp(&b.memory.id));
+        all_results.sort_by_key(|a| a.memory.id);
         all_results.dedup_by(|a, b| a.memory.id == b.memory.id);
 
         // Re-sort by score

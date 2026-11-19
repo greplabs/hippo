@@ -587,7 +587,7 @@ impl OllamaClient {
     /// Generate embedding for a single text (with caching)
     pub async fn embed_single(&self, text: &str) -> Result<Vec<f32>> {
         // Create cache key from text hash
-        let cache_key = format!("{}:{:x}", &self.embedding_model, Self::hash_text(text));
+        let cache_key = format!("{}:{:x}", self.embedding_model, Self::hash_text(text));
 
         // Check cache first
         {
