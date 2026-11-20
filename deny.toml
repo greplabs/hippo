@@ -56,6 +56,9 @@ allow = [
     "0BSD",
     "MPL-2.0",
     "Unicode-3.0",
+    # Permissive data license for the Mozilla CA root bundle shipped by
+    # webpki-roots / webpki-root-certs (pulled in transitively via rustls).
+    "CDLA-Permissive-2.0",
 ]
 # Confidence threshold for license detection
 confidence-threshold = 0.8
