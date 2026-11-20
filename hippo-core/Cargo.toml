@@ -17,9 +17,6 @@ serde_json = { workspace = true }
 # Vector DB
 qdrant-client = { workspace = true }
 
-# ML/Embeddings
-ort = { workspace = true }
-ndarray = { workspace = true }
 
 # File processing
 walkdir = { workspace = true }
