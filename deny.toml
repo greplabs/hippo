@@ -12,6 +12,7 @@ ignore = [
 ]
 
 [licenses]
+version = 2
 # Allow licenses used by Hippo
 allow = [
     "MIT",
@@ -27,9 +28,6 @@ allow = [
     "MPL-2.0",
     "Unicode-3.0",
 ]
-# How to handle licenses that are not in the allow list
-# The 'unlicensed' key was deprecated, use 'default' instead
-default = "deny"
 # Confidence threshold for license detection
 confidence-threshold = 0.8
 

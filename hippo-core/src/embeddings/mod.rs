@@ -32,6 +32,23 @@ pub const CODE_EMBEDDING_DIM: usize = 768; // CodeBERT compatible / nomic
 /// backend is the active provider).
 pub const OPENAI_EMBEDDING_DIM: usize = 1536;
 
+/// Default target chunk size in approximate tokens (whitespace words).
+pub const DEFAULT_CHUNK_TOKENS: usize = 512;
+/// Default overlap between consecutive chunks (~15% of `DEFAULT_CHUNK_TOKENS`).
+pub const DEFAULT_CHUNK_OVERLAP_TOKENS: usize = 76;
+
+/// A slice of a document produced by [`Embedder::chunk_document`].
+///
+/// `char_start`/`char_end` are BYTE offsets into the original text, so
+/// `&text[char_start..char_end] == text` of the chunk (for ASCII these equal
+/// character offsets).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextChunk {
+    pub text: String,
+    pub char_start: usize,
+    pub char_end: usize,
+}
+
 /// Cache configuration
 const EMBEDDING_CACHE_SIZE: usize = 5000;
 const EMBEDDING_CACHE_TTL_SECS: u64 = 3600; // 1 hour TTL
@@ -418,12 +435,18 @@ impl Embedder {
         // Prefer Ollama (document task prefix applied inside embed_documents).
         if let Some(ollama) = &self.ollama {
             if matches!(self.config.api_provider, EmbeddingProvider::Ollama) {
-                match ollama.embed_documents(std::slice::from_ref(&text.to_string())).await {
+                match ollama
+                    .embed_documents(std::slice::from_ref(&text.to_string()))
+                    .await
+                {
                     Ok(mut embs) if !embs.is_empty() => {
                         return Ok(Self::normalized(embs.remove(0)));
                     }
                     Ok(_) => warn!("Ollama returned no document embedding, falling back to hash"),
-                    Err(e) => warn!("Ollama document embedding failed, falling back to hash: {}", e),
+                    Err(e) => warn!(
+                        "Ollama document embedding failed, falling back to hash: {}",
+                        e
+                    ),
                 }
             }
         }
@@ -431,7 +454,9 @@ impl Embedder {
         // OpenAI API if configured.
         if let Some(api_key) = &self.config.api_key {
             if matches!(self.config.api_provider, EmbeddingProvider::OpenAI) {
-                return Ok(Self::normalized(self.embed_with_openai(text, api_key).await?));
+                return Ok(Self::normalized(
+                    self.embed_with_openai(text, api_key).await?,
+                ));
             }
         }
 
@@ -439,26 +464,128 @@ impl Embedder {
         Ok(self.hash_embed(text, self.text_output_dim()))
     }
 
-    /// Scaffold: split a long document into ~512-token chunks with overlap.
+    /// Split a long document into sentence/paragraph-aware chunks with overlap.
     ///
-    /// TODO(chunking): A real document chunking pipeline should produce chunks
-    /// that are embedded independently and indexed as child vectors pointing
-    /// back to a `parent_memory_id`, so that retrieval can match a passage
-    /// rather than a whole-document average. This signature is a placeholder;
-    /// the multi-vector index wiring (child points + parent linkage in storage)
-    /// is intentionally NOT implemented here (needs a storage schema change,
-    /// owned by another module). See report "Deferred" section.
-    #[allow(dead_code)]
-    pub fn chunk_document(text: &str, _chunk_tokens: usize, _overlap_tokens: usize) -> Vec<String> {
-        // Placeholder: return the whole document as a single chunk.
-        vec![text.to_string()]
+    /// Tokens are approximated by whitespace word count (no tokenizer dependency).
+    /// Chunks target `chunk_tokens` words, carry `overlap_tokens` words over from
+    /// the previous chunk, and are never cut mid-word — every boundary falls on a
+    /// word boundary, and chunk ends prefer the nearest sentence/paragraph
+    /// boundary when one lands reasonably close to the size cap. Each returned
+    /// [`TextChunk`] carries BYTE offsets such that
+    /// `&text[char_start..char_end] == chunk.text` (for ASCII these equal
+    /// character offsets).
+    ///
+    /// A short text (<= `chunk_tokens` words) yields exactly one chunk covering
+    /// the whole text; whitespace-only / empty text yields no chunks.
+    pub fn chunk_document(
+        text: &str,
+        chunk_tokens: usize,
+        overlap_tokens: usize,
+    ) -> Vec<TextChunk> {
+        let chunk_tokens = chunk_tokens.max(1);
+        // Overlap must be strictly smaller than the chunk size to guarantee the
+        // window advances every iteration (otherwise the loop could not progress).
+        let overlap_tokens = overlap_tokens.min(chunk_tokens.saturating_sub(1));
+
+        // Byte span (start, end) of every whitespace-delimited word. Using byte
+        // offsets makes `&text[start..end]` slice exactly, so chunks round-trip.
+        let mut words: Vec<(usize, usize)> = Vec::new();
+        let mut word_start: Option<usize> = None;
+        for (i, ch) in text.char_indices() {
+            if ch.is_whitespace() {
+                if let Some(s) = word_start.take() {
+                    words.push((s, i));
+                }
+            } else if word_start.is_none() {
+                word_start = Some(i);
+            }
+        }
+        if let Some(s) = word_start {
+            words.push((s, text.len()));
+        }
+
+        let n = words.len();
+        if n == 0 {
+            return Vec::new();
+        }
+
+        // `sentence_end[i]` marks word `i` as the last word of a sentence or
+        // paragraph: it ends with terminal punctuation (ignoring trailing
+        // quotes/brackets), the gap to the next word contains a newline, or it is
+        // the final word of the text.
+        let bytes = text.as_bytes();
+        let mut sentence_end = vec![false; n];
+        for i in 0..n {
+            let (start, end) = words[i];
+            let word_str = &text[start..end];
+            let trimmed = word_str.trim_end_matches(['"', '\'', ')', ']', '}', '»', '”', '’']);
+            let ends_punct =
+                trimmed.ends_with('.') || trimmed.ends_with('!') || trimmed.ends_with('?');
+            let gap_has_newline = if i + 1 < n {
+                bytes[end..words[i + 1].0].contains(&b'\n')
+            } else {
+                true
+            };
+            sentence_end[i] = ends_punct || gap_has_newline;
+        }
+
+        // Don't let a sentence-boundary trim produce a chunk smaller than half the
+        // target; below that we keep the hard word cap instead.
+        let min_chunk = (chunk_tokens / 2).max(1);
+
+        let mut chunks = Vec::new();
+        let mut start = 0usize;
+        loop {
+            let hard_end = (start + chunk_tokens).min(n);
+            let mut end = hard_end;
+
+            if hard_end < n {
+                // Prefer the last sentence boundary in [start + min_chunk, hard_end).
+                let lower = start + min_chunk;
+                let mut w = hard_end;
+                while w > lower {
+                    w -= 1;
+                    if sentence_end[w] {
+                        end = w + 1; // `end` is exclusive
+                        break;
+                    }
+                }
+            }
+
+            let char_start = words[start].0;
+            let char_end = words[end - 1].1;
+            chunks.push(TextChunk {
+                text: text[char_start..char_end].to_string(),
+                char_start,
+                char_end,
+            });
+
+            if end >= n {
+                break;
+            }
+
+            // Start the next chunk `overlap_tokens` words before this one ended,
+            // but always advance by at least one word.
+            let mut next_start = end.saturating_sub(overlap_tokens);
+            if next_start <= start {
+                next_start = start + 1;
+            }
+            start = next_start;
+        }
+
+        chunks
     }
 
     /// Embed a search query (with caching for repeated queries)
     pub async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
         // Check cache first. Key includes model id + dim so that switching
         // models/providers never returns a stale vector from a prior model.
-        let cache_key = format!("query:{}:{}:{}", self.model_id(), self.text_output_dim(), query);
+        let cache_key = format!(
+            "query:{}:{}:{}",
+            self.model_id(),
+            self.text_output_dim(),
+            query
+        );
         {
             let mut cache = self.cache.write();
             if let Some(cached) = cache.get(&cache_key) {
@@ -496,7 +623,9 @@ impl Embedder {
         // Use OpenAI API if available
         if let Some(api_key) = &self.config.api_key {
             if matches!(self.config.api_provider, EmbeddingProvider::OpenAI) {
-                return Ok(Self::normalized(self.embed_with_openai(query, api_key).await?));
+                return Ok(Self::normalized(
+                    self.embed_with_openai(query, api_key).await?,
+                ));
             }
         }
 
@@ -587,7 +716,11 @@ impl Embedder {
                         for (embedding, (_, memory)) in
                             embeddings.into_iter().zip(code_memories.iter())
                         {
-                            results.push((memory.id, Self::normalized(embedding), "code_embedding"));
+                            results.push((
+                                memory.id,
+                                Self::normalized(embedding),
+                                "code_embedding",
+                            ));
                         }
                     }
                     Err(e) => {
@@ -636,7 +769,11 @@ impl Embedder {
                         for (embedding, (_, memory)) in
                             embeddings.into_iter().zip(text_memories.iter())
                         {
-                            results.push((memory.id, Self::normalized(embedding), "text_embedding"));
+                            results.push((
+                                memory.id,
+                                Self::normalized(embedding),
+                                "text_embedding",
+                            ));
                         }
                     }
                     Err(e) => {
