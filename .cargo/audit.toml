@@ -1,0 +1,31 @@
+# cargo-audit configuration (https://github.com/rustsec/rustsec/tree/main/cargo-audit)
+#
+# The CI "Security & Dependency Audit" job runs BOTH `cargo deny check` and a
+# bare `cargo audit`. cargo-audit does not read deny.toml, so the same set of
+# residual advisories (those with no semver-compatible fix in our dependency
+# range) is mirrored here. See deny.toml for the per-advisory justifications.
+[advisories]
+ignore = [
+    # Vulnerabilities (no in-range fix)
+    "RUSTSEC-2026-0459", # libsqlite3-sys SQLite C CVE (pinned by rusqlite bundled)
+    "RUSTSEC-2026-0187", # lopdf stack overflow (pinned by pdf-extract 0.7)
+    "RUSTSEC-2026-0548", # zip extract name mismatch (fix only in zip 4.x/9.x)
+    "RUSTSEC-2026-0429", # zip extract symlink abort (fix only in zip 4.x/9.x)
+    "RUSTSEC-2026-0367", # zip extract SUID/SGID preservation (fix only in zip 4.x/9.x)
+    "RUSTSEC-2026-0368", # zip extract symlink traversal (fix only in zip 4.x/9.x)
+    "RUSTSEC-2026-0369", # zip extract perms through symlink (fix only in zip 4.x/9.x)
+    "RUSTSEC-2026-0545", # zip AES entries without auth check (fix only in zip 4.x/9.x)
+    # Unmaintained (transitive, no maintained replacement in range)
+    "RUSTSEC-2026-0543", # chrono unmaintained
+    "RUSTSEC-2024-0384", # instant unmaintained
+    "RUSTSEC-2025-0119", # number_prefix unmaintained (via indicatif)
+    "RUSTSEC-2024-0436", # paste unmaintained (compile-time)
+    "RUSTSEC-2024-0370", # proc-macro-error unmaintained (compile-time)
+    "RUSTSEC-2026-0371", # zbus_names unmaintained (via tauri/Linux)
+    "RUSTSEC-2026-0370", # zvariant unmaintained (via tauri/Linux)
+    "RUSTSEC-2026-0372", # zvariant_derive unmaintained (via tauri/Linux)
+    # Unsound (transitive, not reachable from Hippo's code)
+    "RUSTSEC-2024-0429", # glib VariantStrIter unsound (via tauri/GTK)
+    "RUSTSEC-2026-0253", # lru LruCache::pop() UAF (no fix in 0.12 range)
+    "RUSTSEC-2026-0002", # lru IterMut stacked-borrows (no fix in 0.12 range)
+]
