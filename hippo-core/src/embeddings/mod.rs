@@ -435,12 +435,18 @@ impl Embedder {
         // Prefer Ollama (document task prefix applied inside embed_documents).
         if let Some(ollama) = &self.ollama {
             if matches!(self.config.api_provider, EmbeddingProvider::Ollama) {
-                match ollama.embed_documents(std::slice::from_ref(&text.to_string())).await {
+                match ollama
+                    .embed_documents(std::slice::from_ref(&text.to_string()))
+                    .await
+                {
                     Ok(mut embs) if !embs.is_empty() => {
                         return Ok(Self::normalized(embs.remove(0)));
                     }
                     Ok(_) => warn!("Ollama returned no document embedding, falling back to hash"),
-                    Err(e) => warn!("Ollama document embedding failed, falling back to hash: {}", e),
+                    Err(e) => warn!(
+                        "Ollama document embedding failed, falling back to hash: {}",
+                        e
+                    ),
                 }
             }
         }
@@ -448,7 +454,9 @@ impl Embedder {
         // OpenAI API if configured.
         if let Some(api_key) = &self.config.api_key {
             if matches!(self.config.api_provider, EmbeddingProvider::OpenAI) {
-                return Ok(Self::normalized(self.embed_with_openai(text, api_key).await?));
+                return Ok(Self::normalized(
+                    self.embed_with_openai(text, api_key).await?,
+                ));
             }
         }
 
@@ -469,7 +477,11 @@ impl Embedder {
     ///
     /// A short text (<= `chunk_tokens` words) yields exactly one chunk covering
     /// the whole text; whitespace-only / empty text yields no chunks.
-    pub fn chunk_document(text: &str, chunk_tokens: usize, overlap_tokens: usize) -> Vec<TextChunk> {
+    pub fn chunk_document(
+        text: &str,
+        chunk_tokens: usize,
+        overlap_tokens: usize,
+    ) -> Vec<TextChunk> {
         let chunk_tokens = chunk_tokens.max(1);
         // Overlap must be strictly smaller than the chunk size to guarantee the
         // window advances every iteration (otherwise the loop could not progress).
@@ -506,8 +518,7 @@ impl Embedder {
         for i in 0..n {
             let (start, end) = words[i];
             let word_str = &text[start..end];
-            let trimmed =
-                word_str.trim_end_matches(['"', '\'', ')', ']', '}', '»', '”', '’']);
+            let trimmed = word_str.trim_end_matches(['"', '\'', ')', ']', '}', '»', '”', '’']);
             let ends_punct =
                 trimmed.ends_with('.') || trimmed.ends_with('!') || trimmed.ends_with('?');
             let gap_has_newline = if i + 1 < n {
@@ -569,7 +580,12 @@ impl Embedder {
     pub async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
         // Check cache first. Key includes model id + dim so that switching
         // models/providers never returns a stale vector from a prior model.
-        let cache_key = format!("query:{}:{}:{}", self.model_id(), self.text_output_dim(), query);
+        let cache_key = format!(
+            "query:{}:{}:{}",
+            self.model_id(),
+            self.text_output_dim(),
+            query
+        );
         {
             let mut cache = self.cache.write();
             if let Some(cached) = cache.get(&cache_key) {
@@ -607,7 +623,9 @@ impl Embedder {
         // Use OpenAI API if available
         if let Some(api_key) = &self.config.api_key {
             if matches!(self.config.api_provider, EmbeddingProvider::OpenAI) {
-                return Ok(Self::normalized(self.embed_with_openai(query, api_key).await?));
+                return Ok(Self::normalized(
+                    self.embed_with_openai(query, api_key).await?,
+                ));
             }
         }
 
@@ -698,7 +716,11 @@ impl Embedder {
                         for (embedding, (_, memory)) in
                             embeddings.into_iter().zip(code_memories.iter())
                         {
-                            results.push((memory.id, Self::normalized(embedding), "code_embedding"));
+                            results.push((
+                                memory.id,
+                                Self::normalized(embedding),
+                                "code_embedding",
+                            ));
                         }
                     }
                     Err(e) => {
@@ -747,7 +769,11 @@ impl Embedder {
                         for (embedding, (_, memory)) in
                             embeddings.into_iter().zip(text_memories.iter())
                         {
-                            results.push((memory.id, Self::normalized(embedding), "text_embedding"));
+                            results.push((
+                                memory.id,
+                                Self::normalized(embedding),
+                                "text_embedding",
+                            ));
                         }
                     }
                     Err(e) => {

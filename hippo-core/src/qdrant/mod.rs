@@ -98,8 +98,12 @@ impl QdrantStorage {
     /// collection is created at the real runtime dim. (storage/mod.rs currently
     /// calls this variant; see cross-cutting note in the PR.)
     pub async fn ensure_collections(&self) -> Result<()> {
-        self.ensure_collections_with_dims(TEXT_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, CODE_EMBEDDING_DIM)
-            .await
+        self.ensure_collections_with_dims(
+            TEXT_EMBEDDING_DIM,
+            IMAGE_EMBEDDING_DIM,
+            CODE_EMBEDDING_DIM,
+        )
+        .await
     }
 
     /// Ensure collections exist, deriving the TEXT dim from the embedder's
@@ -464,7 +468,10 @@ impl QdrantStorage {
                     "parent_memory_id".to_string(),
                     QdrantValue::from(chunk.parent_memory_id.to_string()),
                 ),
-                ("ordinal".to_string(), QdrantValue::from(chunk.ordinal as i64)),
+                (
+                    "ordinal".to_string(),
+                    QdrantValue::from(chunk.ordinal as i64),
+                ),
                 ("is_chunk".to_string(), QdrantValue::from(true)),
             ]),
         );
@@ -523,16 +530,23 @@ impl QdrantStorage {
 
         let mut hits: Vec<(MemoryId, Option<String>, f32)> = Vec::new();
         for point in results.result {
-            let point_id = match point.id.as_ref().and_then(|id| id.point_id_options.as_ref()) {
+            let point_id = match point
+                .id
+                .as_ref()
+                .and_then(|id| id.point_id_options.as_ref())
+            {
                 Some(qdrant_client::qdrant::point_id::PointIdOptions::Uuid(u)) => u.clone(),
                 Some(qdrant_client::qdrant::point_id::PointIdOptions::Num(n)) => n.to_string(),
                 None => continue,
             };
 
-            let parent_str = point.payload.get("parent_memory_id").and_then(|v| match &v.kind {
-                Some(Kind::StringValue(s)) => Some(s.clone()),
-                _ => None,
-            });
+            let parent_str = point
+                .payload
+                .get("parent_memory_id")
+                .and_then(|v| match &v.kind {
+                    Some(Kind::StringValue(s)) => Some(s.clone()),
+                    _ => None,
+                });
 
             match parent_str {
                 Some(parent) => {
@@ -574,7 +588,11 @@ impl QdrantStorage {
             .await
             .map_err(|e| HippoError::Other(format!("Failed to delete chunk vectors: {}", e)))?;
 
-        debug!("Deleted {} chunk vectors from {}", ids.len(), COLLECTION_TEXT);
+        debug!(
+            "Deleted {} chunk vectors from {}",
+            ids.len(),
+            COLLECTION_TEXT
+        );
         Ok(())
     }
 

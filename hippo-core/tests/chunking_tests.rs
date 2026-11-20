@@ -184,7 +184,10 @@ async fn upsert_and_get_chunks_round_trip() {
     let mem = doc_memory("/tmp/a.txt");
     storage.upsert_memory(&mem).await.expect("upsert memory");
 
-    let chunks = chunks_for(mem.id, &["first passage", "second passage", "third passage"]);
+    let chunks = chunks_for(
+        mem.id,
+        &["first passage", "second passage", "third passage"],
+    );
     storage
         .upsert_chunks(mem.id, &chunks)
         .await
@@ -217,7 +220,10 @@ async fn reindex_replaces_chunks_without_orphans_or_dupes() {
     storage.upsert_memory(&mem).await.expect("upsert memory");
 
     storage
-        .upsert_chunks(mem.id, &chunks_for(mem.id, &["one", "two", "three", "four"]))
+        .upsert_chunks(
+            mem.id,
+            &chunks_for(mem.id, &["one", "two", "three", "four"]),
+        )
         .await
         .expect("first index");
     assert_eq!(storage.get_chunks(mem.id).await.unwrap().len(), 4);
@@ -332,7 +338,11 @@ async fn memory_without_chunks_retrievable_via_whole_doc_fallback() {
         .iter()
         .find(|h| h.memory_id == mem.id)
         .expect("chunk-less memory must still be retrievable via whole-doc embedding");
-    assert!(hit.score > 0.99, "whole-doc self-match score was {}", hit.score);
+    assert!(
+        hit.score > 0.99,
+        "whole-doc self-match score was {}",
+        hit.score
+    );
     assert!(
         hit.best_chunk.is_none(),
         "a chunk-less memory has no best chunk"

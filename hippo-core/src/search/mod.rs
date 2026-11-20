@@ -729,7 +729,10 @@ impl Searcher {
                     .map(|h| (h.memory_id, h.score, h.best_chunk))
                     .collect(),
                 Err(e) => {
-                    warn!("Chunk roll-up failed, falling back to whole-doc search: {}", e);
+                    warn!(
+                        "Chunk roll-up failed, falling back to whole-doc search: {}",
+                        e
+                    );
                     self.storage
                         .search_vectors(query_embedding.clone(), None, limit)
                         .await?
@@ -860,11 +863,13 @@ impl Searcher {
         let mut results: Vec<MemorySearchResult> = fused
             .into_iter()
             .filter_map(|(id, score)| {
-                lookup.remove(&id).map(|(memory, highlights)| MemorySearchResult {
-                    memory,
-                    score,
-                    highlights,
-                })
+                lookup
+                    .remove(&id)
+                    .map(|(memory, highlights)| MemorySearchResult {
+                        memory,
+                        score,
+                        highlights,
+                    })
             })
             .collect();
 

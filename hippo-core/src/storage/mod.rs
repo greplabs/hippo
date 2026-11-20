@@ -65,7 +65,9 @@ fn bytes_to_f32_vec(bytes: &[u8]) -> Result<Vec<f32>> {
         )));
     }
     Ok(bytes
-        .as_chunks::<4>().0.iter()
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect())
 }
@@ -1353,7 +1355,10 @@ impl Storage {
         let mut db = self.get_db()?;
         let tx = db.transaction()?;
         let pid = parent_id.to_string();
-        tx.execute("DELETE FROM chunks WHERE parent_memory_id = ?1", params![pid])?;
+        tx.execute(
+            "DELETE FROM chunks WHERE parent_memory_id = ?1",
+            params![pid],
+        )?;
         tx.execute(
             "DELETE FROM chunk_embeddings WHERE parent_memory_id = ?1",
             params![pid],
@@ -1401,14 +1406,16 @@ impl Storage {
         // guard is scoped so it is dropped before the `await` on Qdrant below.
         let chunk_ids: Vec<String> = {
             let db = self.get_db()?;
-            let mut stmt =
-                db.prepare("SELECT chunk_id FROM chunks WHERE parent_memory_id = ?1")?;
+            let mut stmt = db.prepare("SELECT chunk_id FROM chunks WHERE parent_memory_id = ?1")?;
             let ids: Vec<String> = stmt
                 .query_map(params![pid], |row| row.get::<_, String>(0))?
                 .filter_map(|r| r.ok())
                 .collect();
             drop(stmt);
-            db.execute("DELETE FROM chunks WHERE parent_memory_id = ?1", params![pid])?;
+            db.execute(
+                "DELETE FROM chunks WHERE parent_memory_id = ?1",
+                params![pid],
+            )?;
             db.execute(
                 "DELETE FROM chunk_embeddings WHERE parent_memory_id = ?1",
                 params![pid],
@@ -1440,8 +1447,7 @@ impl Storage {
     ) -> Result<()> {
         {
             let db = self.get_db()?;
-            let embedding_bytes: Vec<u8> =
-                embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
+            let embedding_bytes: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
             db.execute(
                 r#"INSERT OR REPLACE INTO chunk_embeddings
                    (chunk_id, parent_memory_id, embedding, model, created_at)
@@ -1536,7 +1542,10 @@ impl Storage {
                     Err(_) => continue,
                 };
                 let score = cosine_similarity(query, &emb);
-                per_parent.entry(parent_id).or_default().push((score, chunk_id));
+                per_parent
+                    .entry(parent_id)
+                    .or_default()
+                    .push((score, chunk_id));
             }
         }
 
@@ -1546,7 +1555,10 @@ impl Storage {
             scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
             let best_chunk_id = scores.first().map(|(_, id)| id.clone());
             let only_scores: Vec<f32> = scores.iter().map(|(s, _)| *s).collect();
-            best.insert(parent, (Self::apply_rollup(&only_scores, rollup), best_chunk_id));
+            best.insert(
+                parent,
+                (Self::apply_rollup(&only_scores, rollup), best_chunk_id),
+            );
         }
 
         // 2. Whole-document embeddings: a memory with no chunk wins keeps its
@@ -1635,7 +1647,10 @@ impl Storage {
 
         let mut per_parent: HashMap<MemoryId, Vec<(f32, Option<String>)>> = HashMap::new();
         for (parent, chunk_id, score) in raw {
-            per_parent.entry(parent).or_default().push((score, chunk_id));
+            per_parent
+                .entry(parent)
+                .or_default()
+                .push((score, chunk_id));
         }
 
         let mut ranked: Vec<(MemoryId, f32, Option<String>)> = per_parent
@@ -1644,7 +1659,11 @@ impl Storage {
                 scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
                 let best_chunk_id = scores.first().and_then(|(_, c)| c.clone());
                 let only_scores: Vec<f32> = scores.iter().map(|(s, _)| *s).collect();
-                (parent, Self::apply_rollup(&only_scores, rollup), best_chunk_id)
+                (
+                    parent,
+                    Self::apply_rollup(&only_scores, rollup),
+                    best_chunk_id,
+                )
             })
             .collect();
         ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
