@@ -2,6 +2,7 @@
 name = "hippo-tauri"
 version = "1.2.0"
 edition = "2021"
+license.workspace = true
 description = "Hippo desktop app - The memory that never forgets"
 
 [build-dependencies]

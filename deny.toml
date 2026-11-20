@@ -2,16 +2,23 @@
 # https://embarkstudios.github.io/cargo-deny/
 
 [advisories]
+# cargo-deny v2 advisories schema (the old `vulnerability`/`unmaintained`
+# severity keys were removed; policy is now driven by the db + ignore list).
+version = 2
 # The path where the advisory database is cloned/fetched into
 db-path = "~/.cargo/advisory-db"
 # The url(s) of the advisory databases to use
 db-urls = ["https://github.com/rustsec/advisory-db"]
-# Ignore specific advisories (use with caution)
+# Residual advisories with no in-range upgrade available. Each entry is a
+# deliberate, justified acceptance (see `reason`); revisit when a fixed
+# version lands in our dependency range.
 ignore = [
-    # Example: "RUSTSEC-2020-0053"
+    # <populated from CI "Security & Dependency Audit" log after cargo update>
 ]
 
 [licenses]
+# cargo-deny v2 licenses schema.
+version = 2
 # Allow licenses used by Hippo
 allow = [
     "MIT",
@@ -27,9 +34,6 @@ allow = [
     "MPL-2.0",
     "Unicode-3.0",
 ]
-# How to handle licenses that are not in the allow list
-# The 'unlicensed' key was deprecated, use 'default' instead
-default = "deny"
 # Confidence threshold for license detection
 confidence-threshold = 0.8
 

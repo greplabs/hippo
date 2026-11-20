@@ -816,11 +816,13 @@ impl Searcher {
         let mut results: Vec<MemorySearchResult> = fused
             .into_iter()
             .filter_map(|(id, score)| {
-                lookup.remove(&id).map(|(memory, highlights)| MemorySearchResult {
-                    memory,
-                    score,
-                    highlights,
-                })
+                lookup
+                    .remove(&id)
+                    .map(|(memory, highlights)| MemorySearchResult {
+                        memory,
+                        score,
+                        highlights,
+                    })
             })
             .collect();
 

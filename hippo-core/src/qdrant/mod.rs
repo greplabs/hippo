@@ -98,8 +98,12 @@ impl QdrantStorage {
     /// collection is created at the real runtime dim. (storage/mod.rs currently
     /// calls this variant; see cross-cutting note in the PR.)
     pub async fn ensure_collections(&self) -> Result<()> {
-        self.ensure_collections_with_dims(TEXT_EMBEDDING_DIM, IMAGE_EMBEDDING_DIM, CODE_EMBEDDING_DIM)
-            .await
+        self.ensure_collections_with_dims(
+            TEXT_EMBEDDING_DIM,
+            IMAGE_EMBEDDING_DIM,
+            CODE_EMBEDDING_DIM,
+        )
+        .await
     }
 
     /// Ensure collections exist, deriving the TEXT dim from the embedder's
@@ -415,9 +419,17 @@ impl QdrantStorage {
             Ok(response) => {
                 if let Some(point) = response.result.first() {
                     if let Some(vectors) = &point.vectors {
-                        if let Some(qdrant_client::qdrant::vectors::VectorsOptions::Vector(v)) =
-                            &vectors.vectors_options
+                        if let Some(
+                            qdrant_client::qdrant::vectors_output::VectorsOptions::Vector(v),
+                        ) = &vectors.vectors_options
                         {
+                            // qdrant-client 1.20 split vector input/output types and
+                            // deprecated `VectorOutput::data` in favour of the typed
+                            // dense/sparse/multi accessors. For our single dense-vector
+                            // collections `data` still holds the f32 values.
+                            // TODO: migrate to the typed VectorOutput accessors once the
+                            // 1.20 API stabilises a non-deprecated path for dense vectors.
+                            #[allow(deprecated)]
                             return Ok(Some(v.data.clone()));
                         }
                     }

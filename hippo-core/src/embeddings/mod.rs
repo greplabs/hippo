@@ -418,12 +418,18 @@ impl Embedder {
         // Prefer Ollama (document task prefix applied inside embed_documents).
         if let Some(ollama) = &self.ollama {
             if matches!(self.config.api_provider, EmbeddingProvider::Ollama) {
-                match ollama.embed_documents(std::slice::from_ref(&text.to_string())).await {
+                match ollama
+                    .embed_documents(std::slice::from_ref(&text.to_string()))
+                    .await
+                {
                     Ok(mut embs) if !embs.is_empty() => {
                         return Ok(Self::normalized(embs.remove(0)));
                     }
                     Ok(_) => warn!("Ollama returned no document embedding, falling back to hash"),
-                    Err(e) => warn!("Ollama document embedding failed, falling back to hash: {}", e),
+                    Err(e) => warn!(
+                        "Ollama document embedding failed, falling back to hash: {}",
+                        e
+                    ),
                 }
             }
         }
@@ -431,7 +437,9 @@ impl Embedder {
         // OpenAI API if configured.
         if let Some(api_key) = &self.config.api_key {
             if matches!(self.config.api_provider, EmbeddingProvider::OpenAI) {
-                return Ok(Self::normalized(self.embed_with_openai(text, api_key).await?));
+                return Ok(Self::normalized(
+                    self.embed_with_openai(text, api_key).await?,
+                ));
             }
         }
 
@@ -458,7 +466,12 @@ impl Embedder {
     pub async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
         // Check cache first. Key includes model id + dim so that switching
         // models/providers never returns a stale vector from a prior model.
-        let cache_key = format!("query:{}:{}:{}", self.model_id(), self.text_output_dim(), query);
+        let cache_key = format!(
+            "query:{}:{}:{}",
+            self.model_id(),
+            self.text_output_dim(),
+            query
+        );
         {
             let mut cache = self.cache.write();
             if let Some(cached) = cache.get(&cache_key) {
@@ -496,7 +509,9 @@ impl Embedder {
         // Use OpenAI API if available
         if let Some(api_key) = &self.config.api_key {
             if matches!(self.config.api_provider, EmbeddingProvider::OpenAI) {
-                return Ok(Self::normalized(self.embed_with_openai(query, api_key).await?));
+                return Ok(Self::normalized(
+                    self.embed_with_openai(query, api_key).await?,
+                ));
             }
         }
 
@@ -587,7 +602,11 @@ impl Embedder {
                         for (embedding, (_, memory)) in
                             embeddings.into_iter().zip(code_memories.iter())
                         {
-                            results.push((memory.id, Self::normalized(embedding), "code_embedding"));
+                            results.push((
+                                memory.id,
+                                Self::normalized(embedding),
+                                "code_embedding",
+                            ));
                         }
                     }
                     Err(e) => {
@@ -636,7 +655,11 @@ impl Embedder {
                         for (embedding, (_, memory)) in
                             embeddings.into_iter().zip(text_memories.iter())
                         {
-                            results.push((memory.id, Self::normalized(embedding), "text_embedding"));
+                            results.push((
+                                memory.id,
+                                Self::normalized(embedding),
+                                "text_embedding",
+                            ));
                         }
                     }
                     Err(e) => {
