@@ -5,8 +5,13 @@
 # cargo-deny v2 advisories schema (the old `vulnerability`/`unmaintained`
 # severity keys were removed; policy is now driven by the db + ignore list).
 version = 2
-# The path where the advisory database is cloned/fetched into
-db-path = "~/.cargo/advisory-db"
+# The path where the advisory database is cloned/fetched into.
+# NOTE: deliberately distinct from cargo-audit's default (~/.cargo/advisory-db).
+# The Security CI job runs `cargo deny check` and then `cargo audit` in the same
+# job; if both clone into the same directory, cargo-audit's clone fails with
+# "failed to prepare clone" because cargo-deny already populated it. Keeping the
+# two databases separate lets each tool manage its own clone.
+db-path = "~/.cargo/advisory-db-deny"
 # The url(s) of the advisory databases to use
 db-urls = ["https://github.com/rustsec/advisory-db"]
 # Residual advisories with no in-range upgrade available. Each entry is a
