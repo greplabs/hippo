@@ -273,8 +273,5 @@ async fn batch_upsert_empty_is_noop() {
         .upsert_memories_batch(&[])
         .await
         .expect("empty batch ok");
-    assert_eq!(
-        storage.get_all_memories().await.expect("get_all").len(),
-        0
-    );
+    assert_eq!(storage.get_all_memories().await.expect("get_all").len(), 0);
 }

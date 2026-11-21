@@ -2,6 +2,7 @@
 name = "hippo-wasm"
 version.workspace = true
 edition = "2021"
+license.workspace = true
 description = "WebAssembly bindings for Hippo search engine"
 
 [lib]

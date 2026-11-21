@@ -32,10 +32,6 @@ serde_json = "1.0"
 # Vector database
 qdrant-client = "1.12"
 
-# Embeddings & ML
-ort = { version = "2.0.0-rc.10", features = ["download-binaries"] }  # ONNX Runtime
-ndarray = "0.16"
-
 # File processing
 walkdir = "2.5"
 mime_guess = "2.0"

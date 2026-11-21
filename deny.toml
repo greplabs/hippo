@@ -2,16 +2,51 @@
 # https://embarkstudios.github.io/cargo-deny/
 
 [advisories]
-# The path where the advisory database is cloned/fetched into
-db-path = "~/.cargo/advisory-db"
+# cargo-deny v2 advisories schema (the old `vulnerability`/`unmaintained`
+# severity keys were removed; policy is now driven by the db + ignore list).
+version = 2
+# The path where the advisory database is cloned/fetched into.
+# NOTE: deliberately distinct from cargo-audit's default (~/.cargo/advisory-db).
+# The Security CI job runs `cargo deny check` and then `cargo audit` in the same
+# job; if both clone into the same directory, cargo-audit's clone fails with
+# "failed to prepare clone" because cargo-deny already populated it. Keeping the
+# two databases separate lets each tool manage its own clone.
+db-path = "~/.cargo/advisory-db-deny"
 # The url(s) of the advisory databases to use
 db-urls = ["https://github.com/rustsec/advisory-db"]
-# Ignore specific advisories (use with caution)
+# Residual advisories with no in-range upgrade available. Each entry is a
+# deliberate, justified acceptance (see `reason`); revisit when a fixed
+# version lands in our dependency range.
 ignore = [
-    # Example: "RUSTSEC-2020-0053"
+    # --- Vulnerabilities (no semver-compatible fix available) ---
+    { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys SQLite C CVE; version is pinned by rusqlite's `bundled` feature and no fix exists in rusqlite 0.32's range. Hippo only ever opens its own local, app-created database, not untrusted SQLite files." },
+    { id = "RUSTSEC-2026-0187", reason = "lopdf stack overflow on deeply nested PDF objects; lopdf is a transitive dep of pdf-extract 0.7 which pins the vulnerable 0.34 line, so no in-range bump. Only reachable while extracting text from a maliciously crafted PDF." },
+    { id = "RUSTSEC-2026-0548", reason = "zip ZipStreamReader local-header/central-directory name mismatch during extraction. Fix is only in zip 4.x/9.x (a major bump out of our 2.x range). Hippo reads ZIP-based Office document metadata in-memory and never extracts untrusted archives to disk." },
+    { id = "RUSTSEC-2026-0429", reason = "zip ZipArchive::extract process abort on oversized symlink entry; fixed only in zip 4.x/9.x (out of our 2.x range). Hippo does not call extract() on untrusted archives." },
+    { id = "RUSTSEC-2026-0367", reason = "zip insecure SUID/SGID preservation during extraction; fixed only in zip 4.x/9.x (out of range). Hippo does not extract untrusted archives to disk." },
+    { id = "RUSTSEC-2026-0368", reason = "zip extract() creates symlinks with attacker-controlled targets outside the destination; fixed only in zip 4.x/9.x (out of range). Hippo does not extract untrusted archives." },
+    { id = "RUSTSEC-2026-0369", reason = "zip extract() applies Unix permissions through symlinks without confining the target; fixed only in zip 4.x/9.x (out of range). Hippo does not extract untrusted archives." },
+    { id = "RUSTSEC-2026-0545", reason = "zip returns AES entries without verifying the authentication code on short/empty data; fixed only in zip 4.x/9.x (out of range). Hippo does not decrypt untrusted AES-protected ZIPs." },
+
+    # --- Unmaintained crates (transitive; no maintained drop-in within range) ---
+    { id = "RUSTSEC-2026-0543", reason = "chrono flagged unmaintained; still the de-facto date/time crate with no drop-in replacement, and no security defect. Will migrate if a successor stabilises." },
+    { id = "RUSTSEC-2024-0384", reason = "instant unmaintained; pulled in transitively (wasm timing shim), not used directly. No maintained replacement available through our dependency tree." },
+    { id = "RUSTSEC-2025-0119", reason = "number_prefix unmaintained; transitive via indicatif progress bars. Build/display-only, no security impact." },
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained; compile-time proc-macro helper pulled in transitively, no runtime code and no replacement in range." },
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error unmaintained; compile-time macro helper pulled in transitively, no runtime exposure." },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names unmaintained; transitive via tauri's Linux D-Bus stack, not used directly and no replacement in range." },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant unmaintained; transitive via tauri/zbus on Linux, not used directly and no replacement in range." },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive unmaintained; transitive via tauri/zbus on Linux, compile-time only." },
+
+    # --- Unsound (transitive; not reachable from Hippo's own code paths) ---
+    { id = "RUSTSEC-2024-0429", reason = "glib VariantStrIter unsoundness; transitive via tauri's GTK stack on Linux and not invoked by Hippo. No fix in the version tauri pins." },
+    { id = "RUSTSEC-2026-0253", reason = "lru LruCache::pop() panic-safety UAF; latest lru in our 0.12 range is still affected (fix needs a major bump). Our cache values are plain owned data whose Drop cannot panic, so the UAF path is not reachable." },
+    { id = "RUSTSEC-2026-0002", reason = "lru IterMut Stacked-Borrows violation; same crate, no fix in our 0.12 range. Hippo does not use IterMut on its LRU caches." },
 ]
 
 [licenses]
+# cargo-deny v2 licenses schema.
+version = 2
 # Allow licenses used by Hippo
 allow = [
     "MIT",
@@ -26,10 +61,10 @@ allow = [
     "0BSD",
     "MPL-2.0",
     "Unicode-3.0",
+    # Permissive data license for the Mozilla CA root bundle shipped by
+    # webpki-roots / webpki-root-certs (pulled in transitively via rustls).
+    "CDLA-Permissive-2.0",
 ]
-# How to handle licenses that are not in the allow list
-# The 'unlicensed' key was deprecated, use 'default' instead
-default = "deny"
 # Confidence threshold for license detection
 confidence-threshold = 0.8
 
