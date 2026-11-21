@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AiProvider","DuplicateType"],"mod":["analysis"],"struct":["AiConfig","ClaudeClient","CodeSummary","CollectionSuggestion","DocumentSummary","DuplicateMatch","FileAnalysis","OrganizationSuggestion","SimilarFile","TagSuggestion","UnifiedAiClient"]};

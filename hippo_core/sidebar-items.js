@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["ai","duplicates","embeddings","error","graph","indexer","models","ollama","organization","qdrant","scheduler","search","sources","storage","thumbnails","watcher"],"struct":["Hippo","HippoConfig"]};

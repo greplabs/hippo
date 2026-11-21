@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_TEXT_PREVIEW_CHARS"],"fn":["extract_metadata"]};
