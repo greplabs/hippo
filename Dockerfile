@@ -2,7 +2,9 @@
 # Note: GUI (Tauri) app cannot run in Docker without X11/Wayland
 
 # Build stage
-FROM rust:1.85-slim-bookworm AS builder
+# rust:1 tracks the latest stable 1.x — the updated deps (encoding_rs/icu_*)
+# require rustc >= 1.88, which the old 1.85 pin couldn't satisfy.
+FROM rust:1-slim-bookworm AS builder
 
 # Cap lints to warnings for dependencies (required for zune-jpeg SIMD intrinsics)
 ENV CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_OPT_LEVEL="2"

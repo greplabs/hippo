@@ -47,7 +47,7 @@ jobs:
 
           # Build JSON payload using file input (avoids argument length issues)
           jq -n --rawfile diff /tmp/diff.txt '{
-            model: "claude-sonnet-4-20250514",
+            model: "claude-sonnet-5-5",
             max_tokens: 2048,
             messages: [{
               role: "user",
