@@ -184,6 +184,16 @@ pub struct HippoConfig {
     /// How chunk-level scores roll up to a parent memory's semantic score.
     /// Default: [`ChunkRollup::Max`] (score by best-matching chunk).
     pub chunk_rollup: ChunkRollup,
+
+    /// Whether to run the result reranking stage after Reciprocal Rank Fusion in
+    /// hybrid search. When false, behaviour is exactly today's RRF order.
+    /// Default: true (uses the zero-dependency [`search::HeuristicReranker`]).
+    pub rerank_enabled: bool,
+
+    /// How many top candidates (by fused RRF score) to rerank before truncating
+    /// to the requested limit. Candidates past this cutoff keep their RRF order.
+    /// Default: 50.
+    pub rerank_candidates: usize,
 }
 
 impl Default for HippoConfig {
@@ -205,6 +215,8 @@ impl Default for HippoConfig {
             auto_tag_enabled: true,
             chunking_enabled: true,
             chunk_rollup: ChunkRollup::Max,
+            rerank_enabled: true,
+            rerank_candidates: 50,
         }
     }
 }

@@ -6,10 +6,12 @@
 //! - Optimized scoring algorithms
 
 mod advanced_filter;
+pub mod rerank;
 
 pub use advanced_filter::{
     AdvancedFilter, ExtensionFilter, FilterBuilder, MatchMode, MetadataMatch,
 };
+pub use rerank::{rerank_stage, HeuristicReranker, RerankWeights, Reranker};
 
 use crate::embeddings::Embedder;
 use crate::error::Result;
@@ -297,6 +299,12 @@ pub struct Searcher {
     chunking_enabled: bool,
     /// How chunk scores roll up to a parent memory's semantic score.
     chunk_rollup: ChunkRollup,
+    /// Second-stage reranker applied after RRF fusion in `hybrid_search`.
+    reranker: Arc<dyn Reranker>,
+    /// Whether the rerank stage runs (false ⇒ raw RRF order).
+    rerank_enabled: bool,
+    /// How many top fused candidates to rerank before truncating to `limit`.
+    rerank_candidates: usize,
     // Performance cache for search results
     search_cache: Arc<RwLock<LruCache<u64, SearchCacheEntry>>>,
 }
@@ -313,6 +321,9 @@ impl Searcher {
             hybrid_config: HybridSearchConfig::default(),
             chunking_enabled: config.chunking_enabled,
             chunk_rollup: config.chunk_rollup,
+            reranker: Arc::new(HeuristicReranker::new()),
+            rerank_enabled: config.rerank_enabled,
+            rerank_candidates: config.rerank_candidates,
             search_cache: Arc::new(RwLock::new(LruCache::new(
                 NonZeroUsize::new(SEARCH_CACHE_SIZE).unwrap(),
             ))),
@@ -332,6 +343,9 @@ impl Searcher {
             hybrid_config,
             chunking_enabled: config.chunking_enabled,
             chunk_rollup: config.chunk_rollup,
+            reranker: Arc::new(HeuristicReranker::new()),
+            rerank_enabled: config.rerank_enabled,
+            rerank_candidates: config.rerank_candidates,
             search_cache: Arc::new(RwLock::new(LruCache::new(
                 NonZeroUsize::new(SEARCH_CACHE_SIZE).unwrap(),
             ))),
@@ -878,6 +892,17 @@ impl Searcher {
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+
+        // Second-stage precision rerank over the top fused candidates, BEFORE
+        // truncating to `limit`. When `rerank_enabled` is false this is an
+        // identity pass and the final order is exactly the RRF order above.
+        let mut results = rerank::rerank_stage(
+            self.reranker.as_ref(),
+            query,
+            results,
+            self.rerank_enabled,
+            self.rerank_candidates,
+        );
         results.truncate(limit);
 
         Ok(SearchResults {
