@@ -98,3 +98,11 @@ parking_lot = "0.12"       # Faster mutexes
 # Archive extraction (for Qdrant auto-install)
 flate2 = "1.0"
 tar = "0.4"
+
+# ONNX cross-encoder reranker (OPTIONAL — only pulled in by the hippo-core
+# `reranker-onnx` feature; OFF by default so Windows/default builds never
+# compile `ort-sys`, which panics on Windows CI). See hippo-core/src/search/rerank.rs.
+# `download-binaries` fetches a prebuilt ONNX Runtime at build time (Linux/macOS CI).
+# Default ort features already include: std, ndarray, tracing, download-binaries, copy-dylibs.
+ort = { version = "=2.0.0-rc.10", features = ["download-binaries", "ndarray"] }
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
