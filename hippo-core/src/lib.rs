@@ -194,6 +194,12 @@ pub struct HippoConfig {
     /// to the requested limit. Candidates past this cutoff keep their RRF order.
     /// Default: 50.
     pub rerank_candidates: usize,
+
+    /// Opt-in to real CLIP image embeddings for image files. Only has an effect
+    /// when hippo-core is built with the `image-clip` cargo feature (which pulls
+    /// the optional `ort`/ONNX Runtime dependency); otherwise image files use
+    /// the deterministic placeholder regardless of this flag. Default: false.
+    pub image_clip_enabled: bool,
 }
 
 impl Default for HippoConfig {
@@ -217,6 +223,7 @@ impl Default for HippoConfig {
             chunk_rollup: ChunkRollup::Max,
             rerank_enabled: true,
             rerank_candidates: 50,
+            image_clip_enabled: false,
         }
     }
 }

@@ -5,7 +5,21 @@
 //! - API-based embeddings (OpenAI)
 //! - Simple hash-based fallback for offline use
 
+#[cfg(feature = "image-clip")]
+mod clip;
+
 use crate::error::{HippoError, Result};
+
+/// Resolve where the CLIP ONNX model is cached. Prefers the embedder's model
+/// directory; otherwise the platform data dir, finally a repo-local fallback.
+#[cfg(feature = "image-clip")]
+fn clip_cache_dir_from(model_path: &Option<std::path::PathBuf>) -> std::path::PathBuf {
+    model_path.clone().unwrap_or_else(|| {
+        directories::ProjectDirs::from("", "", "Hippo")
+            .map(|d| d.data_dir().join("models"))
+            .unwrap_or_else(|| std::path::PathBuf::from(".hippo/models"))
+    })
+}
 use crate::models::*;
 use crate::ollama::{OllamaClient, OllamaConfig};
 use crate::HippoConfig;
@@ -171,6 +185,14 @@ pub struct Embedder {
     ollama: Option<OllamaClient>,
     /// Query embedding cache for faster repeated searches
     cache: Arc<RwLock<EmbeddingCache>>,
+    /// Lazily-loaded CLIP image encoder (only present under `image-clip`).
+    /// `None` inside the `OnceCell` means the model could not be loaded and we
+    /// have permanently fallen back to the placeholder for this session.
+    #[cfg(feature = "image-clip")]
+    clip: tokio::sync::OnceCell<Option<Arc<clip::ClipImageEncoder>>>,
+    /// Directory under which the CLIP ONNX model is cached.
+    #[cfg(feature = "image-clip")]
+    clip_cache_dir: std::path::PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -179,6 +201,10 @@ pub struct EmbedderConfig {
     pub model_path: Option<std::path::PathBuf>,
     pub api_key: Option<String>,
     pub api_provider: EmbeddingProvider,
+    /// Opt-in to real CLIP image embeddings. Only has an effect when the
+    /// `image-clip` cargo feature is compiled in; otherwise the (fixed)
+    /// deterministic placeholder is always used.
+    pub image_clip: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -213,12 +239,18 @@ impl Embedder {
             EmbeddingProvider::Local
         };
 
+        let model_path = Some(config.data_dir.join("models"));
         Ok(Self {
+            #[cfg(feature = "image-clip")]
+            clip: tokio::sync::OnceCell::new(),
+            #[cfg(feature = "image-clip")]
+            clip_cache_dir: clip_cache_dir_from(&model_path),
             config: EmbedderConfig {
                 use_local: config.local_embeddings,
-                model_path: Some(config.data_dir.join("models")),
+                model_path,
                 api_key: config.ai_api_key.clone(),
                 api_provider: provider,
+                image_clip: config.image_clip_enabled,
             },
             client: Client::new(),
             ollama,
@@ -233,11 +265,16 @@ impl Embedder {
             ..Default::default()
         };
         Self {
+            #[cfg(feature = "image-clip")]
+            clip: tokio::sync::OnceCell::new(),
+            #[cfg(feature = "image-clip")]
+            clip_cache_dir: clip_cache_dir_from(&None),
             config: EmbedderConfig {
                 use_local: true,
                 model_path: None,
                 api_key: None,
                 api_provider: EmbeddingProvider::Ollama,
+                image_clip: false,
             },
             client: Client::new(),
             ollama: Some(OllamaClient::with_config(ollama_config)),
@@ -248,11 +285,16 @@ impl Embedder {
     /// Create embedder with OpenAI API
     pub fn with_openai(api_key: String) -> Self {
         Self {
+            #[cfg(feature = "image-clip")]
+            clip: tokio::sync::OnceCell::new(),
+            #[cfg(feature = "image-clip")]
+            clip_cache_dir: clip_cache_dir_from(&None),
             config: EmbedderConfig {
                 use_local: false,
                 model_path: None,
                 api_key: Some(api_key),
                 api_provider: EmbeddingProvider::OpenAI,
+                image_clip: false,
             },
             client: Client::new(),
             ollama: None,
@@ -323,51 +365,112 @@ impl Embedder {
         }
     }
 
-    /// Embed an image file
+    /// Embed an image file.
     ///
-    /// TODO(image-embeddings): This is a degenerate placeholder, NOT a real
-    /// image embedding. It writes raw downsampled RGB pixel values into the
-    /// vector; the 16x16 downsample only fills ~170 of the 512 dims (the
-    /// `i * 3 + 2 < len` guard stops early) and the dimension-info block at
-    /// `dim_idx = 256 * 3 = 768` is dead code (768 > IMAGE_EMBEDDING_DIM=512).
-    /// These vectors are not semantically comparable across images. Replace with
-    /// real CLIP ViT-B/32 (512-dim) embeddings via ONNX Runtime. Left as-is
-    /// (behavior unchanged) because a proper fix needs model/ONNX infra that is
-    /// unavailable in this environment. See report "Deferred" section.
+    /// When the `image-clip` feature is compiled in AND `config.image_clip` is
+    /// set, this runs a real CLIP ViT-B/32 (512-dim) embedding via ONNX Runtime
+    /// (see [`clip`]). If CLIP is unavailable (feature off, opt-in off, or the
+    /// model can't be loaded) it falls back to the deterministic placeholder in
+    /// [`Self::embed_image_placeholder`]. Image indexing never hard-fails on a
+    /// CLIP error — it degrades to the placeholder.
     async fn embed_image(&self, path: &Path) -> Result<Vec<f32>> {
         debug!("Generating image embedding for: {:?}", path);
 
+        #[cfg(feature = "image-clip")]
+        {
+            if self.config.image_clip {
+                match self.clip_embed_image(path).await {
+                    Ok(Some(embedding)) => return Ok(embedding),
+                    // Model unavailable: already logged once at load time.
+                    Ok(None) => {}
+                    Err(e) => warn!(
+                        "CLIP image embedding failed ({}), using placeholder for {:?}",
+                        e, path
+                    ),
+                }
+            }
+        }
+
+        self.embed_image_placeholder(path)
+    }
+
+    /// CLIP image embedding path (feature `image-clip`).
+    ///
+    /// Returns `Ok(None)` when the model could not be loaded (permanent
+    /// fallback for this session), `Ok(Some(vec))` on success. The 512-dim,
+    /// L2-normalized output matches the `hippo_images` collection dimension.
+    ///
+    /// NOT runtime-tested here (requires network + the ONNX Runtime library);
+    /// compile-verified only.
+    #[cfg(feature = "image-clip")]
+    async fn clip_embed_image(&self, path: &Path) -> Result<Option<Vec<f32>>> {
+        let encoder = self
+            .clip
+            .get_or_init(|| async {
+                match clip::ClipImageEncoder::load(&self.clip_cache_dir).await {
+                    Ok(enc) => Some(Arc::new(enc)),
+                    Err(e) => {
+                        warn!(
+                            "CLIP model unavailable, falling back to placeholder image embeddings: {}",
+                            e
+                        );
+                        None
+                    }
+                }
+            })
+            .await;
+
+        let Some(encoder) = encoder.clone() else {
+            return Ok(None);
+        };
+
+        let img = image::open(path)
+            .map_err(|e| HippoError::Other(format!("Failed to open image for CLIP: {e}")))?;
+
+        // ONNX inference is synchronous/CPU-bound; run it on the blocking pool
+        // so it never stalls the async runtime.
+        let embedding = tokio::task::spawn_blocking(move || encoder.embed(&img))
+            .await
+            .map_err(|e| HippoError::Other(format!("CLIP inference task failed: {e}")))??;
+        Ok(Some(embedding))
+    }
+
+    /// Deterministic placeholder image "embedding" (feature `image-clip` off, or
+    /// CLIP unavailable).
+    ///
+    /// This is NOT a semantic embedding — it is a normalized downsample of the
+    /// image's pixels, comparable only in a coarse visual sense. It exists so
+    /// the default build still produces a stable, correctly-sized 512-dim
+    /// vector for the `hippo_images` collection.
+    ///
+    /// Previously this loop had a dead-code bug: the `i * 3 + 2 < len` guard
+    /// stopped after ~170 of the 256 downsampled pixels (leaving the tail dims
+    /// unfilled) and a dimension-info block keyed at `256 * 3 = 768` was
+    /// unreachable (`768 > IMAGE_EMBEDDING_DIM = 512`). The rewrite below fills
+    /// every one of the 512 dims exactly once from the downsampled RGB values.
+    fn embed_image_placeholder(&self, path: &Path) -> Result<Vec<f32>> {
         match image::open(path) {
             Ok(img) => {
-                // Create a simple embedding from image statistics
                 let rgb = img.to_rgb8();
-                let (width, height) = rgb.dimensions();
 
-                // Calculate basic statistics per channel
-                let mut embedding = vec![0.0f32; IMAGE_EMBEDDING_DIM];
-
-                // Resize to 16x16 for feature extraction
+                // Downsample to a small fixed grid for a stable feature vector.
+                // 16x16 RGB = 768 channel values; we fill exactly the first
+                // IMAGE_EMBEDDING_DIM (512) of them — no gaps, no dead code.
                 let small =
                     image::imageops::resize(&rgb, 16, 16, image::imageops::FilterType::Triangle);
 
-                // Use pixel values as features
-                for (i, pixel) in small.pixels().enumerate() {
-                    if i * 3 + 2 < embedding.len() {
-                        embedding[i * 3] = pixel[0] as f32 / 255.0;
-                        embedding[i * 3 + 1] = pixel[1] as f32 / 255.0;
-                        embedding[i * 3 + 2] = pixel[2] as f32 / 255.0;
+                let mut embedding = vec![0.0f32; IMAGE_EMBEDDING_DIM];
+                let mut idx = 0usize;
+                'fill: for pixel in small.pixels() {
+                    for channel in 0..3 {
+                        if idx >= embedding.len() {
+                            break 'fill;
+                        }
+                        embedding[idx] = pixel[channel] as f32 / 255.0;
+                        idx += 1;
                     }
                 }
 
-                // Add dimension info
-                let dim_idx = 256 * 3;
-                if dim_idx + 2 < embedding.len() {
-                    embedding[dim_idx] = (width as f32).ln() / 10.0;
-                    embedding[dim_idx + 1] = (height as f32).ln() / 10.0;
-                    embedding[dim_idx + 2] = (width as f32 / height as f32).min(5.0) / 5.0;
-                }
-
-                // Normalize
                 Self::normalize(&mut embedding);
                 Ok(embedding)
             }

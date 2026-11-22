@@ -98,3 +98,10 @@ parking_lot = "0.12"       # Faster mutexes
 # Archive extraction (for Qdrant auto-install)
 flate2 = "1.0"
 tar = "0.4"
+
+# Local CLIP image embeddings via ONNX Runtime (OPTIONAL, feature-gated).
+# Pulled in ONLY by hippo-core's `image-clip` feature. Kept OUT of the default
+# build because `ort-sys` is known to panic on Windows CI. `download-binaries`
+# fetches a prebuilt ONNX Runtime at build time (same version the reranker PR
+# uses); the orchestrator reconciles the overlap between this and that PR.
+ort = { version = "=2.0.0-rc.10", features = ["download-binaries"] }
