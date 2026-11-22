@@ -309,6 +309,40 @@ pub struct Searcher {
     search_cache: Arc<RwLock<LruCache<u64, SearchCacheEntry>>>,
 }
 
+/// Select the second-stage reranker for a config.
+///
+/// Default (and any build without the `reranker-onnx` feature): the
+/// zero-dependency [`HeuristicReranker`]. When the feature is on AND
+/// `config.rerank_onnx` is set, attempt to load the ONNX cross-encoder,
+/// downloading/caching the model on first use; if that fails, log and fall back
+/// to the heuristic so search never hard-fails. `config` is consumed only on the
+/// gated path, hence the `_config` binding on the default build.
+async fn build_reranker(_config: &HippoConfig) -> Arc<dyn Reranker> {
+    #[cfg(feature = "reranker-onnx")]
+    {
+        if _config.rerank_onnx {
+            // Cache models under the OS app cache dir, falling back to data_dir.
+            let cache_dir = directories::ProjectDirs::from("", "", "Hippo")
+                .map(|d| d.cache_dir().to_path_buf())
+                .unwrap_or_else(|| _config.data_dir.join("cache"));
+            let onnx_config =
+                rerank::OnnxRerankerConfig::resolve(_config.reranker_model.as_deref(), cache_dir);
+            match rerank::OnnxReranker::load(onnx_config).await {
+                Ok(reranker) => {
+                    tracing::info!("Using ONNX cross-encoder reranker");
+                    return Arc::new(reranker);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to load ONNX reranker ({e}); falling back to heuristic reranker"
+                    );
+                }
+            }
+        }
+    }
+    Arc::new(HeuristicReranker::new())
+}
+
 impl Searcher {
     pub async fn new(
         storage: Arc<Storage>,
@@ -321,7 +355,7 @@ impl Searcher {
             hybrid_config: HybridSearchConfig::default(),
             chunking_enabled: config.chunking_enabled,
             chunk_rollup: config.chunk_rollup,
-            reranker: Arc::new(HeuristicReranker::new()),
+            reranker: build_reranker(config).await,
             rerank_enabled: config.rerank_enabled,
             rerank_candidates: config.rerank_candidates,
             search_cache: Arc::new(RwLock::new(LruCache::new(
@@ -343,7 +377,7 @@ impl Searcher {
             hybrid_config,
             chunking_enabled: config.chunking_enabled,
             chunk_rollup: config.chunk_rollup,
-            reranker: Arc::new(HeuristicReranker::new()),
+            reranker: build_reranker(config).await,
             rerank_enabled: config.rerank_enabled,
             rerank_candidates: config.rerank_candidates,
             search_cache: Arc::new(RwLock::new(LruCache::new(

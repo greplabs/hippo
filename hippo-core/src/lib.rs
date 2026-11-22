@@ -194,6 +194,19 @@ pub struct HippoConfig {
     /// to the requested limit. Candidates past this cutoff keep their RRF order.
     /// Default: 50.
     pub rerank_candidates: usize,
+
+    /// Opt in to the ONNX cross-encoder reranker instead of the default
+    /// [`search::HeuristicReranker`]. Only takes effect when the crate is built
+    /// with the `reranker-onnx` feature; otherwise it is ignored and the
+    /// heuristic reranker is always used. Default: false (identical behaviour to
+    /// a build without the feature). If the model can't be downloaded/loaded, the
+    /// searcher logs once and falls back to the heuristic reranker.
+    pub rerank_onnx: bool,
+
+    /// Optional cross-encoder model id for the ONNX reranker (e.g.
+    /// `"bge-reranker-base"`). `None` uses the built-in default. Only consulted
+    /// when `rerank_onnx` is true AND the `reranker-onnx` feature is enabled.
+    pub reranker_model: Option<String>,
 }
 
 impl Default for HippoConfig {
@@ -217,6 +230,8 @@ impl Default for HippoConfig {
             chunk_rollup: ChunkRollup::Max,
             rerank_enabled: true,
             rerank_candidates: 50,
+            rerank_onnx: false,
+            reranker_model: None,
         }
     }
 }
