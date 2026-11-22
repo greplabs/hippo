@@ -65,6 +65,10 @@ parking_lot = { workspace = true }
 flate2 = { workspace = true }
 tar = { workspace = true }
 
+# Optional: ONNX Runtime for local CLIP image embeddings (feature-gated, off by
+# default — see the `image-clip` feature below).
+ort = { workspace = true, optional = true }
+
 [features]
 # Optional ONNX cross-encoder reranker backend (see src/search/rerank.rs).
 # DISABLED by default and intentionally EMPTY for now: it adds NO dependencies
@@ -74,9 +78,19 @@ tar = { workspace = true }
 # Today it only compiles the documented identity scaffold `OnnxReranker`.
 reranker-onnx = []
 
+# Real local CLIP ViT-B/32 image embeddings (512-dim) via ONNX Runtime.
+# OFF by default: enabling it pulls `ort` (and `ort-sys`, which panics on
+# Windows CI), so this feature must never be part of the default build or any
+# Windows CI job. With it off, image embedding uses the deterministic
+# placeholder in `embeddings::mod`. The ONNX model is auto-downloaded and cached
+# at RUNTIME on first use (nothing is bundled or fetched at build time beyond
+# the ONNX Runtime library itself).
+image-clip = ["dep:ort"]
+
 [dev-dependencies]
 tempfile = "3"
 tokio-test = "0.4"
+image = { workspace = true }
 
 [[bench]]
 name = "ai_tagging_benchmark"
