@@ -65,6 +65,15 @@ parking_lot = { workspace = true }
 flate2 = { workspace = true }
 tar = { workspace = true }
 
+[features]
+# Optional ONNX cross-encoder reranker backend (see src/search/rerank.rs).
+# DISABLED by default and intentionally EMPTY for now: it adds NO dependencies
+# to the default build and downloads NO model. When wired up, the optional deps
+# below would be declared `optional = true` and listed here, e.g.
+#   reranker-onnx = ["dep:ort", "dep:tokenizers"]
+# Today it only compiles the documented identity scaffold `OnnxReranker`.
+reranker-onnx = []
+
 [dev-dependencies]
 tempfile = "3"
 tokio-test = "0.4"
