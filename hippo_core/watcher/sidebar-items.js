@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["WatchEvent"],"fn":["should_skip_path"],"struct":["DebouncedEvents","FileWatcher","WatchStats"]};

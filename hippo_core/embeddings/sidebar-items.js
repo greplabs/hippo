@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CODE_EMBEDDING_DIM","DEFAULT_CHUNK_OVERLAP_TOKENS","DEFAULT_CHUNK_TOKENS","IMAGE_EMBEDDING_DIM","OPENAI_EMBEDDING_DIM","TEXT_EMBEDDING_DIM"],"enum":["EmbeddingProvider"],"struct":["Embedder","EmbedderConfig","TextChunk","VectorIndex"]};

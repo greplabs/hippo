@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["COLLECTION_CODE","COLLECTION_IMAGES","COLLECTION_TEXT","QDRANT_SCORE_THRESHOLD"],"mod":["manager"],"struct":["QdrantStats","QdrantStorage"]};
