@@ -293,6 +293,10 @@ pub struct Searcher {
     storage: Arc<Storage>,
     embedder: Arc<Embedder>,
     hybrid_config: HybridSearchConfig,
+    /// Whether semantic retrieval matches at chunk granularity with parent roll-up.
+    chunking_enabled: bool,
+    /// How chunk scores roll up to a parent memory's semantic score.
+    chunk_rollup: ChunkRollup,
     // Performance cache for search results
     search_cache: Arc<RwLock<LruCache<u64, SearchCacheEntry>>>,
 }
@@ -301,12 +305,14 @@ impl Searcher {
     pub async fn new(
         storage: Arc<Storage>,
         embedder: Arc<Embedder>,
-        _config: &HippoConfig,
+        config: &HippoConfig,
     ) -> Result<Self> {
         Ok(Self {
             storage,
             embedder,
             hybrid_config: HybridSearchConfig::default(),
+            chunking_enabled: config.chunking_enabled,
+            chunk_rollup: config.chunk_rollup,
             search_cache: Arc::new(RwLock::new(LruCache::new(
                 NonZeroUsize::new(SEARCH_CACHE_SIZE).unwrap(),
             ))),
@@ -317,13 +323,15 @@ impl Searcher {
     pub async fn with_hybrid_config(
         storage: Arc<Storage>,
         embedder: Arc<Embedder>,
-        _config: &HippoConfig,
+        config: &HippoConfig,
         hybrid_config: HybridSearchConfig,
     ) -> Result<Self> {
         Ok(Self {
             storage,
             embedder,
             hybrid_config,
+            chunking_enabled: config.chunking_enabled,
+            chunk_rollup: config.chunk_rollup,
             search_cache: Arc::new(RwLock::new(LruCache::new(
                 NonZeroUsize::new(SEARCH_CACHE_SIZE).unwrap(),
             ))),
@@ -706,11 +714,41 @@ impl Searcher {
             }
         };
 
-        // Use Qdrant-backed search (with SQLite fallback)
-        let scored = self
-            .storage
-            .search_vectors(query_embedding, None, limit)
-            .await?;
+        // Chunk-level retrieval with parent roll-up (deduped to one hit per
+        // memory, carrying its best chunk for snippet offsets). When chunking is
+        // disabled this is exactly the previous whole-document vector search.
+        // Each entry is (memory_id, cosine-like score, best chunk if any).
+        let scored: Vec<(MemoryId, f32, Option<Chunk>)> = if self.chunking_enabled {
+            match self
+                .storage
+                .semantic_rollup(&query_embedding, limit, self.chunk_rollup)
+                .await
+            {
+                Ok(hits) => hits
+                    .into_iter()
+                    .map(|h| (h.memory_id, h.score, h.best_chunk))
+                    .collect(),
+                Err(e) => {
+                    warn!(
+                        "Chunk roll-up failed, falling back to whole-doc search: {}",
+                        e
+                    );
+                    self.storage
+                        .search_vectors(query_embedding.clone(), None, limit)
+                        .await?
+                        .into_iter()
+                        .map(|(id, s)| (id, s, None))
+                        .collect()
+                }
+            }
+        } else {
+            self.storage
+                .search_vectors(query_embedding, None, limit)
+                .await?
+                .into_iter()
+                .map(|(id, s)| (id, s, None))
+                .collect()
+        };
 
         if scored.is_empty() {
             // No results, fall back to text search
@@ -723,20 +761,29 @@ impl Searcher {
                 .await;
         }
 
-        // True match count = number of vectors that matched (above threshold),
+        // True match count = number of parents that matched (above threshold),
         // not the page length after fetch filtering.
         let total = scored.len();
 
         // Fetch full memories for top results
         let mut results = Vec::new();
-        for (id, similarity) in scored {
+        for (id, similarity, best_chunk) in scored {
             if let Some(memory) = self.storage.get_memory(id).await? {
+                let snippet = match &best_chunk {
+                    Some(c) => format!(
+                        "{:.1}% match in passage [{}..{}]",
+                        similarity * 100.0,
+                        c.char_start,
+                        c.char_end
+                    ),
+                    None => format!("{:.1}% similar", similarity * 100.0),
+                };
                 results.push(MemorySearchResult {
                     memory,
                     score: similarity * 100.0, // Scale to percentage-like score
                     highlights: vec![Highlight {
                         field: "semantic".to_string(),
-                        snippet: format!("{:.1}% similar", similarity * 100.0),
+                        snippet,
                     }],
                 });
             }

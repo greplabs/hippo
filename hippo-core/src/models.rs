@@ -61,6 +61,39 @@ impl Memory {
     }
 }
 
+/// A chunk of a document's text, embedded independently so that retrieval can
+/// match a passage rather than a whole-document average.
+///
+/// `char_start`/`char_end` are BYTE offsets into the parent document's text
+/// (so `&text[char_start..char_end]` round-trips to exactly this chunk's text;
+/// for ASCII these equal character offsets). `embedding_id` is the vector point
+/// id (equal to `chunk_id`) used both as the Qdrant point id in `hippo_text`
+/// and as the key in the SQLite `chunk_embeddings` table.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Chunk {
+    pub chunk_id: String,
+    pub parent_memory_id: MemoryId,
+    pub ordinal: usize,
+    pub text: String,
+    pub char_start: usize,
+    pub char_end: usize,
+    pub embedding_id: Option<String>,
+}
+
+/// Strategy for rolling chunk-level similarity scores up to a parent memory.
+///
+/// Chunk-level retrieval produces several scored chunks per parent document;
+/// the parent's final semantic score is derived from those chunk scores by one
+/// of these strategies.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum ChunkRollup {
+    /// Score the parent by its single best-matching chunk (default).
+    #[default]
+    Max,
+    /// Score the parent by the mean of its top-N chunk scores.
+    TopNMean(usize),
+}
+
 /// The type/category of a memory
 /// The type/category of a memory
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

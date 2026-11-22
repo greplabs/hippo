@@ -20,6 +20,17 @@ pub struct Fts5SearchResult {
     pub content_snippet: Option<String>,
 }
 
+/// A parent memory surfaced by chunk-level semantic retrieval, already rolled up
+/// (deduplicated to one row per memory) with its best-matching chunk attached for
+/// snippet offsets. `best_chunk` is `None` when the parent was matched only by its
+/// whole-document embedding (no chunks).
+#[derive(Debug, Clone)]
+pub struct ChunkParentHit {
+    pub memory_id: MemoryId,
+    pub score: f32,
+    pub best_chunk: Option<Chunk>,
+}
+
 /// Helper to parse JSON from database, converting errors to rusqlite errors
 fn parse_json<T: serde::de::DeserializeOwned>(s: &str) -> std::result::Result<T, rusqlite::Error> {
     serde_json::from_str(s).map_err(|e| {
@@ -75,6 +86,10 @@ pub struct Storage {
     db: Mutex<Connection>,
     qdrant: Arc<QdrantStorage>,
     qdrant_url: String,
+    /// Whether chunk-level indexing/retrieval is active (mirrors `HippoConfig`).
+    chunking_enabled: bool,
+    /// How chunk scores roll up to a parent memory's semantic score.
+    chunk_rollup: ChunkRollup,
 }
 
 // TODO(perf, follow-up): this layer serializes ALL database I/O through a
@@ -154,7 +169,19 @@ impl Storage {
             db: Mutex::new(conn),
             qdrant: Arc::new(qdrant),
             qdrant_url: config.qdrant_url.clone(),
+            chunking_enabled: config.chunking_enabled,
+            chunk_rollup: config.chunk_rollup,
         })
+    }
+
+    /// Whether chunk-level indexing/retrieval is enabled.
+    pub fn chunking_enabled(&self) -> bool {
+        self.chunking_enabled
+    }
+
+    /// The configured chunk-score roll-up strategy.
+    pub fn chunk_rollup(&self) -> ChunkRollup {
+        self.chunk_rollup
     }
 
     /// Get the Qdrant storage for direct access
@@ -402,6 +429,40 @@ impl Storage {
             "#,
         )?;
 
+        // === Chunk-level retrieval tables (additive; existing DBs keep working) ===
+        //
+        // `chunks` holds the passage rows for each parent memory. `chunk_embeddings`
+        // is the durable SQLite copy of each chunk's vector (SQLite is the source
+        // of truth; Qdrant `hippo_text` is a write-through accelerator). Both are
+        // created with IF NOT EXISTS so upgrading an existing database is a no-op
+        // migration that never drops data.
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS chunks (
+                chunk_id TEXT PRIMARY KEY,
+                parent_memory_id TEXT NOT NULL,
+                ordinal INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                char_start INTEGER NOT NULL,
+                char_end INTEGER NOT NULL,
+                embedding_id TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_chunks_parent ON chunks(parent_memory_id);
+
+            CREATE TABLE IF NOT EXISTS chunk_embeddings (
+                chunk_id TEXT PRIMARY KEY,
+                parent_memory_id TEXT NOT NULL,
+                embedding BLOB NOT NULL,
+                model TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_parent
+                ON chunk_embeddings(parent_memory_id);
+            "#,
+        )?;
+
         Ok(())
     }
 
@@ -583,27 +644,54 @@ impl Storage {
             "DELETE FROM memories WHERE source_json = ?1",
             params![source_json],
         )?;
+        Self::sweep_orphan_chunks(&db)?;
+        Ok(())
+    }
+
+    /// Delete chunk rows + chunk embeddings whose parent memory no longer exists.
+    /// Used by the bulk-delete paths (which operate by path/source rather than by
+    /// id) to keep the chunk tables free of orphans without a second round-trip.
+    fn sweep_orphan_chunks(db: &Connection) -> Result<()> {
+        db.execute(
+            "DELETE FROM chunks WHERE parent_memory_id NOT IN (SELECT id FROM memories)",
+            [],
+        )?;
+        db.execute(
+            "DELETE FROM chunk_embeddings WHERE parent_memory_id NOT IN (SELECT id FROM memories)",
+            [],
+        )?;
         Ok(())
     }
 
     /// Remove a memory by its ID
     pub async fn delete_memory(&self, id: MemoryId) -> Result<()> {
-        let db = self.get_db()?;
-        db.execute(
-            "DELETE FROM memories WHERE id = ?1",
-            params![id.to_string()],
-        )?;
+        {
+            let db = self.get_db()?;
+            db.execute(
+                "DELETE FROM memories WHERE id = ?1",
+                params![id.to_string()],
+            )?;
+        }
+        // Tear down the memory's chunk rows + chunk vectors (SQLite + Qdrant).
+        self.delete_chunks(id).await?;
         Ok(())
     }
 
     /// Remove a memory by its file path
     pub async fn remove_memory_by_path(&self, path: &std::path::Path) -> Result<()> {
-        let db = self.get_db()?;
-        let path_str = path.to_string_lossy();
-        db.execute(
-            "DELETE FROM memories WHERE path = ?1",
-            params![path_str.as_ref()],
-        )?;
+        // Resolve the id first so we can clean up its chunks after deletion.
+        let id = self.get_memory_by_path(path).await?.map(|m| m.id);
+        {
+            let db = self.get_db()?;
+            let path_str = path.to_string_lossy();
+            db.execute(
+                "DELETE FROM memories WHERE path = ?1",
+                params![path_str.as_ref()],
+            )?;
+        }
+        if let Some(id) = id {
+            self.delete_chunks(id).await?;
+        }
         Ok(())
     }
 
@@ -796,6 +884,7 @@ impl Storage {
             "DELETE FROM memories WHERE path LIKE ?1",
             params![format!("{}%", path_prefix)],
         )?;
+        Self::sweep_orphan_chunks(&db)?;
         Ok(count)
     }
 
@@ -808,6 +897,8 @@ impl Storage {
             DELETE FROM clusters;
             DELETE FROM tags;
             DELETE FROM embeddings;
+            DELETE FROM chunks;
+            DELETE FROM chunk_embeddings;
         "#,
         )?;
         Ok(())
@@ -1237,6 +1328,361 @@ impl Storage {
         }
 
         Ok(())
+    }
+
+    // === Chunk Operations ===
+
+    /// Decode a `chunks` row into a [`Chunk`].
+    fn row_to_chunk(row: &rusqlite::Row) -> std::result::Result<Chunk, rusqlite::Error> {
+        Ok(Chunk {
+            chunk_id: row.get(0)?,
+            parent_memory_id: parse_uuid(&row.get::<_, String>(1)?)?,
+            ordinal: row.get::<_, i64>(2)? as usize,
+            text: row.get(3)?,
+            char_start: row.get::<_, i64>(4)? as usize,
+            char_end: row.get::<_, i64>(5)? as usize,
+            embedding_id: row.get(6)?,
+        })
+    }
+
+    /// Replace all chunk rows for a parent memory in a single transaction.
+    ///
+    /// Any previously stored chunks (and their SQLite embeddings) for this parent
+    /// are deleted first, so a re-index produces no orphaned or duplicated chunks.
+    /// Chunk vectors are persisted separately via
+    /// [`store_chunk_embedding_with_qdrant`](Self::store_chunk_embedding_with_qdrant).
+    pub async fn upsert_chunks(&self, parent_id: MemoryId, chunks: &[Chunk]) -> Result<()> {
+        let mut db = self.get_db()?;
+        let tx = db.transaction()?;
+        let pid = parent_id.to_string();
+        tx.execute(
+            "DELETE FROM chunks WHERE parent_memory_id = ?1",
+            params![pid],
+        )?;
+        tx.execute(
+            "DELETE FROM chunk_embeddings WHERE parent_memory_id = ?1",
+            params![pid],
+        )?;
+        for c in chunks {
+            tx.execute(
+                r#"INSERT OR REPLACE INTO chunks
+                   (chunk_id, parent_memory_id, ordinal, text, char_start, char_end, embedding_id)
+                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
+                params![
+                    c.chunk_id,
+                    c.parent_memory_id.to_string(),
+                    c.ordinal as i64,
+                    c.text,
+                    c.char_start as i64,
+                    c.char_end as i64,
+                    c.embedding_id,
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Fetch all chunks for a parent memory, ordered by ordinal.
+    pub async fn get_chunks(&self, parent_id: MemoryId) -> Result<Vec<Chunk>> {
+        let db = self.get_db()?;
+        let mut stmt = db.prepare(
+            "SELECT chunk_id, parent_memory_id, ordinal, text, char_start, char_end, embedding_id
+             FROM chunks WHERE parent_memory_id = ?1 ORDER BY ordinal",
+        )?;
+        let chunks = stmt
+            .query_map(params![parent_id.to_string()], Self::row_to_chunk)?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(chunks)
+    }
+
+    /// Delete every chunk (rows, SQLite embeddings, and Qdrant points) for a
+    /// parent memory. Called when a memory is removed or re-indexed.
+    pub async fn delete_chunks(&self, parent_id: MemoryId) -> Result<()> {
+        let pid = parent_id.to_string();
+
+        // Collect chunk ids for Qdrant cleanup, then delete the SQLite rows. The
+        // guard is scoped so it is dropped before the `await` on Qdrant below.
+        let chunk_ids: Vec<String> = {
+            let db = self.get_db()?;
+            let mut stmt = db.prepare("SELECT chunk_id FROM chunks WHERE parent_memory_id = ?1")?;
+            let ids: Vec<String> = stmt
+                .query_map(params![pid], |row| row.get::<_, String>(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+            drop(stmt);
+            db.execute(
+                "DELETE FROM chunks WHERE parent_memory_id = ?1",
+                params![pid],
+            )?;
+            db.execute(
+                "DELETE FROM chunk_embeddings WHERE parent_memory_id = ?1",
+                params![pid],
+            )?;
+            ids
+        };
+
+        if !chunk_ids.is_empty() && self.qdrant.is_available().await {
+            if let Err(e) = self.qdrant.delete_text_points(&chunk_ids).await {
+                warn!(
+                    "Failed to delete {} chunk vectors from Qdrant for parent {} (SQLite cleaned): {}",
+                    chunk_ids.len(),
+                    parent_id,
+                    e
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Durably store a chunk's embedding (SQLite source of truth) and write it
+    /// through to Qdrant `hippo_text` when available, mirroring
+    /// [`store_embedding_with_qdrant`](Self::store_embedding_with_qdrant). A
+    /// Qdrant failure is logged but does not fail the call.
+    pub async fn store_chunk_embedding_with_qdrant(
+        &self,
+        chunk: &Chunk,
+        embedding: &[f32],
+    ) -> Result<()> {
+        {
+            let db = self.get_db()?;
+            let embedding_bytes: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
+            db.execute(
+                r#"INSERT OR REPLACE INTO chunk_embeddings
+                   (chunk_id, parent_memory_id, embedding, model, created_at)
+                   VALUES (?1, ?2, ?3, ?4, ?5)"#,
+                params![
+                    chunk.chunk_id,
+                    chunk.parent_memory_id.to_string(),
+                    embedding_bytes,
+                    "chunk_embedding",
+                    chrono::Utc::now().to_rfc3339(),
+                ],
+            )?;
+        }
+
+        if self.qdrant.is_available().await {
+            if let Err(e) = self.qdrant.upsert_chunk(chunk, embedding.to_vec()).await {
+                warn!(
+                    "Failed to write chunk embedding through to Qdrant for {} (kept durably in SQLite): {}",
+                    chunk.chunk_id, e
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Chunk-level semantic retrieval with parent roll-up.
+    ///
+    /// Matches at chunk granularity, groups hits by `parent_memory_id`, and scores
+    /// each parent by the configured [`ChunkRollup`] strategy. Memories that have
+    /// no chunks (older / non-text) remain retrievable via their whole-document
+    /// embedding — the two sources are merged by taking the higher score per
+    /// parent, so every memory appears exactly once. Prefers Qdrant when
+    /// available and falls back to the durable SQLite copy otherwise.
+    pub async fn semantic_rollup(
+        &self,
+        query: &[f32],
+        limit: usize,
+        rollup: ChunkRollup,
+    ) -> Result<Vec<ChunkParentHit>> {
+        if self.qdrant.is_available().await {
+            return self.semantic_rollup_qdrant(query, limit, rollup).await;
+        }
+        self.semantic_rollup_sqlite(query, limit, rollup)
+    }
+
+    /// Reduce a parent's sorted-descending chunk scores to a single score.
+    fn apply_rollup(sorted_desc: &[f32], rollup: ChunkRollup) -> f32 {
+        match rollup {
+            ChunkRollup::Max => sorted_desc.first().copied().unwrap_or(0.0),
+            ChunkRollup::TopNMean(n) => {
+                let take = n.max(1).min(sorted_desc.len());
+                if take == 0 {
+                    0.0
+                } else {
+                    sorted_desc[..take].iter().sum::<f32>() / take as f32
+                }
+            }
+        }
+    }
+
+    /// SQLite (offline) implementation of [`semantic_rollup`](Self::semantic_rollup).
+    fn semantic_rollup_sqlite(
+        &self,
+        query: &[f32],
+        limit: usize,
+        rollup: ChunkRollup,
+    ) -> Result<Vec<ChunkParentHit>> {
+        use std::collections::HashMap;
+        let db = self.get_db()?;
+
+        // 1. Score every chunk, grouping scores + best chunk id per parent.
+        let mut per_parent: HashMap<MemoryId, Vec<(f32, String)>> = HashMap::new();
+        {
+            let mut stmt =
+                db.prepare("SELECT chunk_id, parent_memory_id, embedding FROM chunk_embeddings")?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Vec<u8>>(2)?,
+                    ))
+                })?
+                .filter_map(|r| r.ok());
+            for (chunk_id, parent, bytes) in rows {
+                let parent_id = match uuid::Uuid::parse_str(&parent) {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                };
+                let emb = match bytes_to_f32_vec(&bytes) {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                let score = cosine_similarity(query, &emb);
+                per_parent
+                    .entry(parent_id)
+                    .or_default()
+                    .push((score, chunk_id));
+            }
+        }
+
+        // parent -> (rolled-up score, best chunk id)
+        let mut best: HashMap<MemoryId, (f32, Option<String>)> = HashMap::new();
+        for (parent, mut scores) in per_parent {
+            scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+            let best_chunk_id = scores.first().map(|(_, id)| id.clone());
+            let only_scores: Vec<f32> = scores.iter().map(|(s, _)| *s).collect();
+            best.insert(
+                parent,
+                (Self::apply_rollup(&only_scores, rollup), best_chunk_id),
+            );
+        }
+
+        // 2. Whole-document embeddings: a memory with no chunk wins keeps its
+        //    whole-doc score (fallback); an existing chunk score is only raised.
+        {
+            let mut stmt = db.prepare("SELECT memory_id, embedding FROM embeddings")?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+                })?
+                .filter_map(|r| r.ok());
+            for (mid, bytes) in rows {
+                let id = match uuid::Uuid::parse_str(&mid) {
+                    Ok(i) => i,
+                    Err(_) => continue,
+                };
+                let emb = match bytes_to_f32_vec(&bytes) {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                let score = cosine_similarity(query, &emb);
+                best.entry(id)
+                    .and_modify(|(s, _)| {
+                        if score > *s {
+                            *s = score;
+                        }
+                    })
+                    .or_insert((score, None));
+            }
+        }
+
+        // 3. Rank, truncate, then attach the best chunk row for snippet offsets.
+        let mut ranked: Vec<(MemoryId, f32, Option<String>)> =
+            best.into_iter().map(|(id, (s, c))| (id, s, c)).collect();
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        ranked.truncate(limit);
+
+        let mut out = Vec::with_capacity(ranked.len());
+        for (id, score, chunk_id) in ranked {
+            let best_chunk = match chunk_id {
+                Some(cid) => Self::get_chunk_by_id_in(&db, &cid)?,
+                None => None,
+            };
+            out.push(ChunkParentHit {
+                memory_id: id,
+                score,
+                best_chunk,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Fetch a single chunk row by its id using an already-held connection.
+    fn get_chunk_by_id_in(db: &Connection, chunk_id: &str) -> Result<Option<Chunk>> {
+        let mut stmt = db.prepare(
+            "SELECT chunk_id, parent_memory_id, ordinal, text, char_start, char_end, embedding_id
+             FROM chunks WHERE chunk_id = ?1",
+        )?;
+        match stmt.query_row(params![chunk_id], Self::row_to_chunk) {
+            Ok(c) => Ok(Some(c)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Qdrant-backed implementation of [`semantic_rollup`](Self::semantic_rollup).
+    ///
+    /// `hippo_text` holds both chunk points (payload `parent_memory_id`) and the
+    /// legacy whole-document points (no parent payload, id == memory id). Both are
+    /// grouped under their parent memory id, so chunked and non-chunked memories
+    /// roll up uniformly and each memory appears once.
+    async fn semantic_rollup_qdrant(
+        &self,
+        query: &[f32],
+        limit: usize,
+        rollup: ChunkRollup,
+    ) -> Result<Vec<ChunkParentHit>> {
+        use std::collections::HashMap;
+
+        // Over-fetch so grouping by parent still yields `limit` distinct parents.
+        let fetch = (limit * 6).max(limit + 10);
+        let raw = self
+            .qdrant
+            .search_text_with_parents(query.to_vec(), fetch)
+            .await?;
+
+        let mut per_parent: HashMap<MemoryId, Vec<(f32, Option<String>)>> = HashMap::new();
+        for (parent, chunk_id, score) in raw {
+            per_parent
+                .entry(parent)
+                .or_default()
+                .push((score, chunk_id));
+        }
+
+        let mut ranked: Vec<(MemoryId, f32, Option<String>)> = per_parent
+            .into_iter()
+            .map(|(parent, mut scores)| {
+                scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+                let best_chunk_id = scores.first().and_then(|(_, c)| c.clone());
+                let only_scores: Vec<f32> = scores.iter().map(|(s, _)| *s).collect();
+                (
+                    parent,
+                    Self::apply_rollup(&only_scores, rollup),
+                    best_chunk_id,
+                )
+            })
+            .collect();
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        ranked.truncate(limit);
+
+        let db = self.get_db()?;
+        let mut out = Vec::with_capacity(ranked.len());
+        for (id, score, chunk_id) in ranked {
+            let best_chunk = match chunk_id {
+                Some(cid) => Self::get_chunk_by_id_in(&db, &cid)?,
+                None => None,
+            };
+            out.push(ChunkParentHit {
+                memory_id: id,
+                score,
+                best_chunk,
+            });
+        }
+        Ok(out)
     }
 
     // === Fast SQL Search ===

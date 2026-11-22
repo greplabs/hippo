@@ -4,7 +4,7 @@
 //! files for embedding generation.
 
 use crate::{
-    embeddings::Embedder,
+    embeddings::{Embedder, DEFAULT_CHUNK_OVERLAP_TOKENS, DEFAULT_CHUNK_TOKENS},
     error::{HippoError, Result},
     models::*,
     ollama::OllamaClient,
@@ -180,6 +180,10 @@ pub struct IndexerConfig {
     /// When true, generate AI embeddings via Ollama (slower but enables semantic search)
     /// When false, use fast hash-based embeddings (instant, good for basic search)
     pub generate_ai_embeddings: bool,
+    /// When true, split text-bearing documents into chunks and index each chunk
+    /// as its own vector (with parent roll-up at query time). Only takes effect
+    /// when embeddings are being generated.
+    pub chunking_enabled: bool,
 }
 
 impl Default for IndexerConfig {
@@ -232,6 +236,7 @@ impl Default for IndexerConfig {
             // Fast mode by default - use hash embeddings for instant indexing
             // Set to true to enable AI-powered semantic search (requires Ollama)
             generate_ai_embeddings: false,
+            chunking_enabled: true,
         }
     }
 }
@@ -302,6 +307,7 @@ impl Indexer {
         let indexer_config = IndexerConfig {
             parallelism: config.indexing_parallelism,
             auto_tag_enabled: config.auto_tag_enabled,
+            chunking_enabled: config.chunking_enabled,
             ..Default::default()
         };
 
@@ -487,6 +493,11 @@ impl Indexer {
             }
         }
 
+        // Split into chunks and embed each chunk (if enabled).
+        if self.config.chunking_enabled {
+            Self::embed_and_store_chunks(&self.storage, &self.embedder, &memory).await;
+        }
+
         // Auto-tag single file using fast model if enabled
         if self.config.auto_tag_enabled {
             Self::auto_tag_single(&memory, &self.storage).await;
@@ -494,6 +505,76 @@ impl Indexer {
 
         info!("Indexed single file: {:?}", path);
         Ok(())
+    }
+
+    /// Whether a memory's kind carries enough free text to benefit from chunking.
+    fn is_text_bearing(kind: &MemoryKind) -> bool {
+        matches!(kind, MemoryKind::Document { .. } | MemoryKind::Code { .. })
+    }
+
+    /// Split a text-bearing memory into passages, embed each passage via the
+    /// document path, and persist the chunk rows + vectors. Replaces any existing
+    /// chunks for the memory (safe for re-index). Best-effort: failures are
+    /// logged and never abort indexing, and the whole-document embedding already
+    /// stored by the caller remains as a fallback.
+    async fn embed_and_store_chunks(storage: &Storage, embedder: &Embedder, memory: &Memory) {
+        if !Self::is_text_bearing(&memory.kind) {
+            return;
+        }
+
+        let text = match std::fs::read_to_string(&memory.path) {
+            Ok(t) => t,
+            Err(_) => return, // binary / unreadable document: whole-doc embedding stands
+        };
+        if text.trim().is_empty() {
+            return;
+        }
+
+        let spans =
+            Embedder::chunk_document(&text, DEFAULT_CHUNK_TOKENS, DEFAULT_CHUNK_OVERLAP_TOKENS);
+        if spans.len() <= 1 {
+            // A single chunk == the whole document; the whole-doc embedding already
+            // covers it. Clear any stale chunks left by a previous larger version.
+            let _ = storage.delete_chunks(memory.id).await;
+            return;
+        }
+
+        let chunks: Vec<Chunk> = spans
+            .iter()
+            .enumerate()
+            .map(|(i, span)| {
+                let chunk_id = uuid::Uuid::new_v4().to_string();
+                Chunk {
+                    chunk_id: chunk_id.clone(),
+                    parent_memory_id: memory.id,
+                    ordinal: i,
+                    text: span.text.clone(),
+                    char_start: span.char_start,
+                    char_end: span.char_end,
+                    embedding_id: Some(chunk_id),
+                }
+            })
+            .collect();
+
+        if let Err(e) = storage.upsert_chunks(memory.id, &chunks).await {
+            warn!("Failed to persist chunks for {}: {}", memory.id, e);
+            return;
+        }
+
+        let texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
+        match embedder.embed_batch(&texts).await {
+            Ok(embeddings) => {
+                for (chunk, embedding) in chunks.iter().zip(embeddings.iter()) {
+                    if let Err(e) = storage
+                        .store_chunk_embedding_with_qdrant(chunk, embedding)
+                        .await
+                    {
+                        debug!("Failed to store chunk embedding {}: {}", chunk.chunk_id, e);
+                    }
+                }
+            }
+            Err(e) => warn!("Failed to embed chunks for {}: {}", memory.id, e),
+        }
     }
 
     /// Auto-tag a single memory with rich content analysis
@@ -977,6 +1058,11 @@ impl Indexer {
                                     debug!("Failed to store embedding for {}: {}", memory_id, e);
                                 }
 
+                                // Split into chunks and embed each chunk (if enabled).
+                                if config.chunking_enabled {
+                                    Self::embed_and_store_chunks(storage, embedder, memory).await;
+                                }
+
                                 // Update progress counter
                                 state.files_processed_count.fetch_add(1, Ordering::SeqCst);
                                 state
@@ -1019,6 +1105,11 @@ impl Indexer {
                                             "Failed to store embedding for {}: {}",
                                             memory.id, e
                                         );
+                                    }
+
+                                    if config.chunking_enabled {
+                                        Self::embed_and_store_chunks(storage, embedder, memory)
+                                            .await;
                                     }
                                 }
                                 Err(e) => {

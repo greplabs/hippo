@@ -28,6 +28,7 @@ mod helpers {
             qdrant_url: "http://localhost:6334".into(),
             indexing_parallelism: 2,
             auto_tag_enabled: false,
+            ..HippoConfig::default()
         };
         let hippo = Hippo::with_config(config).await?;
         Ok((hippo, temp_dir))
